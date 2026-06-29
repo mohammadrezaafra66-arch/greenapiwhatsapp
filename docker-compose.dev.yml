@@ -1,0 +1,32 @@
+version: "3.9"
+
+# Development helper: runs ONLY Postgres and Redis so you can run the
+# FastAPI backend, Celery worker, and beat locally on your host machine.
+#
+# Usage:
+#   docker-compose -f docker-compose.dev.yml up -d
+#   cd backend && uvicorn app.main:app --reload
+#   celery -A app.workers.celery_app worker --loglevel=info
+#   celery -A app.workers.celery_app beat --loglevel=info
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: afrakala
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: whatsapp_sender
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data_dev:

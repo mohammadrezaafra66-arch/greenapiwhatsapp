@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+.env
+.venv/
+venv/
+env/
+*.log
+*.sqlite3
+.DS_Store
+node_modules/
+.pytest_cache/
+htmlcov/
+.coverage
+celerybeat-schedule
+
+# Local Claude Code settings
+.claude/
