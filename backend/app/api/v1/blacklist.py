@@ -4,7 +4,6 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models.inbox import Blacklist, InboxMessage
 from app.models.contact import Contact
-import uuid
 
 router = APIRouter(prefix="/blacklist", tags=["blacklist"])
 
@@ -14,12 +13,7 @@ async def list_blacklist(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Blacklist).order_by(Blacklist.created_at.desc()))
     rows = result.scalars().all()
     return [
-        {
-            "id": str(b.id),
-            "phone": b.phone,
-            "reason": b.reason,
-            "created_at": str(b.created_at),
-        }
+        {"id": str(b.id), "phone": b.phone, "reason": b.reason, "created_at": str(b.created_at)}
         for b in rows
     ]
 
@@ -30,27 +24,24 @@ async def add_to_blacklist(phone: str, reason: str = None, db: AsyncSession = De
     if existing.scalar_one_or_none():
         return {"status": "already_blacklisted"}
 
-    bl = Blacklist(phone=phone, reason=reason)
-    db.add(bl)
-
+    db.add(Blacklist(phone=phone, reason=reason))
     contact = await db.execute(select(Contact).where(Contact.phone == phone))
     c = contact.scalar_one_or_none()
     if c:
         c.blacklisted = True
         c.blacklist_reason = reason
-
     await db.commit()
     return {"status": "blacklisted", "phone": phone}
 
 
-@router.delete("/{blacklist_id}")
-async def remove_from_blacklist(blacklist_id: str, db: AsyncSession = Depends(get_db)):
-    bl = await db.get(Blacklist, uuid.UUID(blacklist_id))
+@router.delete("/{phone}")
+async def remove_from_blacklist(phone: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Blacklist).where(Blacklist.phone == phone))
+    bl = result.scalar_one_or_none()
     if not bl:
-        raise HTTPException(404, "Blacklist entry not found")
+        raise HTTPException(404, "Not in blacklist")
 
-    # Unmark contact
-    contact = await db.execute(select(Contact).where(Contact.phone == bl.phone))
+    contact = await db.execute(select(Contact).where(Contact.phone == phone))
     c = contact.scalar_one_or_none()
     if c:
         c.blacklisted = False
@@ -63,7 +54,7 @@ async def remove_from_blacklist(blacklist_id: str, db: AsyncSession = Depends(ge
 
 @router.get("/inbox/recent")
 async def recent_inbox(limit: int = 20, db: AsyncSession = Depends(get_db)):
-    """Latest incoming messages across all accounts."""
+    """Latest incoming messages across all accounts (kept for monitoring widgets)."""
     result = await db.execute(
         select(InboxMessage).order_by(InboxMessage.received_at.desc()).limit(limit)
     )
@@ -75,6 +66,7 @@ async def recent_inbox(limit: int = 20, db: AsyncSession = Depends(get_db)):
             "sender_phone": m.sender_phone,
             "sender_name": m.sender_name,
             "text": m.text_content,
+            "category": m.category,
             "is_group": m.is_group,
             "received_at": str(m.received_at),
         }

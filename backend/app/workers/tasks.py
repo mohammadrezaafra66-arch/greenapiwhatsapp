@@ -2,52 +2,68 @@ import asyncio
 from app.workers.celery_app import celery_app
 from app.services.campaign_runner import run_campaign
 
-
 @celery_app.task(bind=True, name="tasks.run_campaign", max_retries=3)
 def task_run_campaign(self, campaign_id: str):
-    """Run a campaign in the background."""
     try:
         asyncio.run(run_campaign(campaign_id))
     except Exception as exc:
         raise self.retry(exc=exc, countdown=60)
 
-
 @celery_app.task(name="tasks.reset_daily_counters")
 def task_reset_daily_counters():
-    """Reset sent_today counters at midnight. Schedule this with celery beat."""
-    import asyncio
-    from app.database import AsyncSessionLocal
-    from app.models.account import Account
-    from sqlalchemy import update
-    from datetime import date
-
-    async def _reset():
-        async with AsyncSessionLocal() as db:
-            await db.execute(
-                update(Account).values(
-                    sent_today=0,
-                    last_reset_date=date.today()
-                )
-            )
-            await db.commit()
-
-    asyncio.run(_reset())
-
-
-@celery_app.task(name="tasks.update_daily_limits")
-def task_update_daily_limits():
-    """Recalculate daily limits based on formula. Run every hour."""
-    import asyncio
-    from app.database import AsyncSessionLocal
-    from app.models.account import Account
-    from sqlalchemy import select
-
-    async def _update():
+    async def _r():
+        from app.database import AsyncSessionLocal
+        from app.models.account import Account
+        from sqlalchemy import select
+        from datetime import date
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(Account))
-            accounts = result.scalars().all()
-            for account in accounts:
-                account.daily_limit = account.computed_daily_limit
+            for account in result.scalars().all():
+                # Roll today's counts into yesterday before resetting
+                account.received_yesterday = account.received_today
+                account.sent_today = 0
+                account.received_today = 0
+                account.last_reset_date = date.today()
             await db.commit()
+    asyncio.run(_r())
 
-    asyncio.run(_update())
+@celery_app.task(name="tasks.warmup_accounts")
+def task_warmup_accounts():
+    async def _w():
+        from app.database import AsyncSessionLocal
+        from app.models.account import Account, AccountStatus
+        from app.services.green_api import GreenAPIClient
+        from app.services.warmup_service import post_daily_status
+        from sqlalchemy import select
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Account).where(Account.status == AccountStatus.active, Account.warmup_enabled == True))
+            for account in result.scalars().all():
+                client = GreenAPIClient(account.instance_id, account.api_token)
+                await post_daily_status(client)
+                account.days_active += 1
+            await db.commit()
+    asyncio.run(_w())
+
+@celery_app.task(name="tasks.sync_account_states")
+def task_sync_account_states():
+    async def _s():
+        from app.database import AsyncSessionLocal
+        from app.models.account import Account, AccountStatus
+        from app.services.green_api import GreenAPIClient
+        from sqlalchemy import select
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Account))
+            for account in result.scalars().all():
+                try:
+                    client = GreenAPIClient(account.instance_id, account.api_token)
+                    state = await client.get_state()
+                    if state == "authorized":
+                        account.status = AccountStatus.active
+                    elif state == "blocked":
+                        account.status = AccountStatus.banned
+                    elif state == "notAuthorized":
+                        account.status = AccountStatus.disconnected
+                except Exception:
+                    pass
+            await db.commit()
+    asyncio.run(_s())

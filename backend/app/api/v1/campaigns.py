@@ -1,13 +1,37 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from app.database import get_db
-from app.models.campaign import Campaign, CampaignContact, CampaignStatus, MessageStatus
-from app.models.contact import Contact
-from app.workers.tasks import task_run_campaign
+import json
 import uuid
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, delete
+from app.database import get_db
+from app.models.campaign import (
+    Campaign, CampaignContact, CampaignStatus, CampaignType, MessageStatus
+)
+from app.models.account import Account, AccountStatus
+from app.workers.tasks import task_run_campaign
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
+
+
+class CampaignCreateBody(BaseModel):
+    name: str
+    campaign_type: str = "text"
+    use_gpt: bool = True
+    gpt_prompt: str | None = None
+    message_template: str | None = None
+    include_products: bool = False
+    product_count: int = 3
+    image_url: str | None = None
+    poll_question: str | None = None
+    poll_options: list[str] | None = None
+    buttons: list[str] | None = None
+    footer_text: str | None = None
+
+
+class TestBody(BaseModel):
+    phone: str
+    message: str | None = None
 
 
 @router.get("/")
@@ -19,9 +43,12 @@ async def list_campaigns(db: AsyncSession = Depends(get_db)):
             "id": str(c.id),
             "name": c.name,
             "status": c.status,
+            "campaign_type": c.campaign_type,
             "total_contacts": c.total_contacts,
             "sent_count": c.sent_count,
             "failed_count": c.failed_count,
+            "delivered_count": c.delivered_count,
+            "read_count": c.read_count,
             "created_at": str(c.created_at),
         }
         for c in campaigns
@@ -29,31 +56,33 @@ async def list_campaigns(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/")
-async def create_campaign(
-    name: str,
-    use_gpt: bool = True,
-    gpt_prompt: str = None,
-    message_template: str = None,
-    include_products: bool = False,
-    product_count: int = 3,
-    send_image: bool = False,
-    image_url: str = None,
-    db: AsyncSession = Depends(get_db)
-):
+async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(get_db)):
+    try:
+        ctype = CampaignType(body.campaign_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid campaign_type: {body.campaign_type}")
+
+    buttons = body.buttons or []
     campaign = Campaign(
-        name=name,
-        use_gpt=use_gpt,
-        gpt_prompt=gpt_prompt,
-        message_template=message_template,
-        include_products=include_products,
-        product_count=product_count,
-        send_image=send_image,
-        image_url=image_url
+        name=body.name,
+        campaign_type=ctype,
+        use_gpt=body.use_gpt,
+        gpt_prompt=body.gpt_prompt,
+        message_template=body.message_template,
+        include_products=body.include_products,
+        product_count=body.product_count,
+        image_url=body.image_url,
+        poll_question=body.poll_question,
+        poll_options=json.dumps(body.poll_options, ensure_ascii=False) if body.poll_options else None,
+        button1_text=buttons[0] if len(buttons) > 0 else None,
+        button2_text=buttons[1] if len(buttons) > 1 else None,
+        button3_text=buttons[2] if len(buttons) > 2 else None,
+        footer_text=body.footer_text,
     )
     db.add(campaign)
     await db.commit()
     await db.refresh(campaign)
-    return {"id": str(campaign.id), "name": campaign.name}
+    return {"id": str(campaign.id), "name": campaign.name, "campaign_type": campaign.campaign_type}
 
 
 @router.post("/{campaign_id}/contacts")
@@ -62,7 +91,6 @@ async def add_contacts_to_campaign(
     contact_ids: list[str],
     db: AsyncSession = Depends(get_db)
 ):
-    """Add contacts to a campaign."""
     campaign = await db.get(Campaign, uuid.UUID(campaign_id))
     if not campaign:
         raise HTTPException(404, "Campaign not found")
@@ -89,11 +117,8 @@ async def start_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(404, "Campaign not found")
     if campaign.status == CampaignStatus.running:
         raise HTTPException(400, "Campaign already running")
-
     campaign.status = CampaignStatus.running
     await db.commit()
-
-    # Launch Celery task
     task_run_campaign.delay(campaign_id)
     return {"status": "started", "campaign_id": campaign_id}
 
@@ -119,6 +144,37 @@ async def resume_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
     return {"status": "resumed"}
 
 
+@router.post("/{campaign_id}/test")
+async def test_campaign(campaign_id: str, body: TestBody, db: AsyncSession = Depends(get_db)):
+    """Send a single test message for this campaign to one phone number."""
+    campaign = await db.get(Campaign, uuid.UUID(campaign_id))
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+
+    acc_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
+    account = acc_result.scalars().first()
+    if not account:
+        raise HTTPException(400, "No active account available to send test")
+
+    from app.services.green_api import GreenAPIClient
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    message = body.message or campaign.message_template or "پیام تستی افراکالا"
+
+    msg_id = None
+    if campaign.campaign_type == CampaignType.image and campaign.image_url:
+        msg_id = await client.send_image(body.phone, campaign.image_url, message)
+    elif campaign.campaign_type == CampaignType.poll and campaign.poll_question:
+        opts = json.loads(campaign.poll_options) if campaign.poll_options else []
+        msg_id = await client.send_poll(body.phone, campaign.poll_question, opts)
+    elif campaign.campaign_type == CampaignType.interactive_buttons:
+        buttons = [b for b in [campaign.button1_text, campaign.button2_text, campaign.button3_text] if b]
+        msg_id = await client.send_interactive_buttons(body.phone, message, buttons, campaign.footer_text or "")
+    else:
+        msg_id = await client.send_message(body.phone, message)
+
+    return {"sent": bool(msg_id), "message_id": msg_id, "via": account.name}
+
+
 @router.get("/{campaign_id}/progress")
 async def campaign_progress(campaign_id: str, db: AsyncSession = Depends(get_db)):
     campaign = await db.get(Campaign, uuid.UUID(campaign_id))
@@ -139,9 +195,22 @@ async def campaign_progress(campaign_id: str, db: AsyncSession = Depends(get_db)
         "total": campaign.total_contacts,
         "sent": campaign.sent_count,
         "failed": campaign.failed_count,
+        "delivered": campaign.delivered_count,
+        "read": campaign.read_count,
         "pending": status_counts.get(MessageStatus.pending, 0),
         "progress_pct": round(
             (campaign.sent_count / campaign.total_contacts * 100)
             if campaign.total_contacts > 0 else 0, 1
         )
     }
+
+
+@router.delete("/{campaign_id}")
+async def delete_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    campaign = await db.get(Campaign, uuid.UUID(campaign_id))
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    await db.execute(delete(CampaignContact).where(CampaignContact.campaign_id == campaign.id))
+    await db.delete(campaign)
+    await db.commit()
+    return {"success": True}

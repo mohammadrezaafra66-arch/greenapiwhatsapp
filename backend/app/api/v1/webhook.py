@@ -1,106 +1,129 @@
-"""
-Green API Webhook receiver.
-Green API POSTs all WhatsApp events here.
-"""
 import json
 from datetime import datetime
 from fastapi import APIRouter, Request, BackgroundTasks
 from app.database import AsyncSessionLocal
 from app.models.inbox import InboxMessage
+from app.models.account import Account, AccountStatus
+from app.models.campaign import CampaignContact
+from sqlalchemy import select
 
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 
-
 @router.post("/{instance_id}")
-async def receive_webhook(
-    instance_id: str,
-    request: Request,
-    background_tasks: BackgroundTasks
-):
+async def receive_webhook(instance_id: str, request: Request, bg: BackgroundTasks):
     body = await request.json()
-    background_tasks.add_task(process_webhook, instance_id, body)
-    return {"status": "received"}
-
+    bg.add_task(process_webhook, instance_id, body)
+    return {"status": "ok"}
 
 async def process_webhook(instance_id: str, payload: dict):
-    """Process incoming webhook payload from Green API."""
-    webhook_type = payload.get("typeWebhook", "")
+    wtype = payload.get("typeWebhook", "")
+    if wtype == "incomingMessageReceived":
+        await handle_incoming(instance_id, payload)
+    elif wtype == "stateInstanceChanged":
+        await handle_state_change(instance_id, payload)
+    elif wtype == "outgoingMessageStatus":
+        await handle_outgoing_status(instance_id, payload)
 
-    if webhook_type == "incomingMessageReceived":
-        await _handle_incoming_message(instance_id, payload)
-    elif webhook_type == "stateInstanceChanged":
-        await _handle_state_change(instance_id, payload)
-    elif webhook_type == "outgoingMessageStatus":
-        await _handle_message_status(instance_id, payload)
-
-
-async def _handle_incoming_message(instance_id: str, payload: dict):
-    """Save incoming message to DB."""
+async def handle_incoming(instance_id: str, payload: dict):
     data = payload.get("messageData", {})
-    sender_data = payload.get("senderData", {})
-
-    msg = InboxMessage(
-        instance_id=instance_id,
-        sender_phone=sender_data.get("sender", "").replace("@c.us", "").replace("@g.us", ""),
-        sender_name=sender_data.get("senderName", ""),
-        message_type=data.get("typeMessage", "text"),
-        text_content=data.get("textMessageData", {}).get("textMessage", ""),
-        is_group="@g.us" in sender_data.get("chatId", ""),
-        group_name=sender_data.get("chatName", ""),
-        original_payload=json.dumps(payload, ensure_ascii=False),
-        timestamp=datetime.fromtimestamp(payload.get("timestamp", 0))
+    sender = payload.get("senderData", {})
+    text = (
+        data.get("textMessageData", {}).get("textMessage") or
+        data.get("extendedTextMessageData", {}).get("text") or
+        data.get("pollMessageData", {}).get("name") or ""
     )
 
+    from app.services.gpt_service import categorize_message
+    from app.services.auto_reply import process_auto_reply
+    from app.services.green_api import GreenAPIClient
+
+    category = "other"
+    if text:
+        try:
+            category = await categorize_message(text)
+        except Exception:
+            category = "other"
+    sender_phone = sender.get("sender", "").split("@")[0]
+
     async with AsyncSessionLocal() as db:
-        db.add(msg)
-        # Update received_today for the account
-        from app.models.account import Account
-        from sqlalchemy import select
-        result = await db.execute(
-            select(Account).where(Account.instance_id == instance_id)
+        msg = InboxMessage(
+            instance_id=instance_id,
+            sender_phone=sender_phone,
+            sender_name=sender.get("senderName", ""),
+            message_type=data.get("typeMessage", "text"),
+            text_content=text,
+            is_group="@g.us" in sender.get("chatId", ""),
+            group_name=sender.get("chatName", ""),
+            category=category,
+            original_payload=json.dumps(payload, ensure_ascii=False),
+            timestamp=datetime.fromtimestamp(payload.get("timestamp", 0))
         )
-        account = result.scalar_one_or_none()
+        db.add(msg)
+
+        # Update account received count
+        acc_result = await db.execute(select(Account).where(Account.instance_id == instance_id))
+        account = acc_result.scalar_one_or_none()
         if account:
             account.received_today += 1
+
+            # Check if auto-reply needed
+            client = GreenAPIClient(account.instance_id, account.api_token)
+            should_reply, reply_msg = await process_auto_reply(account, sender_phone, text, client)
+            if should_reply and reply_msg and not msg.is_group:
+                try:
+                    await client.send_message(sender_phone, reply_msg)
+                    msg.auto_replied = True
+                except Exception:
+                    pass
+
+            # If unsubscribe → blacklist
+            if text and text.strip() in ["11", "۱۱", "لغو"]:
+                from app.models.inbox import Blacklist
+                from app.models.contact import Contact
+                bl_check = await db.execute(select(Blacklist).where(Blacklist.phone == sender_phone))
+                if not bl_check.scalar_one_or_none():
+                    bl = Blacklist(phone=sender_phone, reason="self_unsubscribed")
+                    db.add(bl)
+                contact_check = await db.execute(select(Contact).where(Contact.phone == sender_phone))
+                ct = contact_check.scalar_one_or_none()
+                if ct:
+                    ct.blacklisted = True
+
         await db.commit()
 
-
-async def _handle_state_change(instance_id: str, payload: dict):
-    """Handle account state changes (banned, disconnected, etc.)."""
+async def handle_state_change(instance_id: str, payload: dict):
     state = payload.get("stateInstance", "")
-    if state in ("blocked", "sleepMode"):
-        from app.models.account import Account, AccountStatus
-        from sqlalchemy import select
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(Account).where(Account.instance_id == instance_id)
-            )
-            account = result.scalar_one_or_none()
-            if account:
-                account.status = AccountStatus.banned if state == "blocked" else AccountStatus.disconnected
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Account).where(Account.instance_id == instance_id))
+        account = result.scalar_one_or_none()
+        if account:
+            if state == "blocked":
+                account.status = AccountStatus.banned
                 account.banned_at = datetime.utcnow()
-                account.ban_reason = f"State changed to: {state}"
-                await db.commit()
-                print(f"[ALERT] Account {instance_id} status: {state}")
+                account.ban_reason = "blocked by WhatsApp"
+            elif state == "notAuthorized":
+                account.status = AccountStatus.disconnected
+            elif state == "authorized":
+                account.status = AccountStatus.active
+            await db.commit()
 
-
-async def _handle_message_status(instance_id: str, payload: dict):
-    """Update message delivery status."""
+async def handle_outgoing_status(instance_id: str, payload: dict):
     msg_id = payload.get("idMessage", "")
     status = payload.get("status", "")
-    if not msg_id:
+    if not msg_id or not status:
         return
-
-    from app.models.campaign import CampaignContact
-    from sqlalchemy import select
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(CampaignContact).where(
-                CampaignContact.green_api_message_id == msg_id
-            )
+            select(CampaignContact).where(CampaignContact.green_api_message_id == msg_id)
         )
         cc = result.scalar_one_or_none()
         if cc:
-            # Update tick status
-            cc.error_message = f"delivery: {status}"
+            cc.delivery_status = status
+            from app.models.campaign import Campaign
+            campaign = await db.get(Campaign, cc.campaign_id)
+            if campaign:
+                if status == "delivered":
+                    campaign.delivered_count += 1
+                elif status == "read":
+                    campaign.read_count += 1
             await db.commit()

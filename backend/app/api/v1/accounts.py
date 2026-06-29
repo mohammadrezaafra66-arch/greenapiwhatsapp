@@ -1,13 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
 from app.models.account import Account, AccountStatus
+from app.models.contact import Contact
 from app.services.green_api import GreenAPIClient
 from app.config import settings
 import uuid
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
+
+
+class AutoReplyUpdate(BaseModel):
+    auto_reply_enabled: bool | None = None
+    auto_reply_message: str | None = None
+    auto_reply_outside_hours: bool | None = None
+    warmup_enabled: bool | None = None
 
 
 @router.get("/")
@@ -22,8 +31,12 @@ async def list_accounts(db: AsyncSession = Depends(get_db)):
             "phone": a.phone,
             "status": a.status,
             "sent_today": a.sent_today,
+            "received_today": a.received_today,
             "daily_limit": a.computed_daily_limit,
             "days_active": a.days_active,
+            "warmup_enabled": a.warmup_enabled,
+            "auto_reply_enabled": a.auto_reply_enabled,
+            "auto_reply_outside_hours": a.auto_reply_outside_hours,
         }
         for a in accounts
     ]
@@ -41,7 +54,6 @@ async def create_account(
     await db.commit()
     await db.refresh(account)
 
-    # Configure webhook automatically
     webhook_url = f"{settings.webhook_base_url}/api/v1/webhook/{instance_id}"
     client = GreenAPIClient(instance_id, api_token)
     try:
@@ -52,33 +64,119 @@ async def create_account(
     return {"id": str(account.id), "name": account.name, "status": account.status}
 
 
-@router.get("/{account_id}/status")
-async def check_account_status(account_id: str, db: AsyncSession = Depends(get_db)):
+async def _get_account(account_id: str, db: AsyncSession) -> Account:
     account = await db.get(Account, uuid.UUID(account_id))
     if not account:
         raise HTTPException(404, "Account not found")
+    return account
 
+
+@router.get("/{account_id}/status")
+async def check_account_status(account_id: str, db: AsyncSession = Depends(get_db)):
+    account = await _get_account(account_id, db)
     client = GreenAPIClient(account.instance_id, account.api_token)
     state = await client.get_state()
-
-    # Update status in DB
     if state == "authorized":
         account.status = AccountStatus.active
-        account.days_active += 1
     elif state == "blocked":
         account.status = AccountStatus.banned
-    else:
+    elif state == "notAuthorized":
         account.status = AccountStatus.disconnected
-
     await db.commit()
     return {"state": state, "status": account.status}
 
 
+@router.get("/{account_id}/qr")
+async def get_account_qr(account_id: str, db: AsyncSession = Depends(get_db)):
+    account = await _get_account(account_id, db)
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    qr = await client.get_qr()
+    return {"qr": qr}
+
+
+@router.post("/{account_id}/reboot")
+async def reboot_account(account_id: str, db: AsyncSession = Depends(get_db)):
+    account = await _get_account(account_id, db)
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.reboot()
+    return {"rebooted": ok}
+
+
+@router.post("/{account_id}/logout")
+async def logout_account(account_id: str, db: AsyncSession = Depends(get_db)):
+    account = await _get_account(account_id, db)
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.logout()
+    account.status = AccountStatus.disconnected
+    await db.commit()
+    return {"logged_out": ok}
+
+
+@router.post("/{account_id}/check-whatsapp-bulk")
+async def check_whatsapp_bulk(
+    account_id: str,
+    contact_ids: list[str],
+    db: AsyncSession = Depends(get_db)
+):
+    """Batch-check whether contacts have WhatsApp using this account."""
+    account = await _get_account(account_id, db)
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    from datetime import datetime
+    results = []
+    for cid in contact_ids:
+        contact = await db.get(Contact, uuid.UUID(cid))
+        if not contact:
+            continue
+        try:
+            has_wa = await client.check_whatsapp(contact.phone)
+            contact.has_whatsapp = has_wa
+            contact.whatsapp_checked_at = datetime.utcnow()
+            results.append({"id": cid, "phone": contact.phone, "has_whatsapp": has_wa})
+        except Exception as e:
+            results.append({"id": cid, "phone": contact.phone, "error": str(e)})
+    await db.commit()
+    return {"checked": len(results), "results": results}
+
+
+@router.put("/{account_id}/auto-reply")
+async def update_auto_reply(account_id: str, payload: AutoReplyUpdate, db: AsyncSession = Depends(get_db)):
+    account = await _get_account(account_id, db)
+    if payload.auto_reply_enabled is not None:
+        account.auto_reply_enabled = payload.auto_reply_enabled
+    if payload.auto_reply_message is not None:
+        account.auto_reply_message = payload.auto_reply_message
+    if payload.auto_reply_outside_hours is not None:
+        account.auto_reply_outside_hours = payload.auto_reply_outside_hours
+    if payload.warmup_enabled is not None:
+        account.warmup_enabled = payload.warmup_enabled
+    await db.commit()
+    return {
+        "auto_reply_enabled": account.auto_reply_enabled,
+        "auto_reply_message": account.auto_reply_message,
+        "auto_reply_outside_hours": account.auto_reply_outside_hours,
+        "warmup_enabled": account.warmup_enabled,
+    }
+
+
+@router.get("/{account_id}/queue")
+async def get_account_queue(account_id: str, db: AsyncSession = Depends(get_db)):
+    account = await _get_account(account_id, db)
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    queue = await client.show_messages_queue()
+    return {"queue": queue, "count": len(queue) if isinstance(queue, list) else 0}
+
+
+@router.delete("/{account_id}/queue")
+async def clear_account_queue(account_id: str, db: AsyncSession = Depends(get_db)):
+    account = await _get_account(account_id, db)
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.clear_messages_queue()
+    return {"cleared": ok}
+
+
 @router.delete("/{account_id}")
 async def delete_account(account_id: str, db: AsyncSession = Depends(get_db)):
-    account = await db.get(Account, uuid.UUID(account_id))
-    if not account:
-        raise HTTPException(404, "Account not found")
+    account = await _get_account(account_id, db)
     await db.delete(account)
     await db.commit()
     return {"success": True}

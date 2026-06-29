@@ -1,55 +1,53 @@
-"""
-OpenAI GPT service for personalized message generation.
-"""
 from openai import AsyncOpenAI
 from app.config import settings
 
-client = AsyncOpenAI(api_key=settings.openai_api_key)
+_client: AsyncOpenAI | None = None
 
 
-async def generate_message(
-    first_name: str,
-    last_name: str,
-    gpt_prompt: str,
-    products: list[dict] = None
-) -> str:
-    """
-    Generate a unique personalized WhatsApp message.
+def get_client() -> AsyncOpenAI:
+    """Lazily build the OpenAI client so the app can start without a key."""
+    global _client
+    if _client is None:
+        _client = AsyncOpenAI(api_key=settings.openai_api_key or "missing")
+    return _client
 
-    products format: [{"name": "...", "price": 12000000}, ...]
-    """
-    products_section = ""
-    if products:
-        products_section = "\n\nمحصولات امروز افراکالا:\n"
-        for p in products[:3]:
-            price_formatted = f"{p['price']:,} تومان" if p.get('price') else "تماس بگیرید"
-            products_section += f"• {p['name']}: {price_formatted}\n"
 
-    system_prompt = """
-تو یک دستیار فروش افراکالا هستی. پیام‌های واتس‌اپ کوتاه، صمیمی و حرفه‌ای برای مشتریان می‌نویسی.
-قوانین مهم:
-- پیام باید کاملاً منحصربه‌فرد و شخصی باشد
-- از اسم مشتری استفاده کن
+SYSTEM_PROMPT = """
+تو یک دستیار فروش افراکالا هستی که پیام‌های واتس‌اپ کوتاه، صمیمی و حرفه‌ای فارسی می‌نویسی.
+قوانین:
+- پیام منحصربه‌فرد، شخصی، و با اسم مشتری
 - لحن صمیمی اما حرفه‌ای
 - حداکثر ۳ پاراگراف کوتاه
-- در پایان گزینه لغو: "برای لغو عدد ۱۱ را ارسال کنید"
+- بدون کلمات اضافه مثل "خلاصه" یا "در نتیجه"
+- در پایان: "برای لغو عدد ۱۱ ارسال کنید"
 """
 
-    user_content = f"""
-اسم مشتری: {first_name} {last_name}
-{gpt_prompt}
-{products_section}
-پیام واتس‌اپ فارسی بنویس:
-"""
+async def generate_message(first_name: str, last_name: str, gpt_prompt: str, products: list[dict] = None) -> str:
+    products_text = ""
+    if products:
+        products_text = "\n\nمحصولات امروز افراکالا:\n"
+        for p in products[:3]:
+            price = f"{p['price']:,} تومان" if p.get("price") else "تماس بگیرید"
+            products_text += f"• {p['name']}: {price}\n"
 
-    response = await client.chat.completions.create(
+    user_msg = f"اسم مشتری: {first_name} {last_name}\n{gpt_prompt}{products_text}\nپیام واتس‌اپ فارسی بنویس:"
+
+    r = await get_client().chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user_msg}],
+        max_tokens=500, temperature=0.85
+    )
+    return r.choices[0].message.content.strip()
+
+
+async def categorize_message(text: str) -> str:
+    """Auto-categorize incoming message: price_inquiry / complaint / order / unsubscribe / other"""
+    r = await get_client().chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content}
+            {"role": "system", "content": "Categorize the Persian WhatsApp message into exactly one: price_inquiry, complaint, order, unsubscribe, other. Reply with only the category word."},
+            {"role": "user", "content": text or ""}
         ],
-        max_tokens=500,
-        temperature=0.8  # Higher = more unique messages
+        max_tokens=10
     )
-
-    return response.choices[0].message.content.strip()
+    return r.choices[0].message.content.strip().lower()
