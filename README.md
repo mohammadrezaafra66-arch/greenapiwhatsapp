@@ -49,7 +49,17 @@ docker-compose up -d
 
 - **API و مستندات**: <http://localhost:8000/docs>
 - **بررسی سلامت**: <http://localhost:8000/health>
-- **داشبورد**: فایل `frontend/index.html` را در مرورگر باز کنید (یا با یک وب‌سرور ساده سرو کنید).
+- **داشبورد (React)**: رابط کاربری در پوشه `frontend/` به‌صورت یک اپ React + Vite ساخته شده است:
+
+```bash
+cd frontend
+npm install
+npm run dev        # روی http://localhost:5173
+```
+
+برای ساخت نسخه تولید: `npm run build` (خروجی در `frontend/dist/`). آدرس بک‌اند پیش‌فرض `http://localhost:8000/api/v1` است و با متغیر `VITE_API_BASE` قابل تغییر است (نمونه در `frontend/.env.example`).
+
+داشبورد شامل صفحات: داشبورد زنده، حساب‌ها، کمپین‌ها، مخاطبین، صندوق ورودی، گروه‌ها، استوری‌ها، قالب‌ها و لیست سیاه — همگی با رابط فارسی راست‌به‌چپ.
 
 ### اجرای محلی برای توسعه (بدون Docker کامل)
 
