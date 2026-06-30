@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   db:
     image: postgres:15-alpine
@@ -10,21 +8,27 @@ services:
       POSTGRES_DB: whatsapp_sender
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # No host port published — only reachable on the internal Docker network
+    # as host "db". Avoids clashing with a local Postgres on 5432.
 
   redis:
     image: redis:7-alpine
     restart: always
-    ports:
-      - "6379:6379"
+    # No host port published — reachable internally as host "redis".
+    # Avoids clashing with a local Redis on 6379.
 
   backend:
     build: ./backend
     restart: always
     env_file: .env
+    # Override the localhost-based URLs from .env so the backend reaches the
+    # db/redis *services* by name on the Docker network.
+    environment:
+      DATABASE_URL: postgresql+asyncpg://afrakala:password@db:5432/whatsapp_sender
+      SYNC_DATABASE_URL: postgresql://afrakala:password@db:5432/whatsapp_sender
+      REDIS_URL: redis://redis:6379/0
     ports:
-      - "8000:8000"
+      - "8002:8000"   # host 8002 (8000 is taken locally) -> container 8000
     depends_on:
       - db
       - redis
@@ -36,6 +40,10 @@ services:
     build: ./backend
     restart: always
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://afrakala:password@db:5432/whatsapp_sender
+      SYNC_DATABASE_URL: postgresql://afrakala:password@db:5432/whatsapp_sender
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       - db
       - redis
@@ -47,6 +55,10 @@ services:
     build: ./backend
     restart: always
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://afrakala:password@db:5432/whatsapp_sender
+      SYNC_DATABASE_URL: postgresql://afrakala:password@db:5432/whatsapp_sender
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       - redis
     volumes:
