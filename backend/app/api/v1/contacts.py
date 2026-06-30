@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from app.database import get_db
@@ -114,6 +114,56 @@ async def contact_history(contact_id: str, count: int = 50, db: AsyncSession = D
     client = GreenAPIClient(account.instance_id, account.api_token)
     history = await client.get_chat_history(contact.phone, count)
     return {"phone": contact.phone, "history": history}
+
+
+@router.post("/{contact_id}/send-file")
+async def send_file_to_contact(
+    contact_id: str,
+    file: UploadFile = File(...),
+    caption: str = Form(""),
+    db: AsyncSession = Depends(get_db)
+):
+    """Send an arbitrary file directly to a contact via multipart upload (no URL hosting needed)."""
+    contact = await db.get(Contact, uuid.UUID(contact_id))
+    if not contact:
+        raise HTTPException(404, "Contact not found")
+    acc_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
+    account = acc_result.scalars().first()
+    if not account:
+        raise HTTPException(400, "No active account available")
+
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    content = await file.read()
+    msg_id = await client.send_file_upload(contact.phone, content, file.filename, caption)
+    return {"sent": bool(msg_id), "message_id": msg_id, "via": account.name}
+
+
+@router.post("/{contact_id}/archive")
+async def archive_contact_chat(contact_id: str, db: AsyncSession = Depends(get_db)):
+    contact = await db.get(Contact, uuid.UUID(contact_id))
+    if not contact:
+        raise HTTPException(404, "Contact not found")
+    acc_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
+    account = acc_result.scalars().first()
+    if not account:
+        raise HTTPException(400, "No active account available")
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.archive_chat(contact.phone)
+    return {"archived": ok}
+
+
+@router.post("/{contact_id}/unarchive")
+async def unarchive_contact_chat(contact_id: str, db: AsyncSession = Depends(get_db)):
+    contact = await db.get(Contact, uuid.UUID(contact_id))
+    if not contact:
+        raise HTTPException(404, "Contact not found")
+    acc_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
+    account = acc_result.scalars().first()
+    if not account:
+        raise HTTPException(400, "No active account available")
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.unarchive_chat(contact.phone)
+    return {"unarchived": ok}
 
 
 @router.post("/{contact_id}/blacklist")

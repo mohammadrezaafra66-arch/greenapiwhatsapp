@@ -29,6 +29,7 @@ class Account(Base):
     banned_at: Mapped[datetime | None] = mapped_column(DateTime)
     ban_reason: Mapped[str | None] = mapped_column(Text)
     warmup_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    polling_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     auto_reply_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     auto_reply_message: Mapped[str | None] = mapped_column(Text)
     auto_reply_outside_hours: Mapped[bool] = mapped_column(Boolean, default=False)

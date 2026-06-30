@@ -20,3 +20,10 @@ def test_base_url_built_from_instance():
     assert client.base_url == "https://api.green-api.com/waInstance1101234567"
     assert client.instance_id == "1101234567"
     assert client.api_token == "token-abc"
+
+
+def test_new_methods_exist():
+    import inspect
+    from app.services.green_api import GreenAPIClient
+    assert inspect.iscoroutinefunction(GreenAPIClient.send_file_upload)
+    assert inspect.iscoroutinefunction(GreenAPIClient.unarchive_chat)

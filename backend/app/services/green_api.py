@@ -100,6 +100,16 @@ class GreenAPIClient:
         })
         return r.get("idMessage")
 
+    async def send_file_upload(self, phone: str, file_bytes: bytes, filename: str, caption: str = "") -> Optional[str]:
+        """Send a file from raw bytes via multipart upload (no public URL needed)."""
+        url = f"{self.base_url}/sendFileByUpload/{self.api_token}"
+        files = {"file": (filename, file_bytes)}
+        data = {"chatId": self._chat_id(phone), "caption": caption}
+        async with httpx.AsyncClient(timeout=60) as c:
+            r = await c.post(url, data=data, files=files)
+            r.raise_for_status()
+            return r.json().get("idMessage")
+
     async def send_poll(self, phone: str, question: str, options: list[str], multiple: bool = False) -> Optional[str]:
         r = await self._post("sendPoll", {
             "chatId": self._chat_id(phone),
@@ -197,6 +207,10 @@ class GreenAPIClient:
     async def archive_chat(self, phone: str) -> bool:
         r = await self._post("archiveChat", {"chatId": self._chat_id(phone)})
         return r.get("isArchived", False)
+
+    async def unarchive_chat(self, phone: str) -> bool:
+        r = await self._post("unarchiveChat", {"chatId": self._chat_id(phone)})
+        return r.get("isUnarchived", False)
 
     # ── QUEUE ────────────────────────────────────────────
     async def show_messages_queue(self) -> list[dict]:

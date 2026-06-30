@@ -59,6 +59,25 @@ async def mark_read(message_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(404, "Message not found")
     msg.is_read = True
     await db.commit()
+
+    # Best-effort: also mark the real WhatsApp chat as read via Green API.
+    try:
+        acc_result = await db.execute(select(Account).where(Account.instance_id == msg.instance_id))
+        account = acc_result.scalar_one_or_none()
+        if account:
+            import json
+            from app.services.green_api import GreenAPIClient
+            green_id = ""
+            if msg.original_payload:
+                try:
+                    green_id = json.loads(msg.original_payload).get("idMessage", "") or ""
+                except Exception:
+                    green_id = ""
+            client = GreenAPIClient(account.instance_id, account.api_token)
+            await client.mark_as_read(msg.sender_phone, green_id)
+    except Exception as e:
+        print(f"[Inbox] readChat sync failed (non-fatal): {e}")
+
     return {"success": True}
 
 

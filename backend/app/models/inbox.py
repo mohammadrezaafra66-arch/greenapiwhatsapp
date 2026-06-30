@@ -19,6 +19,9 @@ class InboxMessage(Base):
     is_reply: Mapped[bool] = mapped_column(Boolean, default=False)
     category: Mapped[str | None] = mapped_column(String(50))  # price_inquiry/complaint/order/unsubscribe
     auto_replied: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    edited_text: Mapped[str | None] = mapped_column(Text)
+    original_message_id: Mapped[str | None] = mapped_column(String(200))
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     original_payload: Mapped[str | None] = mapped_column(Text)
     timestamp: Mapped[datetime | None] = mapped_column(DateTime)

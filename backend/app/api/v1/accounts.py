@@ -17,6 +17,7 @@ class AutoReplyUpdate(BaseModel):
     auto_reply_message: str | None = None
     auto_reply_outside_hours: bool | None = None
     warmup_enabled: bool | None = None
+    polling_enabled: bool | None = None
 
 
 @router.get("/")
@@ -149,12 +150,15 @@ async def update_auto_reply(account_id: str, payload: AutoReplyUpdate, db: Async
         account.auto_reply_outside_hours = payload.auto_reply_outside_hours
     if payload.warmup_enabled is not None:
         account.warmup_enabled = payload.warmup_enabled
+    if payload.polling_enabled is not None:
+        account.polling_enabled = payload.polling_enabled
     await db.commit()
     return {
         "auto_reply_enabled": account.auto_reply_enabled,
         "auto_reply_message": account.auto_reply_message,
         "auto_reply_outside_hours": account.auto_reply_outside_hours,
         "warmup_enabled": account.warmup_enabled,
+        "polling_enabled": account.polling_enabled,
     }
 
 

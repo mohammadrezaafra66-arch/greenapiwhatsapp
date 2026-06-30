@@ -33,6 +33,25 @@ async def handle_incoming(instance_id: str, payload: dict):
         data.get("pollMessageData", {}).get("name") or ""
     )
 
+    type_message = data.get("typeMessage", "text")
+    is_edited = type_message == "editedMessage"
+    is_deleted = type_message in ("deletedMessage", "revokedMessage")
+
+    edited_text = None
+    original_message_id = None
+    if is_edited:
+        edited_block = data.get("editedMessageData", {}) or {}
+        edited_text = (
+            edited_block.get("textMessageData", {}).get("textMessage")
+            or edited_block.get("extendedTextMessageData", {}).get("text")
+        )
+        original_message_id = edited_block.get("stanzaId") or payload.get("idMessage")
+        if edited_text:
+            text = edited_text
+    elif is_deleted:
+        deleted_block = data.get("deletedMessageData", {}) or data.get("protocolMessageData", {}) or {}
+        original_message_id = deleted_block.get("stanzaId") or payload.get("idMessage")
+
     from app.services.gpt_service import categorize_message
     from app.services.auto_reply import process_auto_reply
     from app.services.green_api import GreenAPIClient
@@ -56,6 +75,9 @@ async def handle_incoming(instance_id: str, payload: dict):
             group_name=sender.get("chatName", ""),
             category=category,
             original_payload=json.dumps(payload, ensure_ascii=False),
+            is_deleted=is_deleted,
+            edited_text=edited_text,
+            original_message_id=original_message_id,
             timestamp=datetime.fromtimestamp(payload.get("timestamp", 0))
         )
         db.add(msg)

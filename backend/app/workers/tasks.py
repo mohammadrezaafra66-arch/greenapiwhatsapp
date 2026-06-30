@@ -44,6 +44,25 @@ def task_warmup_accounts():
             await db.commit()
     asyncio.run(_w())
 
+@celery_app.task(name="tasks.poll_accounts")
+def task_poll_accounts():
+    async def _p():
+        from app.database import AsyncSessionLocal
+        from app.models.account import Account, AccountStatus
+        from app.services.polling_service import poll_account_once
+        from sqlalchemy import select
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Account).where(Account.status == AccountStatus.active, Account.polling_enabled == True)
+            )
+            accounts = result.scalars().all()
+        for account in accounts:
+            try:
+                await poll_account_once(account)
+            except Exception as e:
+                print(f"[Polling] account {account.name} error: {e}")
+    asyncio.run(_p())
+
 @celery_app.task(name="tasks.sync_account_states")
 def task_sync_account_states():
     async def _s():
