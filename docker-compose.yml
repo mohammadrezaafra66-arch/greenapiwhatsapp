@@ -53,5 +53,16 @@ services:
       - ./backend:/app
     command: celery -A app.workers.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
 
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: /api/v1
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:

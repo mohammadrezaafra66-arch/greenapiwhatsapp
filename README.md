@@ -49,7 +49,7 @@ docker-compose up -d
 
 - **API و مستندات**: <http://localhost:8000/docs>
 - **بررسی سلامت**: <http://localhost:8000/health>
-- **داشبورد (React)**: رابط کاربری در پوشه `frontend/` به‌صورت یک اپ React + Vite ساخته شده است:
+- **داشبورد (React)**: با `docker-compose up -d` سرویس `frontend` نیز روی <http://localhost:3000> بالا می‌آید (nginx که فایل‌های استاتیک را سرو و درخواست‌های `/api` را به بک‌اند پراکسی می‌کند). برای توسعه می‌توانید جداگانه اجرا کنید:
 
 ```bash
 cd frontend
