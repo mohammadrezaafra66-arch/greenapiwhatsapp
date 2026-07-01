@@ -42,10 +42,15 @@ async def list_inbox(
             "sender_phone": m.sender_phone,
             "sender_name": m.sender_name,
             "text": m.text_content,
+            "message_type": m.message_type,
             "category": m.category,
             "is_group": m.is_group,
             "is_read": m.is_read,
             "auto_replied": m.auto_replied,
+            "call_status": m.call_status,
+            "button_reply_id": m.button_reply_id,
+            "button_reply_title": m.button_reply_title,
+            "poll_votes": m.poll_votes,
             "received_at": str(m.received_at),
         }
         for m in rows

@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -76,6 +77,38 @@ async def send_image_status(body: ImageStatusBody, db: AsyncSession = Depends(ge
             results.append({"account": account.name, "error": str(e)})
     await db.commit()
     return {"sent_to": len(results), "results": results}
+
+
+@router.post("/voice")
+async def send_voice_status(audio_url: str, db: AsyncSession = Depends(get_db)):
+    acc_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
+    accounts = acc_result.scalars().all()
+    results = []
+    for account in accounts:
+        client = GreenAPIClient(account.instance_id, account.api_token)
+        msg_id = await client.send_voice_status(audio_url)
+        results.append({"account": account.name, "message_id": msg_id})
+    return {"sent": len(results), "results": results}
+
+
+@router.delete("/{message_id}")
+async def delete_status(message_id: str, account_id: str, db: AsyncSession = Depends(get_db)):
+    account = await db.get(Account, uuid.UUID(account_id))
+    if not account:
+        raise HTTPException(404, "Account not found")
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.delete_status(message_id)
+    return {"deleted": ok}
+
+
+@router.get("/incoming/{account_id}")
+async def get_incoming_statuses(account_id: str, db: AsyncSession = Depends(get_db)):
+    account = await db.get(Account, uuid.UUID(account_id))
+    if not account:
+        raise HTTPException(404, "Account not found")
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    statuses = await client.get_incoming_statuses()
+    return {"count": len(statuses), "statuses": statuses}
 
 
 @router.get("/{message_id}/stats")

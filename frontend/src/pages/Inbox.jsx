@@ -11,8 +11,51 @@ const CAT_FA = {
   uncategorized: "دسته‌بندی‌نشده",
 };
 
+const MSG_TYPE_FA = {
+  call: "تماس",
+  button_reply: "پاسخ دکمه",
+  poll_update: "رأی نظرسنجی",
+};
+
+function renderSpecial(m) {
+  if (m.message_type === "call") {
+    return (
+      <p className="text-sm text-amber-300 mt-1">
+        📞 تماس {m.call_status === "missed" ? "از دست رفته" : m.call_status || ""}
+      </p>
+    );
+  }
+  if (m.message_type === "button_reply") {
+    return (
+      <p className="text-sm text-sky-300 mt-1">
+        🔘 دکمه انتخاب‌شده: <b>{m.button_reply_title || m.text || "—"}</b>
+      </p>
+    );
+  }
+  if (m.message_type === "poll_update") {
+    let votes = [];
+    try {
+      votes = JSON.parse(m.poll_votes || "[]");
+    } catch {
+      votes = [];
+    }
+    return (
+      <div className="text-sm text-purple-300 mt-1">
+        📊 آرای نظرسنجی:
+        <ul className="list-disc pr-5 text-xs mt-1">
+          {votes.length === 0 && <li>—</li>}
+          {votes.map((v, i) => (
+            <li key={i}>{v.optionName || v.name || JSON.stringify(v)}{Array.isArray(v.optionVoters) ? ` (${v.optionVoters.length})` : ""}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+  return null;
+}
+
 export default function Inbox() {
-  const [filter, setFilter] = React.useState({ unread: false, category: "" });
+  const [filter, setFilter] = React.useState({ unread: false, category: "", msgType: "" });
   const [data, setData] = React.useState(null);
   const [stats, setStats] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -43,6 +86,10 @@ export default function Inbox() {
             <option value="">همه دسته‌ها</option>
             {Object.entries(CAT_FA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
+          <select className="input w-auto" value={filter.msgType} onChange={(e) => setFilter({ ...filter, msgType: e.target.value })}>
+            <option value="">همه انواع پیام</option>
+            {Object.entries(MSG_TYPE_FA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
         </div>
       </div>
 
@@ -59,16 +106,18 @@ export default function Inbox() {
       {data && data.length === 0 && <Empty label="پیامی وجود ندارد." />}
 
       <div className="space-y-2">
-        {data?.map((m) => (
+        {data?.filter((m) => !filter.msgType || m.message_type === filter.msgType).map((m) => (
           <div key={m.id} className={`card flex justify-between items-start gap-3 ${!m.is_read ? "border-brand/40" : ""}`}>
             <div className="flex-1">
               <p className="text-sm">
                 <span className="font-bold text-emerald-300">{m.sender_name || m.sender_phone}</span>
                 {m.is_group && <span className="text-xs text-purple-300"> (گروه)</span>}
+                {MSG_TYPE_FA[m.message_type] && <span className="badge mr-2 bg-indigo-500/20 text-indigo-300 border-indigo-500/40">{MSG_TYPE_FA[m.message_type]}</span>}
                 {m.category && <span className="badge mr-2 bg-slate-700 text-slate-300 border-slate-600">{CAT_FA[m.category] || m.category}</span>}
                 {m.auto_replied && <span className="badge mr-1 bg-sky-500/20 text-sky-300 border-sky-500/40">پاسخ خودکار</span>}
               </p>
-              <p className="text-slate-300 text-sm mt-1">{m.text || "—"}</p>
+              {renderSpecial(m)}
+              {!MSG_TYPE_FA[m.message_type] && <p className="text-slate-300 text-sm mt-1">{m.text || "—"}</p>}
               <p className="text-xs text-slate-500 mt-1 font-mono">{m.sender_phone}</p>
             </div>
             <div className="flex flex-col gap-1">

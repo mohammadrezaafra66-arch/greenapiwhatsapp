@@ -125,6 +125,46 @@ async def send_to_group(group_id: str, body: GroupSendBody, db: AsyncSession = D
     return {"sent": bool(msg_id), "message_id": msg_id}
 
 
+@router.put("/{group_id}/name")
+async def update_group_name(group_id: str, name: str, account_id: str, db: AsyncSession = Depends(get_db)):
+    account = await db.get(Account, uuid.UUID(account_id))
+    if not account:
+        raise HTTPException(404, "Account not found")
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.update_group_name(group_id, name)
+    return {"updated": ok}
+
+
+@router.post("/{group_id}/admin/{phone}")
+async def set_group_admin(group_id: str, phone: str, account_id: str, db: AsyncSession = Depends(get_db)):
+    account = await db.get(Account, uuid.UUID(account_id))
+    if not account:
+        raise HTTPException(404, "Account not found")
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.set_group_admin(group_id, phone)
+    return {"set_admin": ok}
+
+
+@router.delete("/{group_id}/admin/{phone}")
+async def remove_group_admin(group_id: str, phone: str, account_id: str, db: AsyncSession = Depends(get_db)):
+    account = await db.get(Account, uuid.UUID(account_id))
+    if not account:
+        raise HTTPException(404, "Account not found")
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.remove_group_admin(group_id, phone)
+    return {"removed_admin": ok}
+
+
+@router.post("/{group_id}/leave")
+async def leave_group(group_id: str, account_id: str, db: AsyncSession = Depends(get_db)):
+    account = await db.get(Account, uuid.UUID(account_id))
+    if not account:
+        raise HTTPException(404, "Account not found")
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.leave_group(group_id)
+    return {"left": ok}
+
+
 @router.get("/{group_id}/info")
 async def group_info(group_id: str, db: AsyncSession = Depends(get_db)):
     group = await db.get(WhatsAppGroup, uuid.UUID(group_id))

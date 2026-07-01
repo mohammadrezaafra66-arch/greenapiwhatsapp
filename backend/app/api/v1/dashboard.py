@@ -56,6 +56,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
                     "received_today": a.received_today,
                     "daily_limit": a.computed_daily_limit,
                     "warmup_enabled": a.warmup_enabled,
+                    "quota_exceeded_at": str(a.quota_exceeded_at) if a.quota_exceeded_at else None,
                 }
                 for a in accounts
             ]

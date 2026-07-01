@@ -44,6 +44,12 @@ export default function Dashboard() {
     );
 
   const rl = stats.rate_limiter;
+  const now = Date.now();
+  const quotaHit = (stats.accounts.detail || []).filter((a) => {
+    if (!a.quota_exceeded_at) return false;
+    const t = new Date(a.quota_exceeded_at).getTime();
+    return !isNaN(t) && now - t < 24 * 3600 * 1000;
+  });
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -52,6 +58,12 @@ export default function Dashboard() {
           آخرین به‌روزرسانی: {updated?.toLocaleTimeString("fa-IR")}
         </span>
       </div>
+
+      {quotaHit.map((a) => (
+        <div key={a.id} className="card bg-red-500/10 border-red-500/40 text-red-300">
+          ⚠️ حساب {a.name} به سقف ارسال رسیده — تا فردا صبر کنید
+        </div>
+      ))}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Stat label="حساب‌های فعال" value={stats.accounts.active} color="text-emerald-400" />

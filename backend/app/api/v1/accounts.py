@@ -178,6 +178,50 @@ async def clear_account_queue(account_id: str, db: AsyncSession = Depends(get_db
     return {"cleared": ok}
 
 
+@router.post("/{account_id}/send-typing")
+async def send_typing(account_id: str, phone: str, seconds: int = 3, db: AsyncSession = Depends(get_db)):
+    account = await _get_account(account_id, db)
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.send_typing(phone, seconds)
+    return {"typing_sent": ok}
+
+
+@router.post("/{account_id}/messages/{message_id}/edit")
+async def edit_message(account_id: str, message_id: str, phone: str, new_text: str, db: AsyncSession = Depends(get_db)):
+    account = await _get_account(account_id, db)
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.edit_message(phone, message_id, new_text)
+    return {"edited": ok}
+
+
+@router.delete("/{account_id}/messages/{message_id}")
+async def delete_message(account_id: str, message_id: str, phone: str, db: AsyncSession = Depends(get_db)):
+    account = await _get_account(account_id, db)
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.delete_message(phone, message_id)
+    return {"deleted": ok}
+
+
+@router.post("/{account_id}/contacts/add")
+async def add_contact_to_phonebook(account_id: str, phone: str, first_name: str, last_name: str = "", db: AsyncSession = Depends(get_db)):
+    account = await _get_account(account_id, db)
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.add_contact(phone, first_name, last_name)
+    return {"added": ok}
+
+
+@router.post("/{account_id}/token/refresh")
+async def refresh_api_token(account_id: str, db: AsyncSession = Depends(get_db)):
+    """Generate a new API token. Old token stays valid ~1h. Update DB immediately."""
+    account = await _get_account(account_id, db)
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    new_token = await client.update_api_token()
+    if new_token:
+        account.api_token = new_token
+        await db.commit()
+    return {"new_token": new_token, "updated_in_db": bool(new_token)}
+
+
 @router.delete("/{account_id}")
 async def delete_account(account_id: str, db: AsyncSession = Depends(get_db)):
     account = await _get_account(account_id, db)

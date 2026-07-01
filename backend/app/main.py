@@ -8,6 +8,7 @@ from app.api.v1 import (
     accounts, campaigns, contacts, webhook, dashboard,
     inbox, groups, statuses, templates, queue, blacklist,
     keyword_rules, account_schedules,
+    journals, files as files_router,
 )
 
 @asynccontextmanager
@@ -59,6 +60,35 @@ async def lifespan(app: FastAPI):
         ]
         for stmt in ddl:
             await conn.execute(text(stmt))
+        ddl_v4 = [
+            "ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS call_status varchar(50)",
+            "ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS button_reply_id varchar(200)",
+            "ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS button_reply_title varchar(500)",
+            "ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS poll_votes text",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS quota_exceeded_at timestamp",
+            """CREATE TABLE IF NOT EXISTS chat_journals (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                account_id uuid REFERENCES accounts(id) ON DELETE CASCADE,
+                instance_id varchar(50),
+                chat_id varchar(100),
+                direction varchar(10),
+                message_type varchar(50),
+                text_content text,
+                file_url text,
+                green_message_id varchar(200),
+                timestamp timestamp,
+                fetched_at timestamp DEFAULT now()
+            )""",
+            """CREATE TABLE IF NOT EXISTS uploaded_files (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                account_id uuid REFERENCES accounts(id) ON DELETE CASCADE,
+                original_filename varchar(500),
+                green_api_url text,
+                uploaded_at timestamp DEFAULT now()
+            )""",
+        ]
+        for stmt in ddl_v4:
+            await conn.execute(text(stmt))
     yield
 
 app = FastAPI(title="Afrakala WhatsApp Sender", version="2.0.0", lifespan=lifespan)
@@ -76,6 +106,7 @@ for router in [
     dashboard.router, inbox.router, groups.router, statuses.router,
     templates.router, queue.router, blacklist.router,
     keyword_rules.router, account_schedules.router,
+    journals.router, files_router.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

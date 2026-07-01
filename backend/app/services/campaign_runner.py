@@ -96,6 +96,15 @@ async def run_campaign(campaign_id: str):
 
                 cc.generated_message = message
                 client = GreenAPIClient(account.instance_id, account.api_token)
+
+                # Show "typing..." for 2-4 seconds before sending (more human-like)
+                try:
+                    typing_secs = random.randint(2, 4)
+                    await client.send_typing(contact.phone, typing_secs)
+                    await asyncio.sleep(typing_secs)
+                except Exception:
+                    pass  # Non-fatal — never block sending
+
                 msg_id = None
 
                 # Send based on campaign type

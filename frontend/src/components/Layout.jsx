@@ -13,6 +13,8 @@ const NAV = [
   { to: "/blacklist", label: "لیست سیاه", icon: "🚫" },
   { to: "/keyword-rules", label: "پاسخ خودکار", icon: "🔑" },
   { to: "/account-schedules", label: "زمان‌بندی حساب", icon: "⏱️" },
+  { to: "/journals", label: "ژورنال پیام‌ها", icon: "📋" },
+  { to: "/files", label: "فایل‌ها", icon: "📁" },
 ];
 
 export default function Layout() {

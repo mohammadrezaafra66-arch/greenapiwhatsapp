@@ -1,5 +1,5 @@
 import React from "react";
-import { Campaigns as Api } from "../api.js";
+import { Campaigns as Api, FilesApi, Accounts } from "../api.js";
 import { Badge, Spinner, Empty, Modal, Progress, useAsync } from "../ui.jsx";
 
 const TYPE_FA = {
@@ -77,7 +77,36 @@ function AddCampaignModal({ onClose, onDone }) {
     campaign_scope: "pv", group_ids: "",
   });
   const [saving, setSaving] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+
+  // Prefill image_url + campaign type from a file chosen on the Files page
+  React.useEffect(() => {
+    const pre = typeof localStorage !== "undefined" ? localStorage.getItem("afrakala_prefill_image_url") : "";
+    if (pre) {
+      setF((prev) => ({ ...prev, image_url: pre, campaign_type: "image" }));
+      localStorage.removeItem("afrakala_prefill_image_url");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const uploadImage = async (file) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const accs = await Accounts.list();
+      const active = accs.find((a) => a.status === "active") || accs[0];
+      if (!active) return alert("حسابی برای آپلود موجود نیست");
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await FilesApi.upload(active.id, fd);
+      setF((prev) => ({ ...prev, image_url: r.url }));
+    } catch (e) {
+      alert(e?.response?.data?.detail || e.message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const submit = async () => {
     if (!f.name) return alert("نام کمپین لازم است");
@@ -167,7 +196,13 @@ function AddCampaignModal({ onClose, onDone }) {
         {f.campaign_type === "image" && (
           <div>
             <label className="label">آدرس تصویر (URL)</label>
-            <input className="input" value={f.image_url} onChange={set("image_url")} />
+            <div className="flex gap-2">
+              <input className="input flex-1" value={f.image_url} onChange={set("image_url")} />
+              <label className="btn-secondary cursor-pointer whitespace-nowrap">
+                {uploading ? "در حال آپلود..." : "آپلود فایل"}
+                <input type="file" className="hidden" onChange={(e) => uploadImage(e.target.files?.[0])} />
+              </label>
+            </div>
           </div>
         )}
         {f.campaign_type === "poll" && (

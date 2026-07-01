@@ -123,6 +123,21 @@ export const AccountSchedulesApi = {
   updateDelay: (accountId, body) => http.put(`/account-schedules/${accountId}/delay`, body).then((r) => r.data),
 };
 
+// ── Journals ───────────────────────────────────────────────
+export const JournalsApi = {
+  incoming: (accountId, minutes = 1440) => http.get(`/journals/${accountId}/incoming?minutes=${minutes}`).then((r) => r.data),
+  outgoing: (accountId, minutes = 1440) => http.get(`/journals/${accountId}/outgoing?minutes=${minutes}`).then((r) => r.data),
+  chats: (accountId) => http.get(`/journals/${accountId}/chats`).then((r) => r.data),
+  queueCount: (accountId) => http.get(`/journals/${accountId}/queue-count`).then((r) => r.data),
+  clearWebhooks: (accountId) => http.delete(`/journals/${accountId}/webhooks-queue`).then((r) => r.data),
+};
+
+// ── Files ──────────────────────────────────────────────────
+export const FilesApi = {
+  upload: (accountId, formData) => http.post(`/files/upload/${accountId}`, formData, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data),
+  list: (accountId) => http.get(`/files/list/${accountId}`).then((r) => r.data),
+};
+
 // ── Blacklist ──────────────────────────────────────────
 export const BlacklistApi = {
   list: () => http.get("/blacklist/").then((r) => r.data),

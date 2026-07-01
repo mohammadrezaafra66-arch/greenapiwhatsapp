@@ -23,6 +23,14 @@ async def process_webhook(instance_id: str, payload: dict):
         await handle_state_change(instance_id, payload)
     elif wtype == "outgoingMessageStatus":
         await handle_outgoing_status(instance_id, payload)
+    elif wtype == "incomingCall":
+        await handle_incoming_call(instance_id, payload)
+    elif wtype == "buttonsResponseMessage":
+        await handle_button_reply(instance_id, payload)
+    elif wtype == "pollUpdateMessage":
+        await handle_poll_update(instance_id, payload)
+    elif wtype == "quotaExceeded":
+        await handle_quota_exceeded(instance_id, payload)
 
 async def handle_incoming(instance_id: str, payload: dict):
     data = payload.get("messageData", {})
@@ -166,3 +174,95 @@ async def handle_outgoing_status(instance_id: str, payload: dict):
                 elif status == "read":
                     campaign.read_count += 1
             await db.commit()
+
+
+async def handle_incoming_call(instance_id: str, payload: dict):
+    """Log incoming WhatsApp calls."""
+    sender = payload.get("senderData", {})
+    sender_phone = sender.get("sender", "").split("@")[0]
+    async with AsyncSessionLocal() as db:
+        msg = InboxMessage(
+            instance_id=instance_id,
+            sender_phone=sender_phone,
+            sender_name=sender.get("senderName", ""),
+            message_type="call",
+            call_status=payload.get("status", "missed"),
+            original_payload=json.dumps(payload, ensure_ascii=False),
+            timestamp=datetime.fromtimestamp(payload.get("timestamp", 0))
+        )
+        db.add(msg)
+        await db.commit()
+
+
+async def handle_button_reply(instance_id: str, payload: dict):
+    """Handle interactive button reply from a recipient."""
+    data = payload.get("messageData", {})
+    button_data = data.get("buttonsResponseMessage", {})
+    sender = payload.get("senderData", {})
+    sender_phone = sender.get("sender", "").split("@")[0]
+
+    async with AsyncSessionLocal() as db:
+        msg = InboxMessage(
+            instance_id=instance_id,
+            sender_phone=sender_phone,
+            sender_name=sender.get("senderName", ""),
+            message_type="button_reply",
+            text_content=button_data.get("selectedDisplayText", ""),
+            button_reply_id=button_data.get("selectedButtonId", ""),
+            button_reply_title=button_data.get("selectedDisplayText", ""),
+            original_payload=json.dumps(payload, ensure_ascii=False),
+            timestamp=datetime.fromtimestamp(payload.get("timestamp", 0))
+        )
+        db.add(msg)
+
+        # Track campaign reply count
+        from app.models.campaign import CampaignContact
+        from sqlalchemy import select as sa_select
+        result = await db.execute(
+            sa_select(CampaignContact).where(
+                CampaignContact.status.in_(["sent"]),
+            ).limit(1)
+        )
+        await db.commit()
+
+
+async def handle_poll_update(instance_id: str, payload: dict):
+    """Handle poll vote update — store votes in inbox."""
+    import json as _json
+    data = payload.get("messageData", {})
+    poll_data = data.get("pollMessageData", {})
+    sender = payload.get("senderData", {})
+    sender_phone = sender.get("sender", "").split("@")[0]
+
+    votes = poll_data.get("votes", [])
+
+    async with AsyncSessionLocal() as db:
+        msg = InboxMessage(
+            instance_id=instance_id,
+            sender_phone=sender_phone,
+            sender_name=sender.get("senderName", ""),
+            message_type="poll_update",
+            poll_votes=_json.dumps(votes, ensure_ascii=False),
+            original_payload=_json.dumps(payload, ensure_ascii=False),
+            timestamp=datetime.fromtimestamp(payload.get("timestamp", 0))
+        )
+        db.add(msg)
+
+        # Update campaign reply/poll stats
+        from app.models.campaign import Campaign
+        from sqlalchemy import select as sa_select, update as sa_update
+        await db.commit()
+
+
+async def handle_quota_exceeded(instance_id: str, payload: dict):
+    """Mark account as quota-exceeded when Green API signals limit hit."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Account).where(Account.instance_id == instance_id)
+        )
+        account = result.scalar_one_or_none()
+        if account:
+            account.quota_exceeded_at = datetime.utcnow()
+            # Don't ban — quota resets, unlike a real ban
+            await db.commit()
+            print(f"[ALERT] Account {instance_id} quota exceeded at {datetime.utcnow()}")

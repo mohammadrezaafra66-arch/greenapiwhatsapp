@@ -8,7 +8,7 @@ from app.models.campaign import (
     MessageStatus,
     HourRateLimit,
 )
-from app.models.inbox import InboxMessage, Blacklist
+from app.models.inbox import InboxMessage, Blacklist, ChatJournal, UploadedFile
 from app.models.template import MessageTemplate
 from app.models.group import WhatsAppGroup
 from app.models.status_send import StatusSend
@@ -28,6 +28,8 @@ __all__ = [
     "HourRateLimit",
     "InboxMessage",
     "Blacklist",
+    "ChatJournal",
+    "UploadedFile",
     "MessageTemplate",
     "WhatsAppGroup",
     "StatusSend",

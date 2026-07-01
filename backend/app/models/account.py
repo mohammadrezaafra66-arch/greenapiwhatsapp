@@ -28,6 +28,7 @@ class Account(Base):
     last_reset_date: Mapped[date | None] = mapped_column(Date)
     banned_at: Mapped[datetime | None] = mapped_column(DateTime)
     ban_reason: Mapped[str | None] = mapped_column(Text)
+    quota_exceeded_at: Mapped[datetime | None] = mapped_column(DateTime)
     warmup_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     polling_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     auto_reply_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -240,6 +240,171 @@ class GreenAPIClient:
         r = await self._post("sendMessage", {"chatId": group_id, "message": message})
         return r.get("idMessage")
 
+    # ── SENDING — new methods ─────────────────────────────
+    async def send_typing(self, phone: str, duration_seconds: int = 3) -> bool:
+        """Show 'typing...' indicator before sending a message. Call before sendMessage."""
+        r = await self._post("sendTyping", {
+            "chatId": self._chat_id(phone),
+            "time": duration_seconds
+        })
+        return r.get("chatId") is not None or r.get("waId") is not None or True
+
+    async def edit_message(self, phone: str, message_id: str, new_text: str) -> bool:
+        """Edit a previously sent text message."""
+        r = await self._post("editMessage", {
+            "chatId": self._chat_id(phone),
+            "idMessage": message_id,
+            "message": new_text
+        })
+        return r.get("editedMessage") is not None or "idMessage" in r
+
+    async def delete_message(self, phone: str, message_id: str) -> bool:
+        """Delete a sent message."""
+        r = await self._post("deleteMessage", {
+            "chatId": self._chat_id(phone),
+            "idMessage": message_id
+        })
+        return r.get("deleteMessage", False) or "idMessage" in r
+
+    async def upload_file(self, file_bytes: bytes, filename: str) -> Optional[str]:
+        """Upload a file to Green API storage; returns a URL usable in sendFileByUrl."""
+        url = f"{self.base_url}/uploadFile/{self.api_token}"
+        files = {"file": (filename, file_bytes)}
+        async with httpx.AsyncClient(timeout=120) as c:
+            r = await c.post(url, files=files)
+            r.raise_for_status()
+            return r.json().get("urlFile")
+
+    # ── RECEIVING ────────────────────────────────────────
+    async def download_file(self, chat_id: str, message_id: str) -> Optional[str]:
+        """Get download URL for a file received in an incoming message."""
+        r = await self._post("downloadFile", {
+            "chatId": chat_id,
+            "idMessage": message_id
+        })
+        return r.get("downloadUrl")
+
+    async def get_webhooks_count(self) -> int:
+        """Number of notifications waiting in the incoming webhook queue."""
+        r = await self._get("getWebhooksBufferCount")
+        return r.get("webhooksBufferCount", 0)
+
+    async def clear_webhooks_queue(self) -> bool:
+        """Clear all pending notifications from the incoming webhook queue."""
+        r = await self._get("clearWebhooksBuffer")
+        return r.get("isCleared", False)
+
+    # ── JOURNALS ─────────────────────────────────────────
+    async def get_message(self, chat_id: str, message_id: str) -> dict:
+        """Get a single message by ID."""
+        return await self._post("getMessage", {
+            "chatId": chat_id,
+            "idMessage": message_id
+        })
+
+    async def last_incoming_messages(self, minutes: int = 1440) -> list[dict]:
+        """Get incoming messages from the last N minutes (default 24h)."""
+        r = await self._get(f"lastIncomingMessages?minutes={minutes}")
+        return r if isinstance(r, list) else []
+
+    async def last_outgoing_messages(self, minutes: int = 1440) -> list[dict]:
+        """Get outgoing messages from the last N minutes."""
+        r = await self._get(f"lastOutgoingMessages?minutes={minutes}")
+        return r if isinstance(r, list) else []
+
+    # ── SERVICE ──────────────────────────────────────────
+    async def get_chats(self) -> list[dict]:
+        """Get list of all active chats."""
+        r = await self._get("getChats")
+        return r if isinstance(r, list) else []
+
+    async def set_disappearing_chat(self, phone: str, ephemeral: int = 0) -> bool:
+        """Set disappearing messages timer. ephemeral: 0=off, 86400=1day, 604800=1week."""
+        r = await self._post("setDisappearingChat", {
+            "chatId": self._chat_id(phone),
+            "ephemeral": ephemeral
+        })
+        return r.get("chatId") is not None or True
+
+    # ── QUEUE ────────────────────────────────────────────
+    async def get_messages_count(self) -> int:
+        """Number of messages currently in the outgoing send queue."""
+        r = await self._get("getMessagesCount")
+        return r.get("count", 0)
+
+    # ── CONTACTS ─────────────────────────────────────────
+    async def add_contact(self, phone: str, first_name: str, last_name: str = "") -> bool:
+        """Add a contact to the WhatsApp phone book of this account."""
+        r = await self._post("addContact", {
+            "phoneContact": int(self._normalize(phone)),
+            "firstName": first_name,
+            "lastName": last_name,
+            "company": "افراکالا"
+        })
+        return r.get("saveContact", False) or "contactId" in r
+
+    async def delete_contact(self, phone: str) -> bool:
+        """Remove a contact from the phone book."""
+        r = await self._post("deleteContact", {
+            "phoneContact": int(self._normalize(phone))
+        })
+        return r.get("deleteContact", False)
+
+    # ── GROUPS — new methods ──────────────────────────────
+    async def update_group_name(self, group_id: str, name: str) -> bool:
+        r = await self._post("updateGroupName", {"groupId": group_id, "groupName": name})
+        return r.get("updateGroupName", False)
+
+    async def set_group_admin(self, group_id: str, phone: str) -> bool:
+        r = await self._post("setGroupAdmin", {
+            "groupId": group_id,
+            "participantChatId": self._chat_id(phone)
+        })
+        return r.get("setGroupAdmin", False)
+
+    async def remove_group_admin(self, group_id: str, phone: str) -> bool:
+        r = await self._post("removeGroupAdmin", {
+            "groupId": group_id,
+            "participantChatId": self._chat_id(phone)
+        })
+        return r.get("removeGroupAdmin", False)
+
+    async def leave_group(self, group_id: str) -> bool:
+        r = await self._post("leaveGroup", {"groupId": group_id})
+        return r.get("leaveGroup", False)
+
+    async def set_group_picture(self, group_id: str, image_bytes: bytes) -> bool:
+        url = f"{self.base_url}/setGroupPicture/{self.api_token}"
+        files = {"file": ("group.jpg", image_bytes)}
+        data = {"groupId": group_id}
+        async with httpx.AsyncClient(timeout=30) as c:
+            r = await c.post(url, data=data, files=files)
+            r.raise_for_status()
+            return r.json().get("setGroupPicture", False)
+
+    # ── STATUSES — new methods ───────────────────────────
+    async def send_voice_status(self, audio_url: str) -> Optional[str]:
+        r = await self._post("sendVoiceStatus", {"urlFile": audio_url, "fileName": "voice.ogg"})
+        return r.get("idMessage")
+
+    async def delete_status(self, message_id: str) -> bool:
+        r = await self._post("deleteStatus", {"idMessage": message_id})
+        return r.get("deleteStatus", False)
+
+    async def get_incoming_statuses(self) -> list[dict]:
+        r = await self._get("getIncomingStatuses")
+        return r if isinstance(r, list) else []
+
+    async def get_outgoing_statuses(self) -> list[dict]:
+        r = await self._get("getOutgoingStatuses")
+        return r if isinstance(r, list) else []
+
+    # ── ACCOUNT ──────────────────────────────────────────
+    async def update_api_token(self) -> Optional[str]:
+        """Generate a new API token (old token stays valid for ~1h)."""
+        r = await self._get("updateApiToken")
+        return r.get("newApiToken")
+
     # ── HELPERS ──────────────────────────────────────────
     @staticmethod
     def _normalize(phone: str) -> str:
