@@ -27,6 +27,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://afrakala:password@db:5432/whatsapp_sender
       SYNC_DATABASE_URL: postgresql://afrakala:password@db:5432/whatsapp_sender
       REDIS_URL: redis://redis:6379/0
+      # Internal Afrakala Bot API pricing endpoint (requires AFRA_API_KEY from .env)
+      PRICING_API_URL: http://192.168.170.10:3000/api/public/bot/products
     ports:
       - "8002:8000"   # host 8002 (8000 is taken locally) -> container 8000
     depends_on:
@@ -44,6 +46,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://afrakala:password@db:5432/whatsapp_sender
       SYNC_DATABASE_URL: postgresql://afrakala:password@db:5432/whatsapp_sender
       REDIS_URL: redis://redis:6379/0
+      # Internal Afrakala Bot API pricing endpoint (requires AFRA_API_KEY from .env)
+      PRICING_API_URL: http://192.168.170.10:3000/api/public/bot/products
     depends_on:
       - db
       - redis

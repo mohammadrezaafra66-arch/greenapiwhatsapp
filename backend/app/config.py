@@ -6,8 +6,14 @@ class Settings(BaseSettings):
     sync_database_url: str = "postgresql://afrakala:password@localhost:5432/whatsapp_sender"
     redis_url: str = "redis://localhost:6379/0"
     openai_api_key: str = ""
-    pricing_api_url: str = "http://192.168.170.8:3000/pricing/amin-hozoor-board"
+    pricing_api_url: str = "http://192.168.170.10:3000/api/public/bot/products"
     pricing_cache_minutes: int = 5
+    # Bearer token for the internal Afrakala Bot API (pricing endpoint).
+    # Read from env AFRA_API_KEY. Without it the pricing endpoint returns 401.
+    afra_api_key: str = ""
+    # Supabase REST API — primary source for product names + computed prices.
+    supabase_url: str = "https://kwwkppkcihrbeurwudjh.supabase.co"
+    supabase_anon_key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3d2twcGtjaWhyYmV1cnd1ZGpoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMzU5MTUsImV4cCI6MjA5MjYxMTkxNX0.oowSHbrAEL04u9DwGjyPYIlCc8MSL0c00Odv6UvM4bE"
     secret_key: str = "change-this"
     backend_url: str = "http://localhost:8000"
     webhook_base_url: str = "http://localhost:8000"
