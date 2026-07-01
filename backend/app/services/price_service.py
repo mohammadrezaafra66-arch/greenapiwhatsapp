@@ -77,7 +77,8 @@ async def get_products(count: int = 3) -> list[dict]:
             products_raw = await _fetch_products(client)
             price_map = await _fetch_price_map(client)
 
-        # Join products with their computed sale price
+        # Join products with their computed sale price.
+        # Only keep products that have a non-null price.
         products = []
         for item in products_raw:
             if not isinstance(item, dict):
@@ -85,10 +86,10 @@ async def get_products(count: int = 3) -> list[dict]:
             name = item.get("name")
             if not name:
                 continue
-            products.append({
-                "name": name,
-                "price": price_map.get(str(item.get("id"))),
-            })
+            price = price_map.get(str(item.get("id")))
+            if price is None:
+                continue
+            products.append({"name": name, "price": price})
 
         # Cache for configured minutes
         await redis_client.setex(
