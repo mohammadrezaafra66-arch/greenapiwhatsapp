@@ -74,6 +74,7 @@ function AddCampaignModal({ onClose, onDone }) {
     name: "", campaign_type: "text", use_gpt: true, gpt_prompt: "",
     message_template: "", include_products: false, image_url: "",
     poll_question: "", poll_options: "", buttons: "", footer_text: "",
+    campaign_scope: "pv", group_ids: "",
   });
   const [saving, setSaving] = React.useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
@@ -94,6 +95,11 @@ function AddCampaignModal({ onClose, onDone }) {
         poll_options: f.poll_options ? f.poll_options.split("\n").map((s) => s.trim()).filter(Boolean) : null,
         buttons: f.buttons ? f.buttons.split("\n").map((s) => s.trim()).filter(Boolean) : null,
         footer_text: f.footer_text || null,
+        campaign_scope: f.campaign_scope,
+        group_ids:
+          f.campaign_scope === "group" && f.group_ids
+            ? f.group_ids.split("\n").map((s) => s.trim()).filter(Boolean)
+            : null,
       };
       await Api.create(body);
       await onDone();
@@ -120,6 +126,21 @@ function AddCampaignModal({ onClose, onDone }) {
             </select>
           </div>
         </div>
+
+        <div>
+          <label className="label">حوزه کمپین</label>
+          <select className="input" value={f.campaign_scope} onChange={set("campaign_scope")}>
+            <option value="pv">خصوصی (PV)</option>
+            <option value="group">گروه</option>
+          </select>
+        </div>
+
+        {f.campaign_scope === "group" && (
+          <div>
+            <label className="label">شناسه گروه‌ها (هر خط یک chatId)</label>
+            <textarea className="input h-20" value={f.group_ids} onChange={set("group_ids")} placeholder="120363xxxxxxxx@g.us" />
+          </div>
+        )}
 
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={f.use_gpt} onChange={set("use_gpt")} />

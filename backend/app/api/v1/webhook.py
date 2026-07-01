@@ -111,6 +111,23 @@ async def handle_incoming(instance_id: str, payload: dict):
                 if ct:
                     ct.blacklisted = True
 
+            # Keyword auto-reply (runs even if auto_reply already fired — both can reply)
+            if text and not msg.is_group or text:
+                try:
+                    from app.services.keyword_service import check_keywords, increment_use_count
+                    kw_matched, kw_reply, kw_rule_id = await check_keywords(
+                        instance_id=instance_id,
+                        message_text=text,
+                        is_group=msg.is_group,
+                        account_id=str(account.id) if account else None,
+                    )
+                    if kw_matched and kw_reply and account:
+                        await client.send_message(sender_phone, kw_reply)
+                        if kw_rule_id:
+                            await increment_use_count(kw_rule_id)
+                except Exception as e:
+                    print(f"[Keyword] match/reply failed (non-fatal): {e}")
+
         await db.commit()
 
 async def handle_state_change(instance_id: str, payload: dict):

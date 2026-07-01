@@ -11,6 +11,8 @@ const NAV = [
   { to: "/statuses", label: "استوری‌ها", icon: "🟢" },
   { to: "/templates", label: "قالب‌ها", icon: "📝" },
   { to: "/blacklist", label: "لیست سیاه", icon: "🚫" },
+  { to: "/keyword-rules", label: "پاسخ خودکار", icon: "🔑" },
+  { to: "/account-schedules", label: "زمان‌بندی حساب", icon: "⏱️" },
 ];
 
 export default function Layout() {

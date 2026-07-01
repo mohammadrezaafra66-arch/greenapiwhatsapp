@@ -55,6 +55,8 @@ class Campaign(Base):
     delivered_count: Mapped[int] = mapped_column(Integer, default=0)
     read_count: Mapped[int] = mapped_column(Integer, default=0)
     reply_count: Mapped[int] = mapped_column(Integer, default=0)
+    campaign_scope: Mapped[str] = mapped_column(String(20), default="pv")  # pv | group
+    group_ids: Mapped[str | None] = mapped_column(Text)  # JSON list of group chatIds
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 

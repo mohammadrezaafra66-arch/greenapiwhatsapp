@@ -12,6 +12,9 @@ from app.models.inbox import InboxMessage, Blacklist
 from app.models.template import MessageTemplate
 from app.models.group import WhatsAppGroup
 from app.models.status_send import StatusSend
+from app.models.account_send_config import AccountSendConfig
+from app.models.keyword_rule import KeywordRule
+from app.models.account_hour_schedule import AccountHourSchedule
 
 __all__ = [
     "Account",
@@ -28,4 +31,7 @@ __all__ = [
     "MessageTemplate",
     "WhatsAppGroup",
     "StatusSend",
+    "AccountSendConfig",
+    "KeywordRule",
+    "AccountHourSchedule",
 ]

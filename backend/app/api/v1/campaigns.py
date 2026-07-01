@@ -27,6 +27,8 @@ class CampaignCreateBody(BaseModel):
     poll_options: list[str] | None = None
     buttons: list[str] | None = None
     footer_text: str | None = None
+    campaign_scope: str = "pv"      # pv | group
+    group_ids: list[str] | None = None   # list of WhatsApp group chatIds (e.g. "120363xxxxxxxx@g.us")
 
 
 class TestBody(BaseModel):
@@ -78,6 +80,8 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         button2_text=buttons[1] if len(buttons) > 1 else None,
         button3_text=buttons[2] if len(buttons) > 2 else None,
         footer_text=body.footer_text,
+        campaign_scope=body.campaign_scope,
+        group_ids=json.dumps(body.group_ids) if body.group_ids else None,
     )
     db.add(campaign)
     await db.commit()
@@ -119,8 +123,12 @@ async def start_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(400, "Campaign already running")
     campaign.status = CampaignStatus.running
     await db.commit()
-    task_run_campaign.delay(campaign_id)
-    return {"status": "started", "campaign_id": campaign_id}
+    if campaign.campaign_scope == "group":
+        from app.workers.tasks import task_run_group_campaign
+        task_run_group_campaign.delay(campaign_id)
+    else:
+        task_run_campaign.delay(campaign_id)
+    return {"status": "started", "campaign_id": campaign_id, "scope": campaign.campaign_scope}
 
 
 @router.post("/{campaign_id}/pause")

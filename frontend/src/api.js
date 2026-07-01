@@ -106,6 +106,23 @@ export const Templates = {
   remove: (id) => http.delete(`/templates/${id}`).then((r) => r.data),
 };
 
+// ── Keyword Rules ──────────────────────────────────────────
+export const KeywordRulesApi = {
+  list: () => http.get("/keyword-rules/").then((r) => r.data),
+  create: (body) => http.post("/keyword-rules/", body).then((r) => r.data),
+  update: (id, body) => http.put(`/keyword-rules/${id}`, body).then((r) => r.data),
+  delete: (id) => http.delete(`/keyword-rules/${id}`).then((r) => r.data),
+};
+
+// ── Account Schedules ──────────────────────────────────────
+export const AccountSchedulesApi = {
+  get: (accountId) => http.get(`/account-schedules/${accountId}`).then((r) => r.data),
+  createSlot: (body) => http.post("/account-schedules/", body).then((r) => r.data),
+  updateSlot: (id, body) => http.put(`/account-schedules/${id}`, body).then((r) => r.data),
+  deleteSlot: (id) => http.delete(`/account-schedules/${id}`).then((r) => r.data),
+  updateDelay: (accountId, body) => http.put(`/account-schedules/${accountId}/delay`, body).then((r) => r.data),
+};
+
 // ── Blacklist ──────────────────────────────────────────
 export const BlacklistApi = {
   list: () => http.get("/blacklist/").then((r) => r.data),

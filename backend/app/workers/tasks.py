@@ -9,6 +9,14 @@ def task_run_campaign(self, campaign_id: str):
     except Exception as exc:
         raise self.retry(exc=exc, countdown=60)
 
+@celery_app.task(bind=True, name="tasks.run_group_campaign", max_retries=3)
+def task_run_group_campaign(self, campaign_id: str):
+    try:
+        from app.services.group_campaign_runner import run_group_campaign
+        asyncio.run(run_group_campaign(campaign_id))
+    except Exception as exc:
+        raise self.retry(exc=exc, countdown=60)
+
 @celery_app.task(name="tasks.reset_daily_counters")
 def task_reset_daily_counters():
     async def _r():

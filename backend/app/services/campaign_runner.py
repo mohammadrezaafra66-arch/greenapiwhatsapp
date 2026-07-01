@@ -74,16 +74,23 @@ async def run_campaign(campaign_id: str):
                 cc.status = MessageStatus.generating
                 await db.commit()
 
+                # Per-account per-hour override: if the account has a schedule for this
+                # hour with a custom prompt/template, it takes precedence.
+                from app.services.rate_limiter import get_hour_prompt_for_account
+                hour_gpt_prompt, hour_template = await get_hour_prompt_for_account(str(account.id))
+                effective_gpt_prompt = hour_gpt_prompt or campaign.gpt_prompt
+                effective_template = hour_template or campaign.message_template
+
                 # Generate message text
                 if campaign.use_gpt and settings.openai_api_key:
                     message = await generate_message(
                         first_name=contact.first_name or "",
                         last_name=contact.last_name or "",
-                        gpt_prompt=campaign.gpt_prompt or "یک پیام تبلیغاتی مختصر بنویس",
+                        gpt_prompt=effective_gpt_prompt or "یک پیام تبلیغاتی مختصر بنویس",
                         products=products if campaign.include_products else None
                     )
                 else:
-                    message = (campaign.message_template or "سلام {{first_name}} جان!")
+                    message = (effective_template or "سلام {{first_name}} جان!")
                     message = message.replace("{{first_name}}", contact.first_name or "")
                     message = message.replace("{{last_name}}", contact.last_name or "")
 
@@ -124,7 +131,9 @@ async def run_campaign(campaign_id: str):
             finally:
                 await db.commit()
 
-            delay = random.uniform(settings.default_min_delay, settings.default_max_delay)
+            from app.services.delay_service import get_delay
+            min_d, max_d = await get_delay(str(account.id))
+            delay = random.uniform(min_d, max_d)
             await asyncio.sleep(delay)
 
         remaining = await db.execute(

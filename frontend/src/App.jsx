@@ -10,6 +10,8 @@ import Groups from "./pages/Groups.jsx";
 import Statuses from "./pages/Statuses.jsx";
 import Templates from "./pages/Templates.jsx";
 import Blacklist from "./pages/Blacklist.jsx";
+import KeywordRules from "./pages/KeywordRules.jsx";
+import AccountSchedules from "./pages/AccountSchedules.jsx";
 
 export default function App() {
   return (
@@ -24,6 +26,8 @@ export default function App() {
         <Route path="statuses" element={<Statuses />} />
         <Route path="templates" element={<Templates />} />
         <Route path="blacklist" element={<Blacklist />} />
+        <Route path="keyword-rules" element={<KeywordRules />} />
+        <Route path="account-schedules" element={<AccountSchedules />} />
         <Route path="*" element={<div className="text-slate-400">صفحه یافت نشد</div>} />
       </Route>
     </Routes>
