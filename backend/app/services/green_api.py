@@ -57,9 +57,17 @@ class GreenAPIClient:
         return r.get("isLogout", False)
 
     async def get_qr(self) -> str:
-        """Returns base64 QR image."""
+        """Return the base64 QR PNG, or '' if the instance isn't waiting for a scan.
+        Green API only puts base64 in `message` when type == 'qrCode'; for
+        'alreadyLogged'/'notAuthorized'/'error' the message is plain text."""
         r = await self._get("qr")
-        return r.get("message", "")
+        return r.get("message", "") if r.get("type") == "qrCode" else ""
+
+    async def get_qr_info(self) -> dict:
+        """Raw QR state: {'type': ..., 'message': ...}.
+        type is 'qrCode' (message=base64 png), 'alreadyLogged', 'notAuthorized', or 'error'."""
+        r = await self._get("qr")
+        return {"type": r.get("type", ""), "message": r.get("message", "")}
 
     async def get_auth_code(self, phone: str) -> dict:
         """Login by phone number without QR scan."""

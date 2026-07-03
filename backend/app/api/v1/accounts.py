@@ -91,8 +91,11 @@ async def check_account_status(account_id: str, db: AsyncSession = Depends(get_d
 async def get_account_qr(account_id: str, db: AsyncSession = Depends(get_db)):
     account = await _get_account(account_id, db)
     client = GreenAPIClient(account.instance_id, account.api_token)
-    qr = await client.get_qr()
-    return {"qr": qr}
+    info = await client.get_qr_info()
+    qtype = info.get("type", "")
+    message = info.get("message", "")
+    # base64 PNG is only present when Green API is waiting for a scan (qrCode)
+    return {"qr": message if qtype == "qrCode" else "", "type": qtype, "message": message}
 
 
 @router.post("/{account_id}/reboot")

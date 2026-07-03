@@ -23,7 +23,7 @@ export default function Accounts() {
   const showQr = async (id) => {
     try {
       const r = await Api.qr(id);
-      setQr(r.qr || "");
+      setQr(r || {});
     } catch (e) {
       alert("دریافت QR ناموفق بود");
     }
@@ -69,14 +69,21 @@ export default function Accounts() {
       {showAdd && <AddAccountModal onClose={() => setShowAdd(false)} onDone={reload} />}
       {qr !== null && (
         <Modal title="کد QR" onClose={() => setQr(null)}>
-          {qr ? (
-            <img
-              alt="qr"
-              className="mx-auto bg-white p-2 rounded"
-              src={qr.startsWith("data:") ? qr : `data:image/png;base64,${qr}`}
-            />
+          {qr.qr ? (
+            <div className="space-y-2">
+              <img
+                alt="qr"
+                className="mx-auto bg-white p-2 rounded"
+                src={qr.qr.startsWith("data:") ? qr.qr : `data:image/png;base64,${qr.qr}`}
+              />
+              <p className="text-center text-xs text-slate-400">با واتس‌اپ گوشی این کد را اسکن کنید.</p>
+            </div>
           ) : (
-            <p className="text-slate-400 text-sm">QR در دسترس نیست (احتمالاً حساب قبلاً متصل شده).</p>
+            <p className="text-slate-400 text-sm">
+              {qr.type === "alreadyLogged"
+                ? "این حساب هم‌اکنون متصل است؛ کد QR لازم نیست."
+                : qr.message || "QR در دسترس نیست (احتمالاً حساب قبلاً متصل شده)."}
+            </p>
           )}
         </Modal>
       )}
