@@ -2,7 +2,7 @@
 Product price fetcher — reads directly from the Afrakala Supabase REST API.
 
 Fetches active, in-stock products and (best-effort) joins them with the
-`product_computed_prices` relation to attach each product's `rounded_sale_price`.
+`product_computed_prices_public` view to attach each product's `rounded_sale_price`.
 Results are cached in Redis for PRICING_CACHE_MINUTES.
 
 Normalized output: [{"name": "...", "price": <rounded_sale_price | None>}, ...]
@@ -43,7 +43,7 @@ async def _fetch_price_map(client: httpx.AsyncClient) -> dict:
     """
     try:
         resp = await client.get(
-            f"{settings.supabase_url}/rest/v1/product_computed_prices",
+            f"{settings.supabase_url}/rest/v1/product_computed_prices_public",
             params={"select": "product_id,rounded_sale_price"},
             headers=_headers(),
         )
