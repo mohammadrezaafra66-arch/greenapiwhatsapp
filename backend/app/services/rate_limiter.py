@@ -23,6 +23,12 @@ def get_max_per_hour() -> int:
             return slot["max_per_hour"]
     return 0
 
+def _global_max_at_hour(hour: int) -> int:
+    for slot in DEFAULT_SCHEDULE:
+        if slot["hour_start"] <= hour < slot["hour_end"]:
+            return slot["max_per_hour"]
+    return 0
+
 def seconds_until_send_window() -> int:
     """Seconds until the daily send window opens (08:00 Tehran).
     Returns 0 if the window is currently open."""
@@ -34,6 +40,41 @@ def seconds_until_send_window() -> int:
         # Past today's window (>=22) → next open is tomorrow 08:00
         target = target + timedelta(days=1)
     return max(1, int((target - now).total_seconds()))
+
+async def seconds_until_account_window(account_id: str) -> int:
+    """Seconds until THIS account's send window next opens, honoring its
+    per-account hour schedule (falling back to the global schedule per hour).
+    Returns 0 if the account can send in the current hour."""
+    from app.database import AsyncSessionLocal
+    from app.models.account_hour_schedule import AccountHourSchedule
+    from sqlalchemy import select
+    import uuid as _uuid
+
+    now = datetime.now(TEHRAN_TZ)
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(
+            select(AccountHourSchedule).where(
+                AccountHourSchedule.account_id == _uuid.UUID(account_id),
+                AccountHourSchedule.is_active == True,
+            )
+        )).scalars().all()
+
+    def max_at(hour: int) -> int:
+        # A matching per-account slot wins (even if 0 = intentionally blocked);
+        # otherwise fall back to the global schedule for that hour.
+        for r in rows:
+            if r.hour_start <= hour < r.hour_end:
+                return r.max_per_hour
+        return _global_max_at_hour(hour)
+
+    if max_at(now.hour) > 0:
+        return 0
+    for offset in range(1, 25):
+        hour = (now.hour + offset) % 24
+        if max_at(hour) > 0:
+            target = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=offset)
+            return max(1, int((target - now).total_seconds()))
+    return 3600  # no open hour found in the next 24h — retry in an hour
 
 async def get_max_per_hour_for_account(account_id: str) -> int:
     """

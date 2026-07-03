@@ -13,7 +13,7 @@ from app.config import settings
 
 # Auto-pause reasons surfaced in the campaign progress panel.
 NO_ACCOUNT_REASON = "هیچ اکانت فعالی متصل نیست — کمپین به‌طور خودکار متوقف شد"
-WINDOW_WAIT_REASON = "خارج از بازه مجاز ارسال (۸ تا ۲۲ به وقت تهران) — ادامه خودکار در ۰۸:۰۰"
+WINDOW_WAIT_REASON = "خارج از بازه مجاز ارسال این اکانت — ادامه خودکار در بازه بعدی"
 
 
 async def run_campaign(campaign_id: str):
@@ -54,18 +54,24 @@ async def run_campaign(campaign_id: str):
             await db.commit()
             return
 
-        # Outside the daily send window → auto-pause and self-reschedule this task
-        # to fire when the window next opens (08:00 Tehran).
-        from app.services.rate_limiter import seconds_until_send_window
-        wait_seconds = seconds_until_send_window()
-        if wait_seconds > 0:
+        # Outside EVERY active account's send window (per-account hour schedule,
+        # falling back to the global schedule) → auto-pause and self-reschedule
+        # this task to fire when the earliest account window next opens.
+        from app.services.rate_limiter import (
+            get_max_per_hour_for_account, seconds_until_account_window,
+        )
+        acct_max = [await get_max_per_hour_for_account(str(a.id)) for a in accounts]
+        if not any(m > 0 for m in acct_max):
+            waits = [await seconds_until_account_window(str(a.id)) for a in accounts]
+            positive = [w for w in waits if w > 0]
+            wait_seconds = min(positive) if positive else 3600
             campaign.status = CampaignStatus.paused
             campaign.pause_reason = WINDOW_WAIT_REASON
             await db.commit()
             try:
                 from app.workers.tasks import task_run_campaign
                 task_run_campaign.apply_async(args=[campaign_id], countdown=wait_seconds)
-                print(f"[Campaign {campaign_id}] outside send window — rescheduled in {wait_seconds}s")
+                print(f"[Campaign {campaign_id}] outside all account windows — rescheduled in {wait_seconds}s")
             except Exception as e:
                 print(f"[Campaign {campaign_id}] reschedule failed (non-fatal): {e}")
             return
