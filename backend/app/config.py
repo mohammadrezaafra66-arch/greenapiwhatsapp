@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     sync_database_url: str = "postgresql://afrakala:password@localhost:5432/whatsapp_sender"
     redis_url: str = "redis://localhost:6379/0"
     openai_api_key: str = ""
+    gemini_api_key: str = ""
+    deepseek_api_key: str = ""
     pricing_cache_minutes: int = 5
     # Supabase REST API — primary source for product names + computed prices.
     supabase_url: str = "https://kwwkppkcihrbeurwudjh.supabase.co"

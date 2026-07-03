@@ -15,6 +15,7 @@ const NAV = [
   { to: "/account-schedules", label: "زمان‌بندی حساب", icon: "⏱️" },
   { to: "/journals", label: "ژورنال پیام‌ها", icon: "📋" },
   { to: "/files", label: "فایل‌ها", icon: "📁" },
+  { to: "/ai-settings", label: "هوش مصنوعی", icon: "🤖" },
 ];
 
 export default function Layout() {

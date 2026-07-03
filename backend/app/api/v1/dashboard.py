@@ -76,6 +76,24 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     }
 
 
+@router.get("/ai-stats")
+async def ai_stats():
+    """AI token usage per provider over the last 24h."""
+    from app.services.gpt_service import get_ai_stats
+    data = await get_ai_stats()
+    return [
+        {"provider": provider, "calls": v["calls"], "total_tokens": v["total_tokens"], "errors": v["errors"]}
+        for provider, v in data.items()
+    ]
+
+
+@router.get("/ai-providers")
+async def ai_providers():
+    """Which AI providers are configured (key set). Never returns key values."""
+    from app.services.gpt_service import configured_providers
+    return configured_providers()
+
+
 @router.get("/rate-limits")
 async def get_rate_limits():
     return {

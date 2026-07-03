@@ -14,6 +14,7 @@ import KeywordRules from "./pages/KeywordRules.jsx";
 import AccountSchedules from "./pages/AccountSchedules.jsx";
 import Journals from "./pages/Journals.jsx";
 import Files from "./pages/Files.jsx";
+import AiSettings from "./pages/AiSettings.jsx";
 
 export default function App() {
   return (
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="account-schedules" element={<AccountSchedules />} />
         <Route path="journals" element={<Journals />} />
         <Route path="files" element={<Files />} />
+        <Route path="ai-settings" element={<AiSettings />} />
         <Route path="*" element={<div className="text-slate-400">صفحه یافت نشد</div>} />
       </Route>
     </Routes>

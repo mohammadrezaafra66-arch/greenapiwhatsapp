@@ -126,6 +126,12 @@ export const AccountSchedulesApi = {
   updateDelay: (accountId, body) => http.put(`/account-schedules/${accountId}/delay`, body).then((r) => r.data),
 };
 
+// ── AI (multi-provider) ────────────────────────────────────
+export const AiApi = {
+  stats: () => http.get("/dashboard/ai-stats").then((r) => r.data),
+  providers: () => http.get("/dashboard/ai-providers").then((r) => r.data),
+};
+
 // ── Journals ───────────────────────────────────────────────
 export const JournalsApi = {
   incoming: (accountId, minutes = 1440) => http.get(`/journals/${accountId}/incoming?minutes=${minutes}`).then((r) => r.data),

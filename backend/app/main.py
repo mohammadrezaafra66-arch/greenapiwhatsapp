@@ -87,6 +87,17 @@ async def lifespan(app: FastAPI):
                 green_api_url text,
                 uploaded_at timestamp DEFAULT now()
             )""",
+            """CREATE TABLE IF NOT EXISTS ai_usage_logs (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                provider varchar(50) NOT NULL,
+                model varchar(100),
+                prompt_tokens integer DEFAULT 0,
+                completion_tokens integer DEFAULT 0,
+                total_tokens integer DEFAULT 0,
+                success boolean DEFAULT true,
+                error_text text,
+                used_at timestamp DEFAULT now()
+            )""",
         ]
         for stmt in ddl_v4:
             await conn.execute(text(stmt))

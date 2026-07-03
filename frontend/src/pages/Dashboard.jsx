@@ -1,5 +1,5 @@
 import React from "react";
-import { Dashboard as DashApi, Inbox as InboxApi } from "../api.js";
+import { Dashboard as DashApi, Inbox as InboxApi, AiApi } from "../api.js";
 import { Spinner } from "../ui.jsx";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -80,6 +80,7 @@ export default function Dashboard() {
   const [stats, setStats] = React.useState(null);
   const [rl, setRl] = React.useState(null);
   const [inbox, setInbox] = React.useState([]);
+  const [ai, setAi] = React.useState({ stats: [], providers: {} });
   const [err, setErr] = React.useState(null);
   const [updated, setUpdated] = React.useState(null);
 
@@ -102,6 +103,21 @@ export default function Dashboard() {
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
   }, [load]);
+
+  // AI usage polls on a slower 30s cadence
+  const loadAi = React.useCallback(async () => {
+    try {
+      const [s, p] = await Promise.all([AiApi.stats(), AiApi.providers()]);
+      setAi({ stats: Array.isArray(s) ? s : [], providers: p || {} });
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
+  React.useEffect(() => {
+    loadAi();
+    const t = setInterval(loadAi, 30000);
+    return () => clearInterval(t);
+  }, [loadAi]);
 
   if (!stats && !err) return <Spinner />;
   if (err && !stats)
@@ -136,6 +152,13 @@ export default function Dashboard() {
   const curHour = rl?.current_hour ?? stats.rate_limiter.tehran_hour;
   const curMax = rl?.current_max ?? stats.rate_limiter.max_per_hour;
   const allowed = curMax > 0;
+
+  // AI usage
+  const AI_LABEL = { openai: "OpenAI", deepseek: "DeepSeek", gemini: "Gemini" };
+  const aiOrder = ["openai", "deepseek", "gemini"];
+  const aiStatOf = (k) => ai.stats.find((x) => x.provider === k) || { calls: 0, total_tokens: 0, errors: 0 };
+  const aiBar = aiOrder.map((k) => ({ name: AI_LABEL[k], tokens: aiStatOf(k).total_tokens }));
+  const aiTotalTokens = ai.stats.reduce((s, x) => s + (x.total_tokens || 0), 0);
 
   // quota warnings (kept from previous dashboard)
   const now = Date.now();
@@ -214,6 +237,43 @@ export default function Dashboard() {
               </PieChart>
             </ResponsiveContainer>
           )}
+        </div>
+      </div>
+
+      {/* ── AI USAGE PANEL ─────────────────────────────────── */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h3 className="font-bold">مصرف هوش مصنوعی امروز</h3>
+          <div className="flex items-center gap-3 flex-wrap">
+            {aiOrder.map((k) => (
+              <span key={k} className="flex items-center gap-1.5 text-xs text-slate-400">
+                <span className={`inline-block w-2 h-2 rounded-full ${ai.providers[k] ? "bg-emerald-400 animate-pulse" : "bg-slate-600"}`} />
+                {AI_LABEL[k]}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+          <div>
+            <p className="text-slate-400 text-sm">مجموع توکن مصرفی (۲۴ ساعت)</p>
+            <p className="text-4xl font-bold mt-2 text-sky-400"><AnimatedNumber value={aiTotalTokens} /></p>
+            <p className="text-xs text-slate-500 mt-2">
+              {aiOrder.filter((k) => ai.providers[k]).length > 0
+                ? `${fa(aiOrder.filter((k) => ai.providers[k]).length)} ارائه‌دهنده فعال`
+                : "هیچ ارائه‌دهنده‌ای پیکربندی نشده"}
+            </p>
+          </div>
+          <div className="md:col-span-2">
+            <ResponsiveContainer width="100%" height={160}>
+              <BarChart data={aiBar} margin={{ top: 6, right: 8, left: -12, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <XAxis dataKey="name" tick={{ fill: "#94a3b8", fontSize: 12 }} />
+                <YAxis allowDecimals={false} tick={{ fill: "#94a3b8", fontSize: 12 }} />
+                <Tooltip {...CHART_TOOLTIP} cursor={{ fill: "#1e293b55" }} />
+                <Bar dataKey="tokens" name="توکن" fill="#38bdf8" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 

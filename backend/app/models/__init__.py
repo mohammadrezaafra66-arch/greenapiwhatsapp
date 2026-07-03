@@ -15,6 +15,7 @@ from app.models.status_send import StatusSend
 from app.models.account_send_config import AccountSendConfig
 from app.models.keyword_rule import KeywordRule
 from app.models.account_hour_schedule import AccountHourSchedule
+from app.models.ai_usage import AiUsageLog
 
 __all__ = [
     "Account",
@@ -36,4 +37,5 @@ __all__ = [
     "AccountSendConfig",
     "KeywordRule",
     "AccountHourSchedule",
+    "AiUsageLog",
 ]
