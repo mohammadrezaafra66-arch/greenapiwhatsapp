@@ -42,12 +42,24 @@ class GreenAPIClient:
         return r.get("saveSettings", False)
 
     async def set_webhook(self, webhook_url: str, delay_ms: int = 15000) -> bool:
+        # Enable EVERY Green API notification type so all webhooks reach the backend.
         return await self.set_settings({
             "webhookUrl": webhook_url,
-            "outgoingWebhook": "yes",
+            "delaySendMessagesMilliseconds": delay_ms,
             "incomingWebhook": "yes",
+            "outgoingWebhook": "yes",
+            "outgoingMessageWebhook": "yes",
+            "outgoingAPIMessageWebhook": "yes",
             "stateWebhook": "yes",
-            "delaySendMessagesMilliseconds": delay_ms
+            "deviceWebhook": "yes",
+            "statusInstanceWebhook": "yes",
+            "pollMessageWebhook": "yes",
+            "incomingBlockWebhook": "yes",
+            "incomingCallWebhook": "yes",
+            "outgoingCallWebhook": "yes",
+            "editedMessageWebhook": "yes",
+            "deletedMessageWebhook": "yes",
+            "catalogWebhook": "yes",
         })
 
     async def reboot(self) -> bool:
