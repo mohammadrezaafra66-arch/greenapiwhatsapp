@@ -11,6 +11,7 @@ export default function Contacts() {
   const [addToCampaign, setAddToCampaign] = React.useState(false);
   const [addManual, setAddManual] = React.useState(false);
   const [showGuide, setShowGuide] = React.useState(false);
+  const [showCheckInfo, setShowCheckInfo] = React.useState(false);
   const fileRef = React.useRef();
 
   const load = React.useCallback(() => {
@@ -69,11 +70,18 @@ export default function Contacts() {
           </button>
           <button className="btn-secondary" onClick={() => setAddManual(true)}>افزودن دستی</button>
           <button className="btn-secondary" onClick={checkSelected}>بررسی واتس‌اپ ({selected.size})</button>
+          <button className="btn-secondary" title="راهنما" onClick={() => setShowCheckInfo((v) => !v)}>؟</button>
           <button className="btn-primary" onClick={() => selected.size ? setAddToCampaign(true) : alert("مخاطبی انتخاب نشده")}>
             افزودن به گروه پیام ({selected.size})
           </button>
         </div>
       </div>
+
+      {showCheckInfo && (
+        <div className="card text-xs text-slate-400">
+          این دکمه شماره‌های انتخاب‌شده را بررسی می‌کند که آیا واتساپ دارند یا خیر. شماره‌هایی که واتساپ ندارند از ارسال کمپین خودکار حذف می‌شوند.
+        </div>
+      )}
 
       <div className="card p-0 overflow-hidden">
         <button

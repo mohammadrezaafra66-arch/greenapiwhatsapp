@@ -30,6 +30,20 @@ class CampaignCreateBody(BaseModel):
     footer_text: str | None = None
     campaign_scope: str = "pv"      # pv | group
     group_ids: list[str] | None = None   # list of WhatsApp group chatIds (e.g. "120363xxxxxxxx@g.us")
+    # V5 extensions
+    description: str | None = None
+    append_date: bool = False
+    append_seller_name: bool = False
+    seller_name: str | None = None
+    append_seller_phone: bool = False
+    seller_phone: str | None = None
+    seller_phone2: str | None = None
+    emoji_level: str = "medium"  # none/low/medium/high
+    contact_group_id: str | None = None  # use contacts from this group
+    wa_collection_id: str | None = None  # send to WA groups in this collection
+    product_label_filter: str | None = None  # filter products by label id
+    is_always_on: bool = False
+    is_active: bool = True
 
 
 class TestBody(BaseModel):
@@ -48,6 +62,8 @@ async def list_campaigns(db: AsyncSession = Depends(get_db)):
             "status": c.status,
             "pause_reason": c.pause_reason,
             "campaign_type": c.campaign_type,
+            "description": c.description,
+            "is_active": c.is_active,
             "total_contacts": c.total_contacts,
             "sent_count": c.sent_count,
             "failed_count": c.failed_count,
@@ -57,6 +73,96 @@ async def list_campaigns(db: AsyncSession = Depends(get_db)):
         }
         for c in campaigns
     ]
+
+
+def _campaign_detail(c: Campaign) -> dict:
+    return {
+        "id": str(c.id),
+        "name": c.name,
+        "status": c.status,
+        "campaign_type": c.campaign_type,
+        "use_gpt": c.use_gpt,
+        "gpt_prompt": c.gpt_prompt,
+        "message_template": c.message_template,
+        "include_products": c.include_products,
+        "product_count": c.product_count,
+        "image_url": c.image_url,
+        "campaign_scope": c.campaign_scope,
+        "group_ids": json.loads(c.group_ids) if c.group_ids else None,
+        "description": c.description,
+        "is_active": c.is_active,
+        "append_date": c.append_date,
+        "append_seller_name": c.append_seller_name,
+        "seller_name": c.seller_name,
+        "append_seller_phone": c.append_seller_phone,
+        "seller_phone": c.seller_phone,
+        "seller_phone2": c.seller_phone2,
+        "emoji_level": c.emoji_level,
+        "contact_group_id": str(c.contact_group_id) if c.contact_group_id else None,
+        "wa_collection_id": str(c.wa_collection_id) if c.wa_collection_id else None,
+        "product_label_filter": c.product_label_filter,
+        "is_always_on": c.is_always_on,
+    }
+
+
+@router.get("/{campaign_id}")
+async def get_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    c = await db.get(Campaign, uuid.UUID(campaign_id))
+    if not c:
+        raise HTTPException(404, "Campaign not found")
+    return _campaign_detail(c)
+
+
+@router.put("/{campaign_id}")
+async def update_campaign(campaign_id: str, body: CampaignCreateBody, db: AsyncSession = Depends(get_db)):
+    c = await db.get(Campaign, uuid.UUID(campaign_id))
+    if not c:
+        raise HTTPException(404, "Campaign not found")
+    try:
+        c.campaign_type = CampaignType(body.campaign_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid campaign_type: {body.campaign_type}")
+    buttons = body.buttons or []
+    c.name = body.name
+    c.use_gpt = body.use_gpt
+    c.gpt_prompt = body.gpt_prompt
+    c.message_template = body.message_template
+    c.include_products = body.include_products
+    c.product_count = body.product_count
+    c.image_url = body.image_url
+    c.poll_question = body.poll_question
+    c.poll_options = json.dumps(body.poll_options, ensure_ascii=False) if body.poll_options else None
+    c.button1_text = buttons[0] if len(buttons) > 0 else None
+    c.button2_text = buttons[1] if len(buttons) > 1 else None
+    c.button3_text = buttons[2] if len(buttons) > 2 else None
+    c.footer_text = body.footer_text
+    c.campaign_scope = body.campaign_scope
+    c.group_ids = json.dumps(body.group_ids) if body.group_ids else None
+    c.description = body.description
+    c.append_date = body.append_date
+    c.append_seller_name = body.append_seller_name
+    c.seller_name = body.seller_name
+    c.append_seller_phone = body.append_seller_phone
+    c.seller_phone = body.seller_phone
+    c.seller_phone2 = body.seller_phone2
+    c.emoji_level = body.emoji_level or "medium"
+    c.contact_group_id = uuid.UUID(body.contact_group_id) if body.contact_group_id else None
+    c.wa_collection_id = uuid.UUID(body.wa_collection_id) if body.wa_collection_id else None
+    c.product_label_filter = body.product_label_filter
+    c.is_always_on = body.is_always_on
+    c.is_active = body.is_active
+    await db.commit()
+    return {"id": campaign_id, "updated": True}
+
+
+@router.post("/{campaign_id}/toggle-active")
+async def toggle_campaign_active(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    c = await db.get(Campaign, uuid.UUID(campaign_id))
+    if not c:
+        raise HTTPException(404, "Campaign not found")
+    c.is_active = not c.is_active
+    await db.commit()
+    return {"id": campaign_id, "is_active": c.is_active}
 
 
 @router.post("/")
@@ -84,6 +190,19 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         footer_text=body.footer_text,
         campaign_scope=body.campaign_scope,
         group_ids=json.dumps(body.group_ids) if body.group_ids else None,
+        description=body.description,
+        append_date=body.append_date,
+        append_seller_name=body.append_seller_name,
+        seller_name=body.seller_name,
+        append_seller_phone=body.append_seller_phone,
+        seller_phone=body.seller_phone,
+        seller_phone2=body.seller_phone2,
+        emoji_level=body.emoji_level or "medium",
+        contact_group_id=uuid.UUID(body.contact_group_id) if body.contact_group_id else None,
+        wa_collection_id=uuid.UUID(body.wa_collection_id) if body.wa_collection_id else None,
+        product_label_filter=body.product_label_filter,
+        is_always_on=body.is_always_on,
+        is_active=body.is_active,
     )
     db.add(campaign)
     await db.commit()
@@ -123,6 +242,40 @@ async def start_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(404, "Campaign not found")
     if campaign.status == CampaignStatus.running:
         raise HTTPException(400, "Campaign already running")
+
+    # If a contact group is set, auto-add its contacts as campaign_contacts.
+    if campaign.contact_group_id:
+        from app.models.contact_group import ContactGroupMember
+        member_rows = await db.execute(
+            select(ContactGroupMember.contact_id).where(
+                ContactGroupMember.group_id == campaign.contact_group_id
+            )
+        )
+        existing_rows = await db.execute(
+            select(CampaignContact.contact_id).where(CampaignContact.campaign_id == campaign.id)
+        )
+        existing_ids = {r for r in existing_rows.scalars().all()}
+        added = 0
+        for cid in member_rows.scalars().all():
+            if cid in existing_ids:
+                continue
+            db.add(CampaignContact(campaign_id=campaign.id, contact_id=cid, status=MessageStatus.pending))
+            added += 1
+        campaign.total_contacts += added
+
+    # If a WA collection is set, target its groups.
+    if campaign.wa_collection_id:
+        from app.models.contact_group import WaGroupCollectionMember
+        grp_rows = await db.execute(
+            select(WaGroupCollectionMember.group_chat_id).where(
+                WaGroupCollectionMember.collection_id == campaign.wa_collection_id
+            )
+        )
+        chat_ids = [g for g in grp_rows.scalars().all()]
+        if chat_ids:
+            campaign.campaign_scope = "group"
+            campaign.group_ids = json.dumps(chat_ids)
+
     campaign.status = CampaignStatus.running
     campaign.pause_reason = None
     await db.commit()

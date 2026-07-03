@@ -1,5 +1,5 @@
 import React from "react";
-import { Campaigns as Api, FilesApi, Accounts } from "../api.js";
+import { Campaigns as Api, FilesApi, Accounts, ContactGroupsApi, WaCollectionsApi, LabelsApi } from "../api.js";
 import { Badge, Spinner, Empty, Modal, Progress, useAsync } from "../ui.jsx";
 
 const TYPE_FA = {
@@ -14,6 +14,8 @@ export default function Campaigns() {
   const { data, loading, error, reload } = useAsync(Api.list, []);
   const [showAdd, setShowAdd] = React.useState(false);
   const [test, setTest] = React.useState(null);
+  const [edit, setEdit] = React.useState(null); // { editId, initial }
+  const [editLoading, setEditLoading] = React.useState(false);
 
   const act = async (fn) => {
     try {
@@ -21,6 +23,18 @@ export default function Campaigns() {
       await reload();
     } catch (e) {
       alert(e?.response?.data?.detail || e.message);
+    }
+  };
+
+  const openEdit = async (c) => {
+    setEditLoading(true);
+    try {
+      const detail = await Api.get(c.id);
+      setEdit({ editId: c.id, initial: detail });
+    } catch (e) {
+      alert(e?.response?.data?.detail || e.message);
+    } finally {
+      setEditLoading(false);
     }
   };
 
@@ -51,6 +65,10 @@ export default function Campaigns() {
                   <button className="btn-primary" onClick={() => act(() => (c.status === "paused" ? Api.resume(c.id) : Api.start(c.id)))}>شروع</button>
                 )}
                 <button className="btn-secondary" onClick={() => setTest(c)}>تست</button>
+                <button className="btn-secondary" disabled={editLoading} onClick={() => openEdit(c)}>✏️ ویرایش</button>
+                <button className="btn-secondary" onClick={() => act(() => Api.toggleActive(c.id))}>
+                  {c.is_active ? "⏸️ غیرفعال" : "▶️ فعال"}
+                </button>
                 <button className="btn-danger" onClick={() => { if (confirm("این گروه پیام حذف شود؟")) act(() => Api.remove(c.id)); }}>حذف</button>
               </div>
             </div>
@@ -65,6 +83,14 @@ export default function Campaigns() {
       </div>
 
       {showAdd && <AddCampaignModal onClose={() => setShowAdd(false)} onDone={reload} />}
+      {edit && (
+        <AddCampaignModal
+          editId={edit.editId}
+          initial={edit.initial}
+          onClose={() => setEdit(null)}
+          onDone={reload}
+        />
+      )}
       {test && <TestModal campaign={test} onClose={() => setTest(null)} />}
     </div>
   );
@@ -148,19 +174,75 @@ function LiveLog({ campaignId }) {
   );
 }
 
-function AddCampaignModal({ onClose, onDone }) {
-  const [f, setF] = React.useState({
-    name: "", campaign_type: "text", use_gpt: true, gpt_prompt: "",
-    message_template: "", include_products: false, product_count: 3, image_url: "",
-    poll_question: "", poll_options: "", buttons: "", footer_text: "",
-    campaign_scope: "pv", group_ids: "",
-  });
+const EMOJI_LEVELS = [
+  { code: "none", label: "بدون ایموجی" },
+  { code: "low", label: "کم" },
+  { code: "medium", label: "متوسط" },
+  { code: "high", label: "زیاد" },
+];
+
+const CAMPAIGN_DEFAULTS = {
+  name: "", campaign_type: "text", use_gpt: true, gpt_prompt: "",
+  message_template: "", include_products: false, product_count: 3, image_url: "",
+  poll_question: "", poll_options: "", buttons: "", footer_text: "",
+  campaign_scope: "pv", group_ids: "",
+  description: "", contact_group_id: "", wa_collection_id: "", product_label_filter: "",
+  emoji_level: "medium",
+  append_seller_name: false, seller_name: "",
+  append_seller_phone: false, seller_phone: "", seller_phone2: "",
+  append_date: false,
+};
+
+function seedCampaignForm(d) {
+  const join = (v) => (Array.isArray(v) ? v.join("\n") : (v || ""));
+  return {
+    name: d.name || "",
+    campaign_type: d.campaign_type || "text",
+    use_gpt: d.use_gpt ?? true,
+    gpt_prompt: d.gpt_prompt || "",
+    message_template: d.message_template || "",
+    include_products: d.include_products || false,
+    product_count: d.product_count || 3,
+    image_url: d.image_url || "",
+    poll_question: d.poll_question || "",
+    poll_options: join(d.poll_options),
+    buttons: join(d.buttons),
+    footer_text: d.footer_text || "",
+    campaign_scope: d.campaign_scope || "pv",
+    group_ids: join(d.group_ids),
+    description: d.description || "",
+    contact_group_id: d.contact_group_id || "",
+    wa_collection_id: d.wa_collection_id || "",
+    product_label_filter: d.product_label_filter || "",
+    emoji_level: d.emoji_level || "medium",
+    append_seller_name: d.append_seller_name || false,
+    seller_name: d.seller_name || "",
+    append_seller_phone: d.append_seller_phone || false,
+    seller_phone: d.seller_phone || "",
+    seller_phone2: d.seller_phone2 || "",
+    append_date: d.append_date || false,
+  };
+}
+
+function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
+  const [f, setF] = React.useState(() => (initial ? seedCampaignForm(initial) : { ...CAMPAIGN_DEFAULTS }));
   const [saving, setSaving] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
+  const [contactGroups, setContactGroups] = React.useState([]);
+  const [waCollections, setWaCollections] = React.useState([]);
+  const [labels, setLabels] = React.useState([]);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
 
-  // Prefill image_url + campaign type from a file chosen on the Files page
+  // Load dropdown data once
   React.useEffect(() => {
+    ContactGroupsApi.list().then(setContactGroups).catch(() => {});
+    WaCollectionsApi.list().then(setWaCollections).catch(() => {});
+    LabelsApi.list().then(setLabels).catch(() => {});
+  }, []);
+
+  // Prefill image_url + campaign type from a file chosen on the Files page (create mode only)
+  React.useEffect(() => {
+    if (editId) return;
     const pre = typeof localStorage !== "undefined" ? localStorage.getItem("afrakala_prefill_image_url") : "";
     if (pre) {
       setF((prev) => ({ ...prev, image_url: pre, campaign_type: "image" }));
@@ -209,8 +291,23 @@ function AddCampaignModal({ onClose, onDone }) {
           f.campaign_scope === "group" && f.group_ids
             ? f.group_ids.split("\n").map((s) => s.trim()).filter(Boolean)
             : null,
+        description: f.description || null,
+        contact_group_id: f.contact_group_id || null,
+        wa_collection_id: f.wa_collection_id || null,
+        product_label_filter: f.include_products && f.product_label_filter ? f.product_label_filter : null,
+        emoji_level: f.emoji_level,
+        append_seller_name: f.append_seller_name,
+        seller_name: f.append_seller_name ? (f.seller_name || null) : null,
+        append_seller_phone: f.append_seller_phone,
+        seller_phone: f.append_seller_phone ? (f.seller_phone || null) : null,
+        seller_phone2: f.append_seller_phone ? (f.seller_phone2 || null) : null,
+        append_date: f.append_date,
       };
-      await Api.create(body);
+      if (editId) {
+        await Api.update(editId, body);
+      } else {
+        await Api.create(body);
+      }
       await onDone();
       onClose();
     } catch (e) {
@@ -221,7 +318,7 @@ function AddCampaignModal({ onClose, onDone }) {
   };
 
   return (
-    <Modal title="گروه پیام جدید" onClose={onClose} wide>
+    <Modal title={editId ? "ویرایش کمپین" : "گروه پیام جدید"} onClose={onClose} wide>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -237,6 +334,11 @@ function AddCampaignModal({ onClose, onDone }) {
         </div>
 
         <div>
+          <label className="label">توضیحات کمپین (اختیاری)</label>
+          <textarea className="input h-16" value={f.description} onChange={set("description")} />
+        </div>
+
+        <div>
           <label className="label">نوع ارسال</label>
           <select className="input" value={f.campaign_scope} onChange={set("campaign_scope")}>
             <option value="pv">ارسال به افراد</option>
@@ -244,11 +346,34 @@ function AddCampaignModal({ onClose, onDone }) {
           </select>
         </div>
 
-        {f.campaign_scope === "group" && (
+        {f.campaign_scope === "pv" && (
           <div>
-            <label className="label">شناسه گروه‌ها (هر خط یک گروه)</label>
-            <textarea className="input h-20" value={f.group_ids} onChange={set("group_ids")} placeholder="120363xxxxxxxx@g.us" />
+            <label className="label">گروه مخاطبین (جایگزین افزودن دستی مخاطبین)</label>
+            <select className="input" value={f.contact_group_id} onChange={set("contact_group_id")}>
+              <option value="">— انتخاب نشده —</option>
+              {contactGroups.map((g) => (
+                <option key={g.id} value={g.id}>{g.name}{g.member_count != null ? ` (${g.member_count})` : ""}</option>
+              ))}
+            </select>
           </div>
+        )}
+
+        {f.campaign_scope === "group" && (
+          <>
+            <div>
+              <label className="label">مجموعه گروه‌های واتساپ</label>
+              <select className="input" value={f.wa_collection_id} onChange={set("wa_collection_id")}>
+                <option value="">— انتخاب نشده —</option>
+                {waCollections.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name}{w.group_count != null ? ` (${w.group_count})` : ""}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">شناسه گروه‌ها (هر خط یک گروه)</label>
+              <textarea className="input h-20" value={f.group_ids} onChange={set("group_ids")} placeholder="120363xxxxxxxx@g.us" />
+            </div>
+          </>
         )}
 
         <label className="flex items-center gap-2 text-sm">
@@ -276,17 +401,37 @@ function AddCampaignModal({ onClose, onDone }) {
         <p className="text-xs text-slate-500 -mt-1">قیمت لحظه‌ای محصولات افراکالا در پیام درج می‌شود</p>
 
         {f.include_products && (
-          <div>
-            <label className="label">تعداد محصول</label>
-            <input
-              type="number"
-              className="input"
-              min={1}
-              max={10}
-              value={f.product_count}
-              onChange={set("product_count")}
-            />
-          </div>
+          <>
+            <div>
+              <label className="label">تعداد محصول</label>
+              <input
+                type="number"
+                className="input"
+                min={1}
+                max={10}
+                value={f.product_count}
+                onChange={set("product_count")}
+              />
+            </div>
+            <div>
+              <label className="label">فیلتر بر اساس برچسب (اختیاری)</label>
+              <select className="input" value={f.product_label_filter} onChange={set("product_label_filter")}>
+                <option value="">— همه محصولات —</option>
+                {labels.map((l) => (
+                  <option key={l.id} value={l.id}>{l.title}</option>
+                ))}
+              </select>
+              {f.product_label_filter && (() => {
+                const sel = labels.find((l) => String(l.id) === String(f.product_label_filter));
+                return sel?.color ? (
+                  <span className="inline-flex items-center gap-2 mt-1 text-xs text-slate-400">
+                    <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: sel.color }} />
+                    {sel.title}
+                  </span>
+                ) : null;
+              })()}
+            </div>
+          </>
         )}
 
         {f.campaign_type === "image" && (
@@ -326,10 +471,52 @@ function AddCampaignModal({ onClose, onDone }) {
           </>
         )}
 
+        <div>
+          <label className="label">سطح ایموجی</label>
+          <select className="input" value={f.emoji_level} onChange={set("emoji_level")}>
+            {EMOJI_LEVELS.map((e) => <option key={e.code} value={e.code}>{e.label}</option>)}
+          </select>
+        </div>
+
+        <div className="rounded-lg border border-slate-700 p-3 space-y-2">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={f.append_seller_name} onChange={set("append_seller_name")} />
+            نام فروشنده اضافه شود
+          </label>
+          {f.append_seller_name && (
+            <div>
+              <label className="label">نام فروشنده</label>
+              <input className="input" value={f.seller_name} onChange={set("seller_name")} />
+            </div>
+          )}
+
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={f.append_seller_phone} onChange={set("append_seller_phone")} />
+            شماره فروشنده اضافه شود
+          </label>
+          {f.append_seller_phone && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">موبایل</label>
+                <input className="input" value={f.seller_phone} onChange={set("seller_phone")} />
+              </div>
+              <div>
+                <label className="label">تلفن ثابت</label>
+                <input className="input" value={f.seller_phone2} onChange={set("seller_phone2")} />
+              </div>
+            </div>
+          )}
+
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={f.append_date} onChange={set("append_date")} />
+            تاریخ امروز (شمسی) آخر پیام اضافه شود
+          </label>
+        </div>
+
         <button className="btn-primary w-full" disabled={saving} onClick={submit}>
-          {saving ? "در حال ساخت..." : "ساخت گروه پیام"}
+          {saving ? (editId ? "در حال ذخیره..." : "در حال ساخت...") : (editId ? "ذخیره تغییرات" : "ساخت گروه پیام")}
         </button>
-        <p className="text-xs text-slate-500">پس از ساخت، مخاطبین را از صفحه مخاطبین اضافه کنید و سپس گروه پیام را شروع کنید.</p>
+        {!editId && <p className="text-xs text-slate-500">پس از ساخت، مخاطبین را از صفحه مخاطبین اضافه کنید و سپس گروه پیام را شروع کنید.</p>}
       </div>
     </Modal>
   );

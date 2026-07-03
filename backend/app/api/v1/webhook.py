@@ -123,18 +123,53 @@ async def handle_incoming(instance_id: str, payload: dict):
             if text and not msg.is_group or text:
                 try:
                     from app.services.keyword_service import check_keywords, increment_use_count
-                    kw_matched, kw_reply, kw_rule_id = await check_keywords(
+                    kw_matched, kw_reply, kw_rule_id, rule_scope = await check_keywords(
                         instance_id=instance_id,
                         message_text=text,
                         is_group=msg.is_group,
                         account_id=str(account.id) if account else None,
                     )
                     if kw_matched and kw_reply and account:
-                        await client.send_message(sender_phone, kw_reply)
+                        # scope determines WHERE to reply: 'group'/'both' in a group
+                        # replies to the group chatId (raw), otherwise to the sender (PV).
+                        if rule_scope in ("group", "both") and msg.is_group:
+                            group_chat_id = sender.get("chatId", "")
+                            if group_chat_id:
+                                await client.send_group_message(group_chat_id, kw_reply)
+                            else:
+                                await client.send_message(sender_phone, kw_reply)
+                        else:
+                            await client.send_message(sender_phone, kw_reply)
                         if kw_rule_id:
                             await increment_use_count(kw_rule_id)
                 except Exception as e:
                     print(f"[Keyword] match/reply failed (non-fatal): {e}")
+
+        # Product mention detection (only in groups)
+        if msg.is_group and text:
+            try:
+                from app.services.price_service import get_products
+                from app.models.reporting import ProductMentionLog
+                products = await get_products(200)  # get all products
+                text_lower = text.lower()
+                for product in products:
+                    pname = (product.get("name") or "").lower()
+                    if pname and len(pname) > 3 and pname in text_lower:
+                        async with AsyncSessionLocal() as log_db:
+                            mention = ProductMentionLog(
+                                product_name=product.get("name"),
+                                sender_phone=sender_phone,
+                                sender_name=sender.get("senderName", ""),
+                                group_name=sender.get("chatName", ""),
+                                group_chat_id=sender.get("chatId", ""),
+                                instance_id=instance_id,
+                                message_text=text[:500]
+                            )
+                            log_db.add(mention)
+                            await log_db.commit()
+                        break  # one mention per message
+            except Exception as e:
+                print(f"[ProductMention] detection error: {e}")
 
         await db.commit()
 

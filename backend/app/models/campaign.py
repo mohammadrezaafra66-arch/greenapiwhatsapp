@@ -58,6 +58,20 @@ class Campaign(Base):
     campaign_scope: Mapped[str] = mapped_column(String(20), default="pv")  # pv | group
     group_ids: Mapped[str | None] = mapped_column(Text)  # JSON list of group chatIds
     pause_reason: Mapped[str | None] = mapped_column(Text)  # why auto-paused (shown in progress panel)
+    # V5 extensions
+    description: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    append_date: Mapped[bool] = mapped_column(Boolean, default=False)
+    append_seller_name: Mapped[bool] = mapped_column(Boolean, default=False)
+    seller_name: Mapped[str | None] = mapped_column(String(200))
+    append_seller_phone: Mapped[bool] = mapped_column(Boolean, default=False)
+    seller_phone: Mapped[str | None] = mapped_column(String(20))
+    seller_phone2: Mapped[str | None] = mapped_column(String(20))
+    emoji_level: Mapped[str] = mapped_column(String(20), default="medium")
+    contact_group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    wa_collection_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    product_label_filter: Mapped[str | None] = mapped_column(String(200))
+    is_always_on: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 

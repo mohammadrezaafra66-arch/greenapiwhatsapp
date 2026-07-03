@@ -6,12 +6,38 @@ export default function Groups() {
   const { data, loading, error, reload } = useAsync(Api.list, []);
   const [showAdd, setShowAdd] = React.useState(false);
   const [send, setSend] = React.useState(null);
+  const [syncing, setSyncing] = React.useState(false);
+
+  const syncWhatsapp = async () => {
+    setSyncing(true);
+    try {
+      const accounts = await AccApi.list();
+      if (!accounts || accounts.length === 0) return alert("حسابی موجود نیست");
+      const account = accounts.find((a) => a.status === "active") || accounts[0];
+      const r = await Api.sync(account.id);
+      alert(`${r.synced} گروه همگام‌سازی شد`);
+      await reload();
+    } catch (e) {
+      alert(e?.response?.data?.detail || e.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">گروه‌ها</h2>
-        <button className="btn-primary" onClick={() => setShowAdd(true)}>+ ساخت گروه</button>
+        <div className="flex gap-2">
+          <button className="btn-secondary" disabled={syncing} onClick={syncWhatsapp}>
+            {syncing ? "در حال همگام‌سازی..." : "همگام‌سازی با واتساپ"}
+          </button>
+          <button className="btn-primary" onClick={() => setShowAdd(true)}>+ ساخت گروه</button>
+        </div>
+      </div>
+
+      <div className="card text-sm text-slate-300 bg-sky-500/10 border-sky-500/30">
+        برای نمایش گروه‌های واتساپ، ابتدا روی «همگام‌سازی با واتساپ» کلیک کنید.
       </div>
 
       {loading && <Spinner />}

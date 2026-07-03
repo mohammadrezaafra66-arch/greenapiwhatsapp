@@ -14,13 +14,13 @@ async def check_keywords(
     message_text: str,
     is_group: bool,
     account_id: str | None = None,
-) -> tuple[bool, str | None, str | None]:
+) -> tuple[bool, str | None, str | None, str | None]:
     """
-    Returns (matched, reply_message, rule_id).
+    Returns (matched, reply_message, rule_id, scope).
     scope: 'pv' only matches non-group, 'group' only group, 'both' always.
     """
     if not message_text:
-        return False, None, None
+        return False, None, None, None
 
     text_lower = message_text.lower().strip()
 
@@ -52,9 +52,9 @@ async def check_keywords(
             matched = kw in text_lower
 
         if matched:
-            return True, rule.reply_message, str(rule.id)
+            return True, rule.reply_message, str(rule.id), rule.scope
 
-    return False, None, None
+    return False, None, None, None
 
 
 async def increment_use_count(rule_id: str):

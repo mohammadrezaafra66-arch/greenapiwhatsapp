@@ -45,6 +45,9 @@ export const Campaigns = {
   progress: (id) => http.get(`/campaigns/${id}/progress`).then((r) => r.data),
   contacts: (id, status) =>
     http.get(`/campaigns/${id}/contacts`, { params: status ? { status } : {} }).then((r) => r.data),
+  get: (id) => http.get(`/campaigns/${id}`).then((r) => r.data),
+  update: (id, body) => http.put(`/campaigns/${id}`, body).then((r) => r.data),
+  toggleActive: (id) => http.post(`/campaigns/${id}/toggle-active`).then((r) => r.data),
   remove: (id) => http.delete(`/campaigns/${id}`).then((r) => r.data),
 };
 
@@ -88,6 +91,7 @@ export const Groups = {
   send: (id, message) =>
     http.post(`/groups/${id}/send`, { message }).then((r) => r.data),
   info: (id) => http.get(`/groups/${id}/info`).then((r) => r.data),
+  sync: (accountId) => http.post(`/groups/sync/${accountId}`).then((r) => r.data),
 };
 
 // ── Statuses ───────────────────────────────────────────
@@ -145,6 +149,49 @@ export const JournalsApi = {
 export const FilesApi = {
   upload: (accountId, formData) => http.post(`/files/upload/${accountId}`, formData, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data),
   list: (accountId) => http.get(`/files/list/${accountId}`).then((r) => r.data),
+};
+
+// ── Contact Groups ─────────────────────────────────────────
+export const ContactGroupsApi = {
+  list: () => http.get("/contact-groups/").then((r) => r.data),
+  create: (body) => http.post("/contact-groups/", body).then((r) => r.data),
+  update: (id, body) => http.put(`/contact-groups/${id}`, body).then((r) => r.data),
+  delete: (id) => http.delete(`/contact-groups/${id}`).then((r) => r.data),
+  addMembers: (id, contact_ids) => http.post(`/contact-groups/${id}/members`, { contact_ids }).then((r) => r.data),
+  removeMember: (id, contact_id) => http.delete(`/contact-groups/${id}/members/${contact_id}`).then((r) => r.data),
+  contacts: (id) => http.get(`/contact-groups/${id}/contacts`).then((r) => r.data),
+};
+
+// ── WA Group Collections ───────────────────────────────────
+export const WaCollectionsApi = {
+  list: () => http.get("/wa-collections/").then((r) => r.data),
+  create: (body) => http.post("/wa-collections/", body).then((r) => r.data),
+  update: (id, body) => http.put(`/wa-collections/${id}`, body).then((r) => r.data),
+  delete: (id) => http.delete(`/wa-collections/${id}`).then((r) => r.data),
+  addGroup: (id, body) => http.post(`/wa-collections/${id}/groups`, body).then((r) => r.data),
+  removeGroup: (id, chat_id) => http.delete(`/wa-collections/${id}/groups/${encodeURIComponent(chat_id)}`).then((r) => r.data),
+  groups: (id) => http.get(`/wa-collections/${id}/groups`).then((r) => r.data),
+};
+
+// ── Reporting ──────────────────────────────────────────────
+export const ReportingApi = {
+  emergencyContacts: () => http.get("/reporting/emergency-contacts").then((r) => r.data),
+  addEmergency: (body) => http.post("/reporting/emergency-contacts", body).then((r) => r.data),
+  deleteEmergency: (id) => http.delete(`/reporting/emergency-contacts/${id}`).then((r) => r.data),
+  subscribers: () => http.get("/reporting/subscribers").then((r) => r.data),
+  addSubscriber: (body) => http.post("/reporting/subscribers", body).then((r) => r.data),
+  deleteSubscriber: (id) => http.delete(`/reporting/subscribers/${id}`).then((r) => r.data),
+  dailyLogs: (date) => http.get(`/reporting/daily-logs${date ? `?date=${date}` : ""}`).then((r) => r.data),
+  productMentions: () => http.get("/dashboard/product-mentions/recent").then((r) => r.data),
+  clearMentions: () => http.delete("/reporting/product-mentions").then((r) => r.data),
+};
+
+// ── Products & Labels ──────────────────────────────────────
+export const ProductsApi = {
+  list: () => http.get("/reporting/products").then((r) => r.data),
+};
+export const LabelsApi = {
+  list: () => http.get("/reporting/product-labels").then((r) => r.data),
 };
 
 // ── Blacklist ──────────────────────────────────────────

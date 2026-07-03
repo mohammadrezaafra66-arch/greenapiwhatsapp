@@ -1,10 +1,10 @@
 import React from "react";
 
 export const STATUS_FA = {
-  active: "فعال",
-  banned: "مسدود",
-  disconnected: "قطع",
-  pending: "در انتظار",
+  active: "متصل ✅",
+  banned: "مسدود 🚫",
+  disconnected: "قطع 🔌",
+  pending: "در انتظار اتصال ⏳",
   draft: "پیش‌نویس",
   running: "در حال اجرا",
   paused: "متوقف",

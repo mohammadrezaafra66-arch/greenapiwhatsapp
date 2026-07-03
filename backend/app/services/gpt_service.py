@@ -145,7 +145,16 @@ def _fallback_message(first_name: str, products=None) -> str:
     return "\n".join(lines)
 
 
-async def generate_message(first_name: str, last_name: str, gpt_prompt: str, products: list[dict] = None) -> str:
+EMOJI_INSTRUCTION = {
+    "none": "هیچ ایموجی استفاده نکن",
+    "low": "حداکثر ۱-۲ ایموجی استفاده کن",
+    "medium": "از ۳-۵ ایموجی مناسب استفاده کن",
+    "high": "از ایموجی‌های متنوع و زیاد استفاده کن (۵-۱۰ ایموجی)",
+}
+
+
+async def generate_message(first_name: str, last_name: str, gpt_prompt: str,
+                           products: list[dict] = None, emoji_level: str = "medium") -> str:
     products_text = ""
     if products:
         products_text = "\n\nمحصولات امروز افراکالا:\n"
@@ -155,7 +164,10 @@ async def generate_message(first_name: str, last_name: str, gpt_prompt: str, pro
 
     user_msg = f"اسم مشتری: {first_name} {last_name}\n{gpt_prompt}{products_text}\nپیام واتس‌اپ فارسی بنویس:"
 
-    text = await _chat(SYSTEM_PROMPT, user_msg, max_tokens=500, temperature=0.85)
+    emoji_rule = EMOJI_INSTRUCTION.get(emoji_level, EMOJI_INSTRUCTION["medium"])
+    system_prompt = f"{SYSTEM_PROMPT}\n- درباره ایموجی: {emoji_rule}"
+
+    text = await _chat(system_prompt, user_msg, max_tokens=500, temperature=0.85)
     return text if text else _fallback_message(first_name, products)
 
 

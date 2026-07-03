@@ -17,6 +17,24 @@ def task_run_group_campaign(self, campaign_id: str):
     except Exception as exc:
         raise self.retry(exc=exc, countdown=60)
 
+@celery_app.task(name="tasks.clear_old_product_mentions")
+def task_clear_old_product_mentions():
+    async def _c():
+        from app.database import AsyncSessionLocal
+        from app.models.reporting import ProductMentionLog
+        from sqlalchemy import delete
+        from datetime import datetime, timedelta
+        async with AsyncSessionLocal() as db:
+            cutoff = datetime.utcnow() - timedelta(days=2)
+            await db.execute(delete(ProductMentionLog).where(ProductMentionLog.mentioned_at < cutoff))
+            await db.commit()
+    asyncio.run(_c())
+
+@celery_app.task(name="tasks.send_night_report")
+def task_send_night_report():
+    from app.services.night_report import send_night_report
+    asyncio.run(send_night_report())
+
 @celery_app.task(name="tasks.reset_daily_counters")
 def task_reset_daily_counters():
     async def _r():

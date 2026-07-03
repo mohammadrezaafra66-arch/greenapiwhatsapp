@@ -9,6 +9,7 @@ from app.api.v1 import (
     inbox, groups, statuses, templates, queue, blacklist,
     keyword_rules, account_schedules,
     journals, files as files_router,
+    contact_groups, wa_collections, reporting as reporting_router,
 )
 
 @asynccontextmanager
@@ -101,6 +102,91 @@ async def lifespan(app: FastAPI):
         ]
         for stmt in ddl_v4:
             await conn.execute(text(stmt))
+        ddl_v5 = [
+            """CREATE TABLE IF NOT EXISTS contact_groups (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                name varchar(200) NOT NULL,
+                description text,
+                color varchar(20) DEFAULT '#25D366',
+                created_at timestamp DEFAULT now()
+            )""",
+            """CREATE TABLE IF NOT EXISTS contact_group_members (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                group_id uuid NOT NULL REFERENCES contact_groups(id) ON DELETE CASCADE,
+                contact_id uuid NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+                UNIQUE(group_id, contact_id)
+            )""",
+            """CREATE TABLE IF NOT EXISTS wa_group_collections (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                name varchar(200) NOT NULL,
+                description text,
+                created_at timestamp DEFAULT now()
+            )""",
+            """CREATE TABLE IF NOT EXISTS wa_group_collection_members (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                collection_id uuid NOT NULL REFERENCES wa_group_collections(id) ON DELETE CASCADE,
+                group_chat_id varchar(200) NOT NULL,
+                group_name varchar(200),
+                UNIQUE(collection_id, group_chat_id)
+            )""",
+            """CREATE TABLE IF NOT EXISTS emergency_contacts (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                name varchar(100),
+                phone varchar(20) NOT NULL,
+                purpose varchar(100) DEFAULT 'alert',
+                is_active boolean DEFAULT true,
+                created_at timestamp DEFAULT now()
+            )""",
+            """CREATE TABLE IF NOT EXISTS report_subscribers (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                phone varchar(20) NOT NULL UNIQUE,
+                name varchar(100),
+                is_active boolean DEFAULT true,
+                created_at timestamp DEFAULT now()
+            )""",
+            """CREATE TABLE IF NOT EXISTS daily_send_logs (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                date date NOT NULL DEFAULT CURRENT_DATE,
+                account_id uuid REFERENCES accounts(id),
+                account_name varchar(100),
+                campaign_name varchar(200),
+                recipient_phone varchar(20),
+                recipient_name varchar(200),
+                status varchar(50),
+                sent_at timestamp DEFAULT now()
+            )""",
+            """CREATE TABLE IF NOT EXISTS product_mention_logs (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                product_name varchar(500),
+                product_id varchar(100),
+                sender_phone varchar(20),
+                sender_name varchar(200),
+                group_name varchar(200),
+                group_chat_id varchar(200),
+                instance_id varchar(50),
+                message_text text,
+                mentioned_at timestamp DEFAULT now()
+            )""",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS description text",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS append_date boolean DEFAULT false",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS append_seller_name boolean DEFAULT false",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS seller_name varchar(200)",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS append_seller_phone boolean DEFAULT false",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS seller_phone varchar(20)",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS seller_phone2 varchar(20)",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS emoji_level varchar(20) DEFAULT 'medium'",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS contact_group_id uuid",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS wa_collection_id uuid",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS product_label_filter varchar(200)",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS is_always_on boolean DEFAULT false",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS emergency_phones text",
+        ]
+        for stmt in ddl_v5:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V5] {e}")
     yield
 
 app = FastAPI(title="Afrakala WhatsApp Sender", version="2.0.0", lifespan=lifespan)
@@ -119,6 +205,7 @@ for router in [
     templates.router, queue.router, blacklist.router,
     keyword_rules.router, account_schedules.router,
     journals.router, files_router.router,
+    contact_groups.router, wa_collections.router, reporting_router.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

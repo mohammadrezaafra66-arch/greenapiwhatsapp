@@ -78,7 +78,11 @@ async def run_campaign(campaign_id: str):
 
         products = []
         if campaign.include_products:
-            products = await get_products(campaign.product_count)
+            if campaign.product_label_filter:
+                from app.services.price_service import get_products_by_label
+                products = await get_products_by_label(campaign.product_label_filter, campaign.product_count)
+            else:
+                products = await get_products(campaign.product_count)
 
         poll_options = []
         if campaign.poll_options:
@@ -125,12 +129,30 @@ async def run_campaign(campaign_id: str):
                         first_name=contact.first_name or "",
                         last_name=contact.last_name or "",
                         gpt_prompt=effective_gpt_prompt or "یک پیام تبلیغاتی مختصر بنویس",
-                        products=products if campaign.include_products else None
+                        products=products if campaign.include_products else None,
+                        emoji_level=campaign.emoji_level or "medium",
                     )
                 else:
                     message = (effective_template or "سلام {{first_name}} جان!")
                     message = message.replace("{{first_name}}", contact.first_name or "")
                     message = message.replace("{{last_name}}", contact.last_name or "")
+
+                # Append seller signature if configured
+                if campaign.append_seller_name and campaign.seller_name:
+                    message += f"\n\n👤 {campaign.seller_name}"
+                if campaign.append_seller_phone and campaign.seller_phone:
+                    message += f"\n📱 {campaign.seller_phone}"
+                    if campaign.seller_phone2:
+                        message += f"\n☎️ {campaign.seller_phone2}"
+
+                # Append Shamsi (Jalali) date if configured
+                if campaign.append_date:
+                    try:
+                        import jdatetime
+                        today_jalali = jdatetime.date.today().strftime('%Y/%m/%d')
+                        message += f"\n\n📅 {today_jalali}"
+                    except Exception:
+                        pass
 
                 cc.generated_message = message
                 client = GreenAPIClient(account.instance_id, account.api_token)
@@ -165,6 +187,17 @@ async def run_campaign(campaign_id: str):
                     account.sent_today += 1
                     campaign.sent_count += 1
                     await record_send(str(account.id))
+
+                    # Log to daily_send_logs for the night report
+                    from app.models.reporting import DailySendLog
+                    db.add(DailySendLog(
+                        account_id=account.id,
+                        account_name=account.name,
+                        campaign_name=campaign.name,
+                        recipient_phone=contact.phone,
+                        recipient_name=contact.full_name,
+                        status="sent",
+                    ))
                 else:
                     cc.status = MessageStatus.failed
                     cc.error_message = "No message ID returned"

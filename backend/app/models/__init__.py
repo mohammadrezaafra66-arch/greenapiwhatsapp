@@ -16,6 +16,12 @@ from app.models.account_send_config import AccountSendConfig
 from app.models.keyword_rule import KeywordRule
 from app.models.account_hour_schedule import AccountHourSchedule
 from app.models.ai_usage import AiUsageLog
+from app.models.contact_group import (
+    ContactGroup, ContactGroupMember, WaGroupCollection, WaGroupCollectionMember,
+)
+from app.models.reporting import (
+    EmergencyContact, ReportSubscriber, DailySendLog, ProductMentionLog,
+)
 
 __all__ = [
     "Account",
@@ -38,4 +44,12 @@ __all__ = [
     "KeywordRule",
     "AccountHourSchedule",
     "AiUsageLog",
+    "ContactGroup",
+    "ContactGroupMember",
+    "WaGroupCollection",
+    "WaGroupCollectionMember",
+    "EmergencyContact",
+    "ReportSubscriber",
+    "DailySendLog",
+    "ProductMentionLog",
 ]

@@ -76,6 +76,20 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     }
 
 
+@router.get("/product-mentions/recent")
+async def get_product_mentions(limit: int = 50, db: AsyncSession = Depends(get_db)):
+    from app.models.reporting import ProductMentionLog
+    result = await db.execute(
+        select(ProductMentionLog).order_by(ProductMentionLog.mentioned_at.desc()).limit(limit)
+    )
+    items = result.scalars().all()
+    return [
+        {"product": i.product_name, "sender": i.sender_phone, "sender_name": i.sender_name,
+         "group": i.group_name, "time": str(i.mentioned_at), "text": i.message_text}
+        for i in items
+    ]
+
+
 @router.get("/ai-stats")
 async def ai_stats():
     """AI token usage per provider over the last 24h."""
