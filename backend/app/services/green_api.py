@@ -13,10 +13,12 @@ class GreenAPIClient:
         self.api_token = api_token
         self.base_url = f"https://api.green-api.com/waInstance{instance_id}"
 
-    async def _get(self, endpoint: str) -> dict:
+    async def _get(self, endpoint: str, params: dict = None) -> dict:
+        # Query params must go AFTER the token segment, not inside `endpoint`
+        # (Green API URL shape: /waInstance{id}/{method}/{token}?query).
         url = f"{self.base_url}/{endpoint}/{self.api_token}"
         async with httpx.AsyncClient(timeout=30) as c:
-            r = await c.get(url)
+            r = await c.get(url, params=params)
             r.raise_for_status()
             return r.json()
 
@@ -312,12 +314,12 @@ class GreenAPIClient:
 
     async def last_incoming_messages(self, minutes: int = 1440) -> list[dict]:
         """Get incoming messages from the last N minutes (default 24h)."""
-        r = await self._get(f"lastIncomingMessages?minutes={minutes}")
+        r = await self._get("lastIncomingMessages", params={"minutes": minutes})
         return r if isinstance(r, list) else []
 
     async def last_outgoing_messages(self, minutes: int = 1440) -> list[dict]:
         """Get outgoing messages from the last N minutes."""
-        r = await self._get(f"lastOutgoingMessages?minutes={minutes}")
+        r = await self._get("lastOutgoingMessages", params={"minutes": minutes})
         return r if isinstance(r, list) else []
 
     # ── SERVICE ──────────────────────────────────────────
