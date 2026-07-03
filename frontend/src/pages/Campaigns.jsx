@@ -59,7 +59,7 @@ export default function Campaigns() {
               <span>تحویل: {c.delivered_count} · خوانده: {c.read_count} · ناموفق: {c.failed_count}</span>
             </div>
             <Progress value={c.sent_count} max={c.total_contacts} />
-            {c.status === "running" && <LiveLog campaignId={c.id} />}
+            {(c.status === "running" || c.status === "paused") && <LiveLog campaignId={c.id} />}
           </div>
         ))}
       </div>
@@ -109,6 +109,12 @@ function LiveLog({ campaignId }) {
       </div>
 
       {err && <div className="text-red-400 text-xs">خطا در دریافت گزارش: {err}</div>}
+
+      {prog?.pause_reason && (
+        <div className="rounded bg-amber-500/10 border border-amber-500/40 text-amber-300 p-2 text-xs">
+          ⏸️ {prog.pause_reason}
+        </div>
+      )}
 
       {prog && (
         <div className="flex flex-wrap gap-2 text-xs">

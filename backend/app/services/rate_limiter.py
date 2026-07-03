@@ -1,5 +1,5 @@
 import redis.asyncio as aioredis
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 from app.config import settings
 
@@ -22,6 +22,18 @@ def get_max_per_hour() -> int:
         if slot["hour_start"] <= h < slot["hour_end"]:
             return slot["max_per_hour"]
     return 0
+
+def seconds_until_send_window() -> int:
+    """Seconds until the daily send window opens (08:00 Tehran).
+    Returns 0 if the window is currently open."""
+    if get_max_per_hour() > 0:
+        return 0
+    now = datetime.now(TEHRAN_TZ)
+    target = now.replace(hour=8, minute=0, second=0, microsecond=0)
+    if now.hour >= 8:
+        # Past today's window (>=22) → next open is tomorrow 08:00
+        target = target + timedelta(days=1)
+    return max(1, int((target - now).total_seconds()))
 
 async def get_max_per_hour_for_account(account_id: str) -> int:
     """

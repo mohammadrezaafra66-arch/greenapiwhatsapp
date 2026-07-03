@@ -46,6 +46,7 @@ async def list_campaigns(db: AsyncSession = Depends(get_db)):
             "id": str(c.id),
             "name": c.name,
             "status": c.status,
+            "pause_reason": c.pause_reason,
             "campaign_type": c.campaign_type,
             "total_contacts": c.total_contacts,
             "sent_count": c.sent_count,
@@ -123,6 +124,7 @@ async def start_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
     if campaign.status == CampaignStatus.running:
         raise HTTPException(400, "Campaign already running")
     campaign.status = CampaignStatus.running
+    campaign.pause_reason = None
     await db.commit()
     if campaign.campaign_scope == "group":
         from app.workers.tasks import task_run_group_campaign
@@ -148,6 +150,7 @@ async def resume_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
     if not campaign:
         raise HTTPException(404, "Campaign not found")
     campaign.status = CampaignStatus.running
+    campaign.pause_reason = None
     await db.commit()
     task_run_campaign.delay(campaign_id)
     return {"status": "resumed"}
@@ -201,6 +204,7 @@ async def campaign_progress(campaign_id: str, db: AsyncSession = Depends(get_db)
         "campaign_id": campaign_id,
         "name": campaign.name,
         "status": campaign.status,
+        "pause_reason": campaign.pause_reason,
         "total": campaign.total_contacts,
         "sent": campaign.sent_count,
         "failed": campaign.failed_count,

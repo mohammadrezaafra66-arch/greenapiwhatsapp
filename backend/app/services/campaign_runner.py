@@ -11,11 +11,23 @@ from app.services.rate_limiter import can_send, record_send
 from app.database import AsyncSessionLocal
 from app.config import settings
 
+# Auto-pause reasons surfaced in the campaign progress panel.
+NO_ACCOUNT_REASON = "هیچ اکانت فعالی متصل نیست — کمپین به‌طور خودکار متوقف شد"
+WINDOW_WAIT_REASON = "خارج از بازه مجاز ارسال (۸ تا ۲۲ به وقت تهران) — ادامه خودکار در ۰۸:۰۰"
+
 
 async def run_campaign(campaign_id: str):
     async with AsyncSessionLocal() as db:
         campaign = await db.get(Campaign, uuid.UUID(campaign_id))
-        if not campaign or campaign.status != CampaignStatus.running:
+        if not campaign:
+            return
+        # Auto-resume a campaign that was parked waiting for the send window to
+        # open (this task was rescheduled via eta/countdown for exactly that).
+        if campaign.status == CampaignStatus.paused and campaign.pause_reason == WINDOW_WAIT_REASON:
+            campaign.status = CampaignStatus.running
+            campaign.pause_reason = None
+            await db.commit()
+        if campaign.status != CampaignStatus.running:
             return
 
         result = await db.execute(
@@ -36,6 +48,26 @@ async def run_campaign(campaign_id: str):
         accounts_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
         accounts = accounts_result.scalars().all()
         if not accounts:
+            # No connected account to send with → auto-pause with a clear reason.
+            campaign.status = CampaignStatus.paused
+            campaign.pause_reason = NO_ACCOUNT_REASON
+            await db.commit()
+            return
+
+        # Outside the daily send window → auto-pause and self-reschedule this task
+        # to fire when the window next opens (08:00 Tehran).
+        from app.services.rate_limiter import seconds_until_send_window
+        wait_seconds = seconds_until_send_window()
+        if wait_seconds > 0:
+            campaign.status = CampaignStatus.paused
+            campaign.pause_reason = WINDOW_WAIT_REASON
+            await db.commit()
+            try:
+                from app.workers.tasks import task_run_campaign
+                task_run_campaign.apply_async(args=[campaign_id], countdown=wait_seconds)
+                print(f"[Campaign {campaign_id}] outside send window — rescheduled in {wait_seconds}s")
+            except Exception as e:
+                print(f"[Campaign {campaign_id}] reschedule failed (non-fatal): {e}")
             return
 
         products = []

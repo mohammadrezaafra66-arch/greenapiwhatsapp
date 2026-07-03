@@ -66,6 +66,7 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS button_reply_title varchar(500)",
             "ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS poll_votes text",
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS quota_exceeded_at timestamp",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS pause_reason text",
             """CREATE TABLE IF NOT EXISTS chat_journals (
                 id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
                 account_id uuid REFERENCES accounts(id) ON DELETE CASCADE,
