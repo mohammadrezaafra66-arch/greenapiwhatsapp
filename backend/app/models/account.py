@@ -43,4 +43,8 @@ class Account(Base):
         base = min(self.days_active, 10)
         incoming = min(self.received_yesterday, 20)
         replies = min(self.quick_replies_yesterday * 5, 50)
-        return base + incoming + replies
+        warmup = base + incoming + replies
+        # The manually-configured daily_limit column acts as a floor, so an
+        # account that isn't warming up (days_active=0) can still send up to its
+        # configured limit instead of being stuck at 0.
+        return max(warmup, self.daily_limit or 0)

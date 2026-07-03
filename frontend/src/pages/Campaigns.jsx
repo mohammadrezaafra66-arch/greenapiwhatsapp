@@ -59,12 +59,85 @@ export default function Campaigns() {
               <span>تحویل: {c.delivered_count} · خوانده: {c.read_count} · ناموفق: {c.failed_count}</span>
             </div>
             <Progress value={c.sent_count} max={c.total_contacts} />
+            {c.status === "running" && <LiveLog campaignId={c.id} />}
           </div>
         ))}
       </div>
 
       {showAdd && <AddCampaignModal onClose={() => setShowAdd(false)} onDone={reload} />}
       {test && <TestModal campaign={test} onClose={() => setTest(null)} />}
+    </div>
+  );
+}
+
+function LiveLog({ campaignId }) {
+  const [prog, setProg] = React.useState(null);
+  const [failed, setFailed] = React.useState([]);
+  const [err, setErr] = React.useState(null);
+  const [tick, setTick] = React.useState(null);
+
+  React.useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      try {
+        const [p, f] = await Promise.all([
+          Api.progress(campaignId),
+          Api.contacts(campaignId, "failed"),
+        ]);
+        if (!alive) return;
+        setProg(p);
+        setFailed(f);
+        setErr(null);
+        setTick(new Date());
+      } catch (e) {
+        if (alive) setErr(e?.response?.data?.detail || e.message);
+      }
+    };
+    poll();
+    const t = setInterval(poll, 3000);
+    return () => { alive = false; clearInterval(t); };
+  }, [campaignId]);
+
+  return (
+    <div className="mt-3 rounded-lg bg-slate-900 border border-slate-700 p-3 text-sm space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="font-bold text-slate-300">گزارش زنده</span>
+        <span className="flex items-center gap-2 text-xs text-slate-500">
+          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          {tick ? `به‌روزرسانی: ${tick.toLocaleTimeString("fa-IR")}` : "در حال اتصال..."}
+        </span>
+      </div>
+
+      {err && <div className="text-red-400 text-xs">خطا در دریافت گزارش: {err}</div>}
+
+      {prog && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="badge bg-slate-700 text-slate-300 border-slate-600">وضعیت: {prog.status}</span>
+          <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40">در انتظار: {prog.pending}</span>
+          <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">ارسال‌شده: {prog.sent}</span>
+          <span className="badge bg-red-500/20 text-red-300 border-red-500/40">ناموفق: {prog.failed}</span>
+          <span className="badge bg-sky-500/20 text-sky-300 border-sky-500/40">پیشرفت: {prog.progress_pct}%</span>
+        </div>
+      )}
+
+      {failed.length === 0 ? (
+        <p className="text-xs text-slate-500">هیچ خطای ارسالی ثبت نشده است.</p>
+      ) : (
+        <div className="space-y-1 max-h-52 overflow-y-auto">
+          <p className="text-xs text-red-300 font-bold">پیام‌های خطا ({failed.length}):</p>
+          {failed.map((f) => (
+            <div key={f.id} className="rounded bg-red-500/10 border border-red-500/30 p-2 text-xs">
+              <div className="flex justify-between text-slate-400">
+                <span className="font-mono">{f.phone}</span>
+                <span>تلاش: {f.retry_count}</span>
+              </div>
+              <div className="text-red-300 mt-1 break-words whitespace-pre-wrap font-mono">
+                {f.error_message || "بدون پیام خطا"}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

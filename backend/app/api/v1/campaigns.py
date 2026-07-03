@@ -9,6 +9,7 @@ from app.models.campaign import (
     Campaign, CampaignContact, CampaignStatus, CampaignType, MessageStatus
 )
 from app.models.account import Account, AccountStatus
+from app.models.contact import Contact
 from app.workers.tasks import task_run_campaign
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
@@ -211,6 +212,48 @@ async def campaign_progress(campaign_id: str, db: AsyncSession = Depends(get_db)
             if campaign.total_contacts > 0 else 0, 1
         )
     }
+
+
+@router.get("/{campaign_id}/contacts")
+async def campaign_contacts(
+    campaign_id: str,
+    status: str = None,
+    limit: int = 200,
+    db: AsyncSession = Depends(get_db),
+):
+    """List a campaign's contacts, optionally filtered by status (e.g. failed).
+    Includes error_message so the frontend can show why sends failed."""
+    campaign = await db.get(Campaign, uuid.UUID(campaign_id))
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+
+    query = (
+        select(CampaignContact, Contact)
+        .join(Contact, CampaignContact.contact_id == Contact.id)
+        .where(CampaignContact.campaign_id == campaign.id)
+    )
+    if status:
+        try:
+            query = query.where(CampaignContact.status == MessageStatus(status))
+        except ValueError:
+            raise HTTPException(400, f"Invalid status: {status}")
+    query = query.order_by(CampaignContact.sent_at.desc().nullslast()).limit(limit)
+
+    rows = (await db.execute(query)).all()
+    return [
+        {
+            "id": str(cc.id),
+            "phone": contact.phone,
+            "name": contact.full_name,
+            "status": cc.status,
+            "error_message": cc.error_message,
+            "retry_count": cc.retry_count,
+            "sent_at": str(cc.sent_at) if cc.sent_at else None,
+            "green_api_message_id": cc.green_api_message_id,
+            "delivery_status": cc.delivery_status,
+        }
+        for cc, contact in rows
+    ]
 
 
 @router.delete("/{campaign_id}")

@@ -43,6 +43,8 @@ export const Campaigns = {
   test: (id, phone, message) =>
     http.post(`/campaigns/${id}/test`, { phone, message }).then((r) => r.data),
   progress: (id) => http.get(`/campaigns/${id}/progress`).then((r) => r.data),
+  contacts: (id, status) =>
+    http.get(`/campaigns/${id}/contacts`, { params: status ? { status } : {} }).then((r) => r.data),
   remove: (id) => http.delete(`/campaigns/${id}`).then((r) => r.data),
 };
 
