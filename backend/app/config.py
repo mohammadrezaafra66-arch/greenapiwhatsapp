@@ -10,8 +10,9 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     pricing_cache_minutes: int = 5
     # Supabase REST API — primary source for product names + computed prices.
-    supabase_url: str = "https://kwwkppkcihrbeurwudjh.supabase.co"
-    supabase_anon_key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3d2twcGtjaWhyYmV1cnd1ZGpoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMzU5MTUsImV4cCI6MjA5MjYxMTkxNX0.oowSHbrAEL04u9DwGjyPYIlCc8MSL0c00Odv6UvM4bE"
+    # Self-hosted Supabase (Kong gateway) on the local network.
+    supabase_url: str = "http://192.168.170.10:8000"
+    supabase_anon_key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzc5MDA1NjkxLCJleHAiOjIwOTQzNjU2OTF9.0LMk6WGniEm92wPtTnapSIcuhZpq5au8KnEUCQFPKeI"
     secret_key: str = "change-this"
     backend_url: str = "http://localhost:8000"
     webhook_base_url: str = "http://localhost:8000"

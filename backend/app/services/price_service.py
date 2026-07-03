@@ -1,15 +1,19 @@
 """
 Product price fetcher — reads directly from the Afrakala Supabase REST API.
 
-Fetches active, in-stock products and joins them with the public
-`product_computed_prices_public` view to attach each product's
-`rounded_sale_price`. Results are cached in Redis for PRICING_CACHE_MINUTES.
+Fetches active, in-stock products and (best-effort) joins them with the
+`product_computed_prices` relation to attach each product's `rounded_sale_price`.
+Results are cached in Redis for PRICING_CACHE_MINUTES.
 
 Normalized output: [{"name": "...", "price": <rounded_sale_price | None>}, ...]
 
-Note: only anon-readable product columns are selected. `sku` and `category`
-are NOT granted to the anon role and would raise a 42501 permission error if
-requested, so they are intentionally omitted.
+Notes:
+- Only anon-readable product columns are selected. `sku` and `category`
+  are NOT granted to the anon role and would raise a 42501 permission error if
+  requested, so they are intentionally omitted.
+- The price join is best-effort: if the prices relation is missing or not
+  readable by the anon role, products are still returned with price=None
+  (downstream renders "تماس بگیرید" in that case).
 """
 import json
 import httpx
@@ -32,14 +36,22 @@ def _headers() -> dict:
 
 
 async def _fetch_price_map(client: httpx.AsyncClient) -> dict:
-    """Return {product_id: rounded_sale_price} from the public prices view."""
-    resp = await client.get(
-        f"{settings.supabase_url}/rest/v1/product_computed_prices_public",
-        params={"select": "product_id,rounded_sale_price"},
-        headers=_headers(),
-    )
-    resp.raise_for_status()
-    rows = resp.json()
+    """Return {product_id: rounded_sale_price} from the prices relation.
+
+    Best-effort: returns an empty map if the relation is missing or not
+    readable by the anon role, so product names still flow through.
+    """
+    try:
+        resp = await client.get(
+            f"{settings.supabase_url}/rest/v1/product_computed_prices",
+            params={"select": "product_id,rounded_sale_price"},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+    except Exception as e:
+        print(f"[PriceService] Prices unavailable, continuing without them: {e}")
+        return {}
     price_map = {}
     if isinstance(rows, list):
         for row in rows:
@@ -77,8 +89,8 @@ async def get_products(count: int = 3) -> list[dict]:
             products_raw = await _fetch_products(client)
             price_map = await _fetch_price_map(client)
 
-        # Join products with their computed sale price.
-        # Only keep products that have a non-null price.
+        # Join products with their computed sale price. Keep every named
+        # product; price may be None when the prices relation is unavailable.
         products = []
         for item in products_raw:
             if not isinstance(item, dict):
@@ -87,8 +99,6 @@ async def get_products(count: int = 3) -> list[dict]:
             if not name:
                 continue
             price = price_map.get(str(item.get("id")))
-            if price is None:
-                continue
             products.append({"name": name, "price": price})
 
         # Cache for configured minutes
