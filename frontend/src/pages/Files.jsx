@@ -100,7 +100,7 @@ export default function Files() {
               <div className="flex flex-wrap items-center gap-2">
                 <input className="input flex-1 font-mono text-xs" value={lastUrl} readOnly />
                 <button className="btn-secondary" onClick={() => copy(lastUrl)}>کپی</button>
-                <button className="btn-primary" onClick={() => useInCampaign(lastUrl)}>این URL را در کمپین استفاده کن</button>
+                <button className="btn-primary" onClick={() => useInCampaign(lastUrl)}>استفاده در گروه پیام</button>
               </div>
             </div>
           )}
@@ -114,7 +114,7 @@ export default function Files() {
                 <thead>
                   <tr className="text-slate-400 border-b border-slate-700">
                     <th className="text-right p-2">نام فایل</th>
-                    <th className="text-right p-2">URL</th>
+                    <th className="text-right p-2">لینک</th>
                     <th className="text-right p-2">تاریخ</th>
                     <th className="text-right p-2"></th>
                   </tr>
@@ -128,7 +128,7 @@ export default function Files() {
                       <td className="p-2">
                         <div className="flex gap-2">
                           <button className="text-sky-400 hover:underline" onClick={() => copy(f.url)}>کپی</button>
-                          <button className="text-brand hover:underline" onClick={() => useInCampaign(f.url)}>کمپین</button>
+                          <button className="text-brand hover:underline" onClick={() => useInCampaign(f.url)}>گروه پیام</button>
                         </div>
                       </td>
                     </tr>

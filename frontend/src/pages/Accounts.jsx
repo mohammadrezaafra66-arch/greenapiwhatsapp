@@ -48,7 +48,7 @@ export default function Accounts() {
               <Badge status={a.status} />
             </div>
             <div className="text-sm text-slate-400 space-y-0.5">
-              <p>Instance: {a.instance_id}</p>
+              <p>شماره واتس‌اپ: {a.instance_id}</p>
               <p>تلفن: {a.phone || "—"}</p>
               <p>ارسال امروز: {a.sent_today} / {a.daily_limit}</p>
               <p>دریافت امروز: {a.received_today}</p>
@@ -118,15 +118,15 @@ function AddAccountModal({ onClose, onDone }) {
           <input className="input" value={form.name} onChange={set("name")} />
         </div>
         <div>
-          <label className="label">Instance ID</label>
+          <label className="label">شناسه شماره واتس‌اپ</label>
           <input className="input" value={form.instance_id} onChange={set("instance_id")} />
         </div>
         <div>
-          <label className="label">API Token</label>
+          <label className="label">توکن اتصال</label>
           <input className="input" value={form.api_token} onChange={set("api_token")} />
         </div>
         <button className="btn-primary w-full" disabled={saving} onClick={submit}>
-          {saving ? "در حال ذخیره..." : "ذخیره و تنظیم وب‌هوک"}
+          {saving ? "در حال ذخیره..." : "ذخیره و تنظیم دریافت خودکار"}
         </button>
       </div>
     </Modal>

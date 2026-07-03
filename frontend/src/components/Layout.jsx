@@ -4,7 +4,7 @@ import { NavLink, Outlet } from "react-router-dom";
 const NAV = [
   { to: "/", label: "داشبورد", icon: "📊", end: true },
   { to: "/accounts", label: "حساب‌ها", icon: "📱" },
-  { to: "/campaigns", label: "کمپین‌ها", icon: "📨" },
+  { to: "/campaigns", label: "گروه‌های پیام", icon: "📨" },
   { to: "/contacts", label: "مخاطبین", icon: "👥" },
   { to: "/inbox", label: "صندوق ورودی", icon: "💬" },
   { to: "/groups", label: "گروه‌ها", icon: "👨‍👩‍👧" },
@@ -13,7 +13,7 @@ const NAV = [
   { to: "/blacklist", label: "لیست سیاه", icon: "🚫" },
   { to: "/keyword-rules", label: "پاسخ خودکار", icon: "🔑" },
   { to: "/account-schedules", label: "زمان‌بندی حساب", icon: "⏱️" },
-  { to: "/journals", label: "ژورنال پیام‌ها", icon: "📋" },
+  { to: "/journals", label: "تاریخچه پیام‌ها", icon: "📋" },
   { to: "/files", label: "فایل‌ها", icon: "📁" },
   { to: "/ai-settings", label: "هوش مصنوعی", icon: "🤖" },
 ];
@@ -25,7 +25,7 @@ export default function Layout() {
       <aside className="w-60 shrink-0 bg-slate-950 border-l border-slate-800 flex flex-col">
         <div className="p-5 border-b border-slate-800">
           <h1 className="text-lg font-bold text-brand">افراکالا</h1>
-          <p className="text-xs text-slate-500 mt-0.5">واتس‌اپ سندر v2</p>
+          <p className="text-xs text-slate-500 mt-0.5">پیام‌رسان افراکالا</p>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {NAV.map((n) => (
@@ -47,7 +47,7 @@ export default function Layout() {
           ))}
         </nav>
         <div className="p-3 text-xs text-slate-600 border-t border-slate-800">
-          متصل به API محلی
+          متصل به سرور
         </div>
       </aside>
 

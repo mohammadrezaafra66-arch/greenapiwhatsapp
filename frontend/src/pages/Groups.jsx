@@ -24,7 +24,7 @@ export default function Groups() {
             <div className="font-bold">{g.name}</div>
             <p className="text-sm text-slate-400">{g.description || "—"}</p>
             <p className="text-xs text-slate-500">اعضا: {g.member_count}</p>
-            <p className="text-xs text-slate-500 font-mono">{g.green_group_id || "بدون شناسه Green"}</p>
+            <p className="text-xs text-slate-500 font-mono">{g.green_group_id || "بدون شناسه گروه"}</p>
             <button className="btn-secondary w-full" onClick={() => setSend(g)}>ارسال پیام</button>
           </div>
         ))}

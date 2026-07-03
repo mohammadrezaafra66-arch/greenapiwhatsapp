@@ -64,9 +64,9 @@ function AddTemplateModal({ onClose, onDone }) {
     <Modal title="قالب جدید" onClose={onClose}>
       <div className="space-y-3">
         <div><label className="label">نام</label><input className="input" value={f.name} onChange={set("name")} /></div>
-        <div><label className="label">دسته (اختیاری)</label><input className="input" value={f.category} onChange={set("category")} placeholder="seasonal / product / general" /></div>
+        <div><label className="label">دسته (اختیاری)</label><input className="input" value={f.category} onChange={set("category")} placeholder="مثلا: مناسبتی / محصول / عمومی" /></div>
         <div><label className="label">متن</label><textarea className="input h-28" value={f.content} onChange={set("content")} /></div>
-        <button className="btn-primary w-full" disabled={saving} onClick={submit}>{saving ? "..." : "ذخیره"}</button>
+        <button className="btn-primary w-full" disabled={saving} onClick={submit}>{saving ? "در حال ذخیره..." : "ذخیره"}</button>
       </div>
     </Modal>
   );

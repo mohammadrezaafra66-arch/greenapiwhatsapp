@@ -56,8 +56,8 @@ export default function Statuses() {
         </div>
       ) : (
         <div className="card space-y-3">
-          <div><label className="label">آدرس تصویر (URL)</label><input className="input" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} /></div>
-          <div><label className="label">کپشن</label><input className="input" value={caption} onChange={(e) => setCaption(e.target.value)} /></div>
+          <div><label className="label">آدرس تصویر (لینک)</label><input className="input" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} /></div>
+          <div><label className="label">توضیح تصویر</label><input className="input" value={caption} onChange={(e) => setCaption(e.target.value)} /></div>
           <button className="btn-primary w-full" disabled={busy} onClick={sendImage}>{busy ? "..." : "انتشار استوری تصویری"}</button>
         </div>
       )}

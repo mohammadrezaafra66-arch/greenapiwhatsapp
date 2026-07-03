@@ -77,7 +77,7 @@ export default function Journals() {
   }, [load, loadQueue]);
 
   const clearWebhooks = async () => {
-    if (!confirm("پاک کردن صف webhook؟")) return;
+    if (!confirm("صف دریافت خودکار پاک شود؟")) return;
     try {
       await Api.clearWebhooks(accountId);
       await loadQueue();
@@ -90,15 +90,15 @@ export default function Journals() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-2xl font-bold">ژورنال پیام‌ها</h2>
+        <h2 className="text-2xl font-bold">تاریخچه پیام‌ها</h2>
         <div className="flex flex-wrap gap-2 items-center">
           {queue && (
             <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40">
-              صف: {queue.messages_in_queue} پیام · {queue.webhooks_in_queue} webhook
+              صف: {queue.messages_in_queue} پیام · {queue.webhooks_in_queue} دریافت خودکار
             </span>
           )}
           <button className="btn-secondary" onClick={() => { load(); loadQueue(); }}>بروزرسانی</button>
-          {accountId && <button className="btn-danger" onClick={clearWebhooks}>پاک کردن صف webhook</button>}
+          {accountId && <button className="btn-danger" onClick={clearWebhooks}>پاک کردن صف دریافت خودکار</button>}
         </div>
       </div>
 

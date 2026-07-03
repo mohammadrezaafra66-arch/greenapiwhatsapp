@@ -69,7 +69,7 @@ export default function Contacts() {
           <button className="btn-secondary" onClick={() => setAddManual(true)}>افزودن دستی</button>
           <button className="btn-secondary" onClick={checkSelected}>بررسی واتس‌اپ ({selected.size})</button>
           <button className="btn-primary" onClick={() => selected.size ? setAddToCampaign(true) : alert("مخاطبی انتخاب نشده")}>
-            افزودن به کمپین ({selected.size})
+            افزودن به گروه پیام ({selected.size})
           </button>
         </div>
       </div>
@@ -192,9 +192,9 @@ function AddToCampaignModal({ contactIds, onClose, onDone }) {
   };
 
   return (
-    <Modal title={`افزودن ${contactIds.length} مخاطب به کمپین`} onClose={onClose}>
+    <Modal title={`افزودن ${contactIds.length} مخاطب به گروه پیام`} onClose={onClose}>
       {!campaigns && <Spinner />}
-      {campaigns && campaigns.length === 0 && <Empty label="ابتدا یک کمپین بسازید." />}
+      {campaigns && campaigns.length === 0 && <Empty label="ابتدا یک گروه پیام بسازید." />}
       <div className="space-y-2">
         {campaigns?.map((c) => (
           <button key={c.id} disabled={busy} className="btn-secondary w-full text-right" onClick={() => add(c.id)}>

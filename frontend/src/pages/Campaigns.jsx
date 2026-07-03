@@ -27,13 +27,13 @@ export default function Campaigns() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">کمپین‌ها</h2>
-        <button className="btn-primary" onClick={() => setShowAdd(true)}>+ کمپین جدید</button>
+        <h2 className="text-2xl font-bold">گروه‌های پیام</h2>
+        <button className="btn-primary" onClick={() => setShowAdd(true)}>+ گروه پیام جدید</button>
       </div>
 
       {loading && <Spinner />}
       {error && <div className="card text-red-400">{error}</div>}
-      {data && data.length === 0 && <Empty label="کمپینی وجود ندارد." />}
+      {data && data.length === 0 && <Empty label="گروه پیامی وجود ندارد." />}
 
       <div className="space-y-3">
         {data?.map((c) => (
@@ -51,7 +51,7 @@ export default function Campaigns() {
                   <button className="btn-primary" onClick={() => act(() => (c.status === "paused" ? Api.resume(c.id) : Api.start(c.id)))}>شروع</button>
                 )}
                 <button className="btn-secondary" onClick={() => setTest(c)}>تست</button>
-                <button className="btn-danger" onClick={() => { if (confirm("حذف کمپین؟")) act(() => Api.remove(c.id)); }}>حذف</button>
+                <button className="btn-danger" onClick={() => { if (confirm("این گروه پیام حذف شود؟")) act(() => Api.remove(c.id)); }}>حذف</button>
               </div>
             </div>
             <div className="flex justify-between text-sm mb-1 text-slate-400">
@@ -188,7 +188,7 @@ function AddCampaignModal({ onClose, onDone }) {
   };
 
   const submit = async () => {
-    if (!f.name) return alert("نام کمپین لازم است");
+    if (!f.name) return alert("لطفاً نام گروه پیام را وارد کنید");
     setSaving(true);
     try {
       const body = {
@@ -220,15 +220,15 @@ function AddCampaignModal({ onClose, onDone }) {
   };
 
   return (
-    <Modal title="کمپین جدید" onClose={onClose} wide>
+    <Modal title="گروه پیام جدید" onClose={onClose} wide>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="label">نام کمپین</label>
+            <label className="label">نام گروه پیام</label>
             <input className="input" value={f.name} onChange={set("name")} />
           </div>
           <div>
-            <label className="label">نوع کمپین</label>
+            <label className="label">نوع پیام</label>
             <select className="input" value={f.campaign_type} onChange={set("campaign_type")}>
               {Object.entries(TYPE_FA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
@@ -236,28 +236,28 @@ function AddCampaignModal({ onClose, onDone }) {
         </div>
 
         <div>
-          <label className="label">حوزه کمپین</label>
+          <label className="label">نوع ارسال</label>
           <select className="input" value={f.campaign_scope} onChange={set("campaign_scope")}>
-            <option value="pv">خصوصی (PV)</option>
-            <option value="group">گروه</option>
+            <option value="pv">ارسال به افراد</option>
+            <option value="group">ارسال به گروه‌ها</option>
           </select>
         </div>
 
         {f.campaign_scope === "group" && (
           <div>
-            <label className="label">شناسه گروه‌ها (هر خط یک chatId)</label>
+            <label className="label">شناسه گروه‌ها (هر خط یک گروه)</label>
             <textarea className="input h-20" value={f.group_ids} onChange={set("group_ids")} placeholder="120363xxxxxxxx@g.us" />
           </div>
         )}
 
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={f.use_gpt} onChange={set("use_gpt")} />
-          تولید پیام با هوش مصنوعی (GPT)
+          نوشتن پیام با هوش مصنوعی
         </label>
 
         {f.use_gpt ? (
           <div>
-            <label className="label">دستور به GPT</label>
+            <label className="label">توضیح برای هوش مصنوعی</label>
             <textarea className="input h-20" value={f.gpt_prompt} onChange={set("gpt_prompt")} placeholder="مثلا: تخفیف ویژه یخچال‌های ساید بای ساید را معرفی کن" />
           </div>
         ) : (
@@ -274,7 +274,7 @@ function AddCampaignModal({ onClose, onDone }) {
 
         {f.campaign_type === "image" && (
           <div>
-            <label className="label">آدرس تصویر (URL)</label>
+            <label className="label">آدرس تصویر</label>
             <div className="flex gap-2">
               <input className="input flex-1" value={f.image_url} onChange={set("image_url")} />
               <label className="btn-secondary cursor-pointer whitespace-nowrap">
@@ -310,9 +310,9 @@ function AddCampaignModal({ onClose, onDone }) {
         )}
 
         <button className="btn-primary w-full" disabled={saving} onClick={submit}>
-          {saving ? "در حال ساخت..." : "ساخت کمپین"}
+          {saving ? "در حال ساخت..." : "ساخت گروه پیام"}
         </button>
-        <p className="text-xs text-slate-500">پس از ساخت، مخاطبین را از صفحه مخاطبین اضافه کنید و سپس کمپین را شروع کنید.</p>
+        <p className="text-xs text-slate-500">پس از ساخت، مخاطبین را از صفحه مخاطبین اضافه کنید و سپس گروه پیام را شروع کنید.</p>
       </div>
     </Modal>
   );
@@ -324,11 +324,11 @@ function TestModal({ campaign, onClose }) {
   const [sending, setSending] = React.useState(false);
 
   const send = async () => {
-    if (!phone) return alert("شماره لازم است");
+    if (!phone) return alert("لطفاً شماره را وارد کنید");
     setSending(true);
     try {
       const r = await Api.test(campaign.id, phone, message || null);
-      alert(r.sent ? `ارسال شد (via ${r.via})` : "ارسال ناموفق");
+      alert(r.sent ? `ارسال شد (از ${r.via})` : "ارسال ناموفق");
       onClose();
     } catch (e) {
       alert(e?.response?.data?.detail || e.message);
@@ -338,7 +338,7 @@ function TestModal({ campaign, onClose }) {
   };
 
   return (
-    <Modal title={`تست کمپین: ${campaign.name}`} onClose={onClose}>
+    <Modal title={`تست گروه پیام: ${campaign.name}`} onClose={onClose}>
       <div className="space-y-3">
         <div>
           <label className="label">شماره تست</label>

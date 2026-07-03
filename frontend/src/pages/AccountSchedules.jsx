@@ -60,7 +60,7 @@ export default function AccountSchedules() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">زمان‌بندی حساب‌ها</h2>
+        <h2 className="text-2xl font-bold">زمان‌بندی ارسال</h2>
         {accountId && <button className="btn-primary" onClick={() => setEdit({})}>+ افزودن بازه</button>}
       </div>
 
@@ -116,8 +116,8 @@ export default function AccountSchedules() {
                   <tr className="text-slate-400 border-b border-slate-700">
                     <th className="text-right p-2">از ساعت</th>
                     <th className="text-right p-2">تا ساعت</th>
-                    <th className="text-right p-2">حداکثر در ساعت</th>
-                    <th className="text-right p-2">دستور GPT</th>
+                    <th className="text-right p-2">حداکثر ارسال در ساعت</th>
+                    <th className="text-right p-2">توضیح برای هوش مصنوعی</th>
                     <th className="text-right p-2">قالب</th>
                     <th className="text-right p-2">وضعیت</th>
                     <th className="text-right p-2"></th>
@@ -207,7 +207,7 @@ function SlotModal({ slot, accountId, onClose, onDone }) {
           <div><label className="label">تا ساعت (۱-۲۴)</label><input type="number" min="1" max="24" className="input" value={f.hour_end} onChange={set("hour_end")} /></div>
           <div><label className="label">حداکثر/ساعت</label><input type="number" min="0" className="input" value={f.max_per_hour} onChange={set("max_per_hour")} /></div>
         </div>
-        <div><label className="label">دستور GPT (اختیاری)</label><textarea className="input h-20" value={f.gpt_prompt} onChange={set("gpt_prompt")} /></div>
+        <div><label className="label">توضیح برای هوش مصنوعی (اختیاری)</label><textarea className="input h-20" value={f.gpt_prompt} onChange={set("gpt_prompt")} /></div>
         <div><label className="label">قالب پیام (اختیاری)</label><textarea className="input h-20" value={f.message_template} onChange={set("message_template")} /></div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={f.is_active} onChange={set("is_active")} />

@@ -123,9 +123,9 @@ export default function Dashboard() {
   if (err && !stats)
     return (
       <div className="card text-red-400">
-        خطا در اتصال به بک‌اند: {err}
+        خطا در اتصال به سرور: {err}
         <p className="text-slate-400 text-sm mt-2">
-          مطمئن شوید بک‌اند روی <code>http://localhost:8002</code> در حال اجراست.
+          مطمئن شوید سرور روی <code>http://localhost:8002</code> در حال اجراست.
         </p>
       </div>
     );
@@ -197,7 +197,7 @@ export default function Dashboard() {
             <AnimatedNumber value={totalCount} />
           </span>
         </Kpi>
-        <Kpi label="کمپین‌های در حال اجرا" icon="🚀" accent="text-amber-400" pulse={stats.campaigns.active > 0}>
+        <Kpi label="گروه‌های پیام فعال" icon="🚀" accent="text-amber-400" pulse={stats.campaigns.active > 0}>
           <AnimatedNumber value={stats.campaigns.active} />
         </Kpi>
       </div>
