@@ -1,16 +1,25 @@
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from app.database import get_db
 from app.models.contact import Contact
 from app.models.account import Account, AccountStatus
 from app.models.inbox import Blacklist
-from app.services.excel_service import parse_contacts_excel
+from app.services.excel_service import parse_contacts_excel, normalize_phone
 from app.services.green_api import GreenAPIClient
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
+
+
+class ContactCreate(BaseModel):
+    phone: str
+    first_name: str | None = None
+    last_name: str | None = None
+    province: str | None = None
+    city: str | None = None
 
 
 @router.get("/")
@@ -50,6 +59,39 @@ async def list_contacts(
         }
         for c in contacts
     ]
+
+
+@router.post("/")
+async def create_contact(body: ContactCreate, db: AsyncSession = Depends(get_db)):
+    """Manually create a single contact. Phone is normalized (same as excel import)."""
+    phone = normalize_phone(body.phone)
+    if not phone:
+        raise HTTPException(400, "شماره موبایل نامعتبر است")
+
+    existing = await db.execute(select(Contact).where(Contact.phone == phone))
+    if existing.scalar_one_or_none():
+        raise HTTPException(409, "این شماره قبلاً ثبت شده است")
+
+    contact = Contact(
+        phone=phone,
+        first_name=body.first_name or None,
+        last_name=body.last_name or None,
+        province=body.province or None,
+        city=body.city or None,
+        source="manual",
+    )
+    db.add(contact)
+    await db.commit()
+    await db.refresh(contact)
+    return {
+        "id": str(contact.id),
+        "phone": contact.phone,
+        "name": contact.full_name,
+        "first_name": contact.first_name,
+        "last_name": contact.last_name,
+        "province": contact.province,
+        "city": contact.city,
+    }
 
 
 @router.post("/import")

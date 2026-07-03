@@ -9,6 +9,7 @@ export default function Contacts() {
   const [selected, setSelected] = React.useState(new Set());
   const [importing, setImporting] = React.useState(false);
   const [addToCampaign, setAddToCampaign] = React.useState(false);
+  const [addManual, setAddManual] = React.useState(false);
   const fileRef = React.useRef();
 
   const load = React.useCallback(() => {
@@ -65,6 +66,7 @@ export default function Contacts() {
           <button className="btn-secondary" disabled={importing} onClick={() => fileRef.current?.click()}>
             {importing ? "در حال ورود..." : "ورود از اکسل"}
           </button>
+          <button className="btn-secondary" onClick={() => setAddManual(true)}>افزودن دستی</button>
           <button className="btn-secondary" onClick={checkSelected}>بررسی واتس‌اپ ({selected.size})</button>
           <button className="btn-primary" onClick={() => selected.size ? setAddToCampaign(true) : alert("مخاطبی انتخاب نشده")}>
             افزودن به کمپین ({selected.size})
@@ -115,7 +117,57 @@ export default function Contacts() {
       {addToCampaign && (
         <AddToCampaignModal contactIds={[...selected]} onClose={() => setAddToCampaign(false)} onDone={() => setSelected(new Set())} />
       )}
+
+      {addManual && (
+        <AddContactModal onClose={() => setAddManual(false)} onDone={load} />
+      )}
     </div>
+  );
+}
+
+function AddContactModal({ onClose, onDone }) {
+  const [f, setF] = React.useState({ phone: "", first_name: "", last_name: "", province: "", city: "" });
+  const [saving, setSaving] = React.useState(false);
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+
+  const submit = async () => {
+    if (!f.phone.trim()) return alert("شماره موبایل الزامی است");
+    setSaving(true);
+    try {
+      await Api.create({
+        phone: f.phone.trim(),
+        first_name: f.first_name.trim() || null,
+        last_name: f.last_name.trim() || null,
+        province: f.province.trim() || null,
+        city: f.city.trim() || null,
+      });
+      await onDone();
+      onClose();
+    } catch (e) {
+      alert(e?.response?.data?.detail || e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="افزودن مخاطب دستی" onClose={onClose}>
+      <div className="space-y-3">
+        <div>
+          <label className="label">شماره موبایل *</label>
+          <input className="input" value={f.phone} onChange={set("phone")} placeholder="09123456789" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="label">نام</label><input className="input" value={f.first_name} onChange={set("first_name")} /></div>
+          <div><label className="label">نام خانوادگی</label><input className="input" value={f.last_name} onChange={set("last_name")} /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="label">استان</label><input className="input" value={f.province} onChange={set("province")} /></div>
+          <div><label className="label">شهر</label><input className="input" value={f.city} onChange={set("city")} /></div>
+        </div>
+        <button className="btn-primary w-full" disabled={saving} onClick={submit}>{saving ? "در حال ذخیره..." : "ذخیره مخاطب"}</button>
+      </div>
+    </Modal>
   );
 }
 

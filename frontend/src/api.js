@@ -49,6 +49,7 @@ export const Campaigns = {
 // ── Contacts ───────────────────────────────────────────
 export const Contacts = {
   list: (params = {}) => http.get("/contacts/", { params }).then((r) => r.data),
+  create: (body) => http.post("/contacts/", body).then((r) => r.data),
   import: (file, source = "excel_import") => {
     const fd = new FormData();
     fd.append("file", file);
