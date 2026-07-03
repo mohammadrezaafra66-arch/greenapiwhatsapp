@@ -222,6 +222,74 @@ async def blacklist_contact(contact_id: str, reason: str = None, db: AsyncSessio
     return {"status": "blacklisted", "phone": contact.phone}
 
 
+@router.post("/{contact_id}/disappearing")
+async def set_disappearing_messages(contact_id: str, ephemeral: int = 0, db: AsyncSession = Depends(get_db)):
+    """Set disappearing messages timer for a contact's chat.
+    ephemeral: 0=off, 86400=24h, 604800=7days, 7776000=90days"""
+    contact = await db.get(Contact, uuid.UUID(contact_id))
+    if not contact:
+        raise HTTPException(404, "Contact not found")
+    acc_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
+    account = acc_result.scalars().first()
+    if not account:
+        raise HTTPException(400, "No active account")
+
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.set_disappearing_chat(contact.phone, ephemeral)
+
+    if ok:
+        from app.models.wa_extras import DisappearingChatSetting
+        existing = await db.execute(
+            select(DisappearingChatSetting).where(
+                DisappearingChatSetting.account_id == account.id,
+                DisappearingChatSetting.chat_id == contact.chat_id,
+            )
+        )
+        setting = existing.scalar_one_or_none()
+        if setting:
+            setting.ephemeral = ephemeral
+        else:
+            db.add(DisappearingChatSetting(account_id=account.id, chat_id=contact.chat_id, ephemeral=ephemeral))
+        await db.commit()
+
+    labels = {0: "خاموش", 86400: "۲۴ ساعت", 604800: "۷ روز", 7776000: "۹۰ روز"}
+    return {"set": ok, "ephemeral": ephemeral, "label": labels.get(ephemeral, str(ephemeral))}
+
+
+@router.post("/{contact_id}/add-to-phonebook")
+async def add_contact_to_phonebook(contact_id: str, db: AsyncSession = Depends(get_db)):
+    """Add a contact to the WhatsApp phonebook of the first active account."""
+    contact = await db.get(Contact, uuid.UUID(contact_id))
+    if not contact:
+        raise HTTPException(404, "Contact not found")
+    acc_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
+    account = acc_result.scalars().first()
+    if not account:
+        raise HTTPException(400, "No active account")
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.add_contact(contact.phone, contact.first_name or "", contact.last_name or "")
+    return {"added": ok, "phone": contact.phone, "name": contact.full_name}
+
+
+@router.put("/{contact_id}/phonebook")
+async def edit_contact_in_phonebook(contact_id: str, first_name: str, last_name: str = "", db: AsyncSession = Depends(get_db)):
+    """Edit a contact in the WhatsApp phonebook (and mirror the change locally)."""
+    contact = await db.get(Contact, uuid.UUID(contact_id))
+    if not contact:
+        raise HTTPException(404, "Contact not found")
+    acc_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
+    account = acc_result.scalars().first()
+    if not account:
+        raise HTTPException(400, "No active account")
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.edit_contact(contact.phone, first_name, last_name)
+    if ok:
+        contact.first_name = first_name
+        contact.last_name = last_name
+        await db.commit()
+    return {"updated": ok, "phone": contact.phone}
+
+
 @router.delete("/{contact_id}")
 async def delete_contact(contact_id: str, db: AsyncSession = Depends(get_db)):
     contact = await db.get(Contact, uuid.UUID(contact_id))

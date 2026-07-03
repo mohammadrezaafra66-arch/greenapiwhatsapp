@@ -22,6 +22,7 @@ from app.models.contact_group import (
 from app.models.reporting import (
     EmergencyContact, ReportSubscriber, DailySendLog, ProductMentionLog,
 )
+from app.models.wa_extras import DisappearingChatSetting, WaBlockedContact
 
 __all__ = [
     "Account",
@@ -52,4 +53,6 @@ __all__ = [
     "ReportSubscriber",
     "DailySendLog",
     "ProductMentionLog",
+    "DisappearingChatSetting",
+    "WaBlockedContact",
 ]

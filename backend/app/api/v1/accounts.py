@@ -118,12 +118,86 @@ async def logout_account(account_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{account_id}/apply-settings")
 async def apply_account_settings(account_id: str, db: AsyncSession = Depends(get_db)):
-    """Re-apply Green API settings (webhook + 15000ms queue send delay) for this account."""
+    """Re-apply Green API settings (webhook + 15000ms queue send delay + proxy) for this account."""
     account = await _get_account(account_id, db)
     webhook_url = f"{settings.webhook_base_url}/api/v1/webhook/{account.instance_id}"
     client = GreenAPIClient(account.instance_id, account.api_token)
     ok = await client.set_webhook(webhook_url, delay_ms=15000)
-    return {"applied": ok, "webhook_url": webhook_url, "delay_ms": 15000}
+
+    proxy_applied = False
+    if account.proxy_enabled and account.proxy_host:
+        proxy_applied = await client.set_proxy(
+            account.proxy_host,
+            account.proxy_port or 1080,
+            account.proxy_login or "",
+            account.proxy_password or "",
+        )
+    return {"applied": ok, "webhook_url": webhook_url, "delay_ms": 15000, "proxy_applied": proxy_applied}
+
+
+class ProxyUpdate(BaseModel):
+    proxy_host: str = ""
+    proxy_port: int = 1080
+    proxy_login: str = ""
+    proxy_password: str = ""
+    proxy_enabled: bool = False
+
+
+@router.put("/{account_id}/proxy")
+async def update_proxy(account_id: str, body: ProxyUpdate, db: AsyncSession = Depends(get_db)):
+    """Set or remove a SOCKS5 proxy for a WhatsApp account."""
+    account = await _get_account(account_id, db)
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    if body.proxy_enabled and body.proxy_host:
+        account.proxy_host = body.proxy_host
+        account.proxy_port = body.proxy_port
+        account.proxy_login = body.proxy_login
+        account.proxy_password = body.proxy_password
+        account.proxy_enabled = True
+        applied = await client.set_proxy(body.proxy_host, body.proxy_port, body.proxy_login, body.proxy_password)
+    else:
+        account.proxy_enabled = False
+        account.proxy_host = None
+        applied = await client.remove_proxy()
+    await db.commit()
+    return {"applied": applied, "proxy_enabled": account.proxy_enabled}
+
+
+@router.get("/{account_id}/proxy")
+async def get_proxy(account_id: str, db: AsyncSession = Depends(get_db)):
+    account = await _get_account(account_id, db)
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    try:
+        proxy_url = await client.get_proxy()
+    except Exception:
+        proxy_url = None
+    return {
+        "proxy_enabled": account.proxy_enabled,
+        "proxy_host": account.proxy_host,
+        "proxy_port": account.proxy_port,
+        "green_api_proxy_url": proxy_url,
+    }
+
+
+@router.get("/{account_id}/blocked-contacts")
+async def get_blocked_contacts(account_id: str, db: AsyncSession = Depends(get_db)):
+    """Fetch blocked contacts from WhatsApp and sync to DB."""
+    account = await _get_account(account_id, db)
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    try:
+        blocked = await client.get_contacts_block()
+    except Exception as e:
+        raise HTTPException(502, f"Green API error: {e}")
+
+    from app.models.wa_extras import WaBlockedContact
+    from sqlalchemy import delete
+    await db.execute(delete(WaBlockedContact).where(WaBlockedContact.account_id == uuid.UUID(account_id)))
+    for b in blocked:
+        phone = str(b.get("id", "")).split("@")[0] if isinstance(b, dict) else str(b).split("@")[0]
+        if phone:
+            db.add(WaBlockedContact(account_id=uuid.UUID(account_id), phone=phone))
+    await db.commit()
+    return {"count": len(blocked), "blocked": blocked}
 
 
 @router.post("/{account_id}/check-whatsapp-bulk")

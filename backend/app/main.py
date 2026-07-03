@@ -187,6 +187,33 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V5] {e}")
+        ddl_v6 = [
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS proxy_host varchar(200)",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS proxy_port integer",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS proxy_login varchar(100)",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS proxy_password varchar(200)",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS proxy_enabled boolean DEFAULT false",
+            """CREATE TABLE IF NOT EXISTS disappearing_chat_settings (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                account_id uuid REFERENCES accounts(id) ON DELETE CASCADE,
+                chat_id varchar(200) NOT NULL,
+                ephemeral integer NOT NULL DEFAULT 0,
+                set_at timestamp DEFAULT now(),
+                UNIQUE(account_id, chat_id)
+            )""",
+            """CREATE TABLE IF NOT EXISTS wa_blocked_contacts (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                account_id uuid REFERENCES accounts(id) ON DELETE CASCADE,
+                phone varchar(20) NOT NULL,
+                synced_at timestamp DEFAULT now(),
+                UNIQUE(account_id, phone)
+            )""",
+        ]
+        for stmt in ddl_v6:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V6] {e}")
     yield
 
 app = FastAPI(title="Afrakala WhatsApp Sender", version="2.0.0", lifespan=lifespan)

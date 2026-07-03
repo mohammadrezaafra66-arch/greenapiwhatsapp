@@ -12,9 +12,11 @@ const CAT_FA = {
 };
 
 const MSG_TYPE_FA = {
-  call: "تماس",
+  call: "تماس 📲",
   button_reply: "پاسخ دکمه",
   poll_update: "رأی نظرسنجی",
+  catalog_update: "آپدیت کاتالوگ 🛍️",
+  outgoing_call: "تماس خروجی 📞",
 };
 
 function renderSpecial(m) {

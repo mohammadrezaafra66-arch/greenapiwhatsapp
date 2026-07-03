@@ -31,6 +31,16 @@ async def process_webhook(instance_id: str, payload: dict):
         await handle_poll_update(instance_id, payload)
     elif wtype == "quotaExceeded":
         await handle_quota_exceeded(instance_id, payload)
+    elif wtype in ("deviceStatusChanged", "deviceWebhook"):
+        await handle_device_status(instance_id, payload)
+    elif wtype in ("statusInstanceChanged", "statusInstance"):
+        pass  # Already handled by handle_state_change — skip duplicate
+    elif wtype in ("catalogUpdate", "catalogWebhook"):
+        await handle_catalog_update(instance_id, payload)
+    elif wtype in ("incomingBlock", "incomingChatBlock"):
+        await handle_incoming_block(instance_id, payload)
+    elif wtype in ("outgoingCall", "outgoingCallReceived"):
+        await handle_outgoing_call(instance_id, payload)
 
 async def handle_incoming(instance_id: str, payload: dict):
     data = payload.get("messageData", {})
@@ -301,3 +311,67 @@ async def handle_quota_exceeded(instance_id: str, payload: dict):
             # Don't ban — quota resets, unlike a real ban
             await db.commit()
             print(f"[ALERT] Account {instance_id} quota exceeded at {datetime.utcnow()}")
+
+
+async def handle_device_status(instance_id: str, payload: dict):
+    """Handle device status changes (battery, online status, etc.)."""
+    device_status = payload.get("deviceStatus", {}) or payload.get("status", "")
+    print(f"[Device] instance {instance_id} device status: {device_status}")
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Account).where(Account.instance_id == instance_id))
+        account = result.scalar_one_or_none()
+        if account:
+            account.notes = f"[device] {device_status} at {datetime.utcnow().isoformat()}"
+            await db.commit()
+
+
+async def handle_catalog_update(instance_id: str, payload: dict):
+    """Handle WhatsApp catalog updates — store as inbox message."""
+    sender = payload.get("senderData", {})
+    async with AsyncSessionLocal() as db:
+        msg = InboxMessage(
+            instance_id=instance_id,
+            sender_phone=sender.get("sender", "").split("@")[0],
+            sender_name=sender.get("senderName", ""),
+            message_type="catalog_update",
+            text_content="آپدیت کاتالوگ",
+            original_payload=json.dumps(payload, ensure_ascii=False),
+            timestamp=datetime.fromtimestamp(payload.get("timestamp", 0) or 0)
+        )
+        db.add(msg)
+        await db.commit()
+
+
+async def handle_incoming_block(instance_id: str, payload: dict):
+    """Handle when someone blocks this WhatsApp number — auto-blacklist them."""
+    sender = payload.get("senderData", {})
+    blocker_phone = sender.get("sender", "").split("@")[0]
+    print(f"[ALERT] Blocked by {blocker_phone} on instance {instance_id}")
+    async with AsyncSessionLocal() as db:
+        from app.models.inbox import Blacklist
+        from sqlalchemy import select as sa_select
+        existing = await db.execute(sa_select(Blacklist).where(Blacklist.phone == blocker_phone))
+        if not existing.scalar_one_or_none():
+            db.add(Blacklist(phone=blocker_phone, reason="blocked_us"))
+        from app.models.contact import Contact
+        contact_result = await db.execute(sa_select(Contact).where(Contact.phone == blocker_phone))
+        ct = contact_result.scalar_one_or_none()
+        if ct:
+            ct.blacklisted = True
+            ct.blacklist_reason = "blocked_this_number"
+        await db.commit()
+
+
+async def handle_outgoing_call(instance_id: str, payload: dict):
+    """Log outgoing calls to inbox for tracking."""
+    async with AsyncSessionLocal() as db:
+        msg = InboxMessage(
+            instance_id=instance_id,
+            sender_phone=payload.get("from", "").split("@")[0],
+            message_type="outgoing_call",
+            call_status=payload.get("status", "outgoing"),
+            original_payload=json.dumps(payload, ensure_ascii=False),
+            timestamp=datetime.fromtimestamp(payload.get("timestamp", 0) or 0)
+        )
+        db.add(msg)
+        await db.commit()

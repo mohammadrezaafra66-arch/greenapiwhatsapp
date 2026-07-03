@@ -1,6 +1,13 @@
 import React from "react";
-import { Contacts as Api, Campaigns as CampApi } from "../api.js";
+import { Contacts as Api, Campaigns as CampApi, ContactExtrasApi } from "../api.js";
 import { Spinner, Empty, Modal } from "../ui.jsx";
+
+const DISAPPEARING_OPTS = [
+  { label: "خاموش", value: 0 },
+  { label: "۲۴ ساعت", value: 86400 },
+  { label: "۷ روز", value: 604800 },
+  { label: "۹۰ روز", value: 7776000 },
+];
 
 export default function Contacts() {
   const [search, setSearch] = React.useState("");
@@ -12,6 +19,26 @@ export default function Contacts() {
   const [addManual, setAddManual] = React.useState(false);
   const [showGuide, setShowGuide] = React.useState(false);
   const [showCheckInfo, setShowCheckInfo] = React.useState(false);
+  const [disappearing, setDisappearing] = React.useState(null); // contact | null
+
+  const addToPhonebook = async (id) => {
+    try {
+      const r = await ContactExtrasApi.addToPhonebook(id);
+      alert(r.added ? "به مخاطبین واتساپ اضافه شد" : "افزودن ناموفق بود");
+    } catch (e) {
+      alert(e?.response?.data?.detail || e.message);
+    }
+  };
+
+  const applyDisappearing = async (id, ephemeral) => {
+    try {
+      const r = await ContactExtrasApi.setDisappearing(id, ephemeral);
+      alert(r.set ? `تنظیم شد: ${r.label}` : "تنظیم ناموفق بود");
+      setDisappearing(null);
+    } catch (e) {
+      alert(e?.response?.data?.detail || e.message);
+    }
+  };
   const fileRef = React.useRef();
 
   const load = React.useCallback(() => {
@@ -170,7 +197,11 @@ export default function Contacts() {
                     {c.has_whatsapp === true ? <span className="text-emerald-400">✓</span> : c.has_whatsapp === false ? <span className="text-red-400">✗</span> : <span className="text-slate-500">?</span>}
                   </td>
                   <td className="p-3">
-                    <button className="text-red-400 hover:underline text-xs" onClick={async () => { if (confirm("لیست سیاه؟")) { await Api.blacklist(c.id); load(); } }}>لیست سیاه</button>
+                    <div className="flex gap-2 flex-wrap">
+                      <button className="text-sky-400 hover:underline text-xs" title="پیام ناپدیدشونده" onClick={() => setDisappearing(c)}>⏱️</button>
+                      <button className="text-emerald-400 hover:underline text-xs" title="افزودن به مخاطبین واتساپ" onClick={() => addToPhonebook(c.id)}>📱</button>
+                      <button className="text-red-400 hover:underline text-xs" onClick={async () => { if (confirm("این مخاطب مسدود شود؟")) { await Api.blacklist(c.id); load(); } }}>لیست سیاه</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -185,6 +216,19 @@ export default function Contacts() {
 
       {addManual && (
         <AddContactModal onClose={() => setAddManual(false)} onDone={load} />
+      )}
+
+      {disappearing && (
+        <Modal title={`مدت نگهداری پیام — ${disappearing.name || disappearing.phone}`} onClose={() => setDisappearing(null)}>
+          <div className="grid grid-cols-2 gap-3">
+            {DISAPPEARING_OPTS.map((opt) => (
+              <button key={opt.value} className="btn-secondary p-3 text-center" onClick={() => applyDisappearing(disappearing.id, opt.value)}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400 mt-3">پیام‌های این چت پس از مدت انتخابی به‌طور خودکار حذف می‌شوند.</p>
+        </Modal>
       )}
     </div>
   );

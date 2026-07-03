@@ -151,6 +151,21 @@ export const FilesApi = {
   list: (accountId) => http.get(`/files/list/${accountId}`).then((r) => r.data),
 };
 
+// ── Proxy & blocked contacts ───────────────────────────────
+export const ProxyApi = {
+  get: (accountId) => http.get(`/accounts/${accountId}/proxy`).then((r) => r.data),
+  set: (accountId, body) => http.put(`/accounts/${accountId}/proxy`, body).then((r) => r.data),
+  getBlocked: (accountId) => http.get(`/accounts/${accountId}/blocked-contacts`).then((r) => r.data),
+};
+
+// ── Contact extras (disappearing / phonebook) ──────────────
+export const ContactExtrasApi = {
+  setDisappearing: (id, ephemeral) => http.post(`/contacts/${id}/disappearing?ephemeral=${ephemeral}`).then((r) => r.data),
+  addToPhonebook: (id) => http.post(`/contacts/${id}/add-to-phonebook`).then((r) => r.data),
+  editPhonebook: (id, first_name, last_name = "") =>
+    http.put(`/contacts/${id}/phonebook`, null, { params: { first_name, last_name } }).then((r) => r.data),
+};
+
 // ── Contact Groups ─────────────────────────────────────────
 export const ContactGroupsApi = {
   list: () => http.get("/contact-groups/").then((r) => r.data),

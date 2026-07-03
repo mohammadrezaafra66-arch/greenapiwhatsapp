@@ -341,12 +341,13 @@ class GreenAPIClient:
         return r if isinstance(r, list) else []
 
     async def set_disappearing_chat(self, phone: str, ephemeral: int = 0) -> bool:
-        """Set disappearing messages timer. ephemeral: 0=off, 86400=1day, 604800=1week."""
+        """Set disappearing messages timer for a chat.
+        ephemeral: 0=off, 86400=24h, 604800=7days, 7776000=90days"""
         r = await self._post("setDisappearingChat", {
             "chatId": self._chat_id(phone),
             "ephemeral": ephemeral
         })
-        return r.get("chatId") is not None or True
+        return r.get("chatId") is not None or r.get("isSet", False)
 
     # ── QUEUE ────────────────────────────────────────────
     async def get_messages_count(self) -> int:
@@ -355,15 +356,47 @@ class GreenAPIClient:
         return r.get("count", 0)
 
     # ── CONTACTS ─────────────────────────────────────────
-    async def add_contact(self, phone: str, first_name: str, last_name: str = "") -> bool:
+    async def get_contacts_block(self) -> list[dict]:
+        """Get list of contacts blocked by this WhatsApp account."""
+        r = await self._get("getContactsBlock")
+        return r if isinstance(r, list) else []
+
+    async def add_contact(self, phone: str, first_name: str, last_name: str = "", company: str = "افراکالا") -> bool:
         """Add a contact to the WhatsApp phone book of this account."""
         r = await self._post("addContact", {
             "phoneContact": int(self._normalize(phone)),
             "firstName": first_name,
             "lastName": last_name,
-            "company": "افراکالا"
+            "company": company
         })
         return r.get("saveContact", False) or "contactId" in r
+
+    async def edit_contact(self, phone: str, first_name: str, last_name: str = "", company: str = "") -> bool:
+        """Edit an existing contact in the phonebook."""
+        r = await self._post("editContact", {
+            "phoneContact": int(self._normalize(phone)),
+            "firstName": first_name,
+            "lastName": last_name,
+            "company": company
+        })
+        return r.get("editContact", False)
+
+    # ── PROXY ─────────────────────────────────────────────
+    async def set_proxy(self, host: str, port: int, login: str = "", password: str = "") -> bool:
+        """Set a SOCKS5 proxy for this WhatsApp instance (helps stability from Iran)."""
+        proxy_url = f"socks5://{login}:{password}@{host}:{port}" if login else f"socks5://{host}:{port}"
+        r = await self._post("setSettings", {"proxyUrl": proxy_url})
+        return r.get("saveSettings", False)
+
+    async def remove_proxy(self) -> bool:
+        """Remove proxy settings."""
+        r = await self._post("setSettings", {"proxyUrl": ""})
+        return r.get("saveSettings", False)
+
+    async def get_proxy(self) -> str | None:
+        """Get current proxy URL from settings."""
+        s = await self.get_settings()
+        return s.get("proxyUrl") or None
 
     async def delete_contact(self, phone: str) -> bool:
         """Remove a contact from the phone book."""

@@ -1,5 +1,5 @@
 import React from "react";
-import { Accounts as Api } from "../api.js";
+import { Accounts as Api, ProxyApi } from "../api.js";
 import { Badge, Spinner, Empty, Modal, useAsync } from "../ui.jsx";
 
 export default function Accounts() {
@@ -62,6 +62,7 @@ export default function Accounts() {
                 if (confirm("حذف این حساب؟")) act(() => Api.remove(a.id), a.id);
               }}>حذف</button>
             </div>
+            <ProxySection accountId={a.id} />
           </div>
         ))}
       </div>
@@ -86,6 +87,82 @@ export default function Accounts() {
             </p>
           )}
         </Modal>
+      )}
+    </div>
+  );
+}
+
+function ProxySection({ accountId }) {
+  const [open, setOpen] = React.useState(false);
+  const [f, setF] = React.useState({ proxy_host: "", proxy_port: 1080, proxy_login: "", proxy_password: "" });
+  const [busy, setBusy] = React.useState(false);
+  const [loaded, setLoaded] = React.useState(false);
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+
+  const load = async () => {
+    try {
+      const r = await ProxyApi.get(accountId);
+      setF((prev) => ({ ...prev, proxy_host: r.proxy_host || "", proxy_port: r.proxy_port || 1080 }));
+    } catch { /* ignore */ }
+    setLoaded(true);
+  };
+
+  const toggle = () => {
+    const n = !open;
+    setOpen(n);
+    if (n && !loaded) load();
+  };
+
+  const saveProxy = async (enabled) => {
+    setBusy(true);
+    try {
+      const r = await ProxyApi.set(accountId, {
+        proxy_host: f.proxy_host,
+        proxy_port: Number(f.proxy_port) || 1080,
+        proxy_login: f.proxy_login,
+        proxy_password: f.proxy_password,
+        proxy_enabled: enabled,
+      });
+      alert(enabled ? (r.applied ? "پروکسی فعال شد" : "ذخیره شد (اعمال روی واتساپ ناموفق)") : "پروکسی غیرفعال شد");
+    } catch (e) {
+      alert(e?.response?.data?.detail || e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const syncBlocked = async () => {
+    setBusy(true);
+    try {
+      const r = await ProxyApi.getBlocked(accountId);
+      alert(`${r.count} مخاطب بلاک‌شده همگام‌سازی شد`);
+    } catch (e) {
+      alert(e?.response?.data?.detail || "دریافت لیست بلاک ناموفق بود");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="border-t border-slate-700 pt-3">
+      <button className="text-xs text-slate-400 hover:text-slate-200" onClick={toggle}>
+        🌐 تنظیمات پروکسی {open ? "▲" : "▼"}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2">
+          <p className="text-xs text-slate-500">برای پایداری اتصال از ایران می‌توانید یک پروکسی SOCKS5 تنظیم کنید.</p>
+          <input className="input" placeholder="آدرس سرور (مثال: 1.2.3.4)" value={f.proxy_host} onChange={set("proxy_host")} />
+          <input className="input" type="number" placeholder="پورت (مثال: 1080)" value={f.proxy_port} onChange={set("proxy_port")} />
+          <input className="input" placeholder="نام کاربری (اختیاری)" value={f.proxy_login} onChange={set("proxy_login")} />
+          <input className="input" type="password" placeholder="رمز عبور (اختیاری)" value={f.proxy_password} onChange={set("proxy_password")} />
+          <div className="flex gap-2">
+            <button className="btn-primary text-sm" disabled={busy} onClick={() => saveProxy(true)}>فعال کن</button>
+            <button className="btn-secondary text-sm" disabled={busy} onClick={() => saveProxy(false)}>غیرفعال کن</button>
+          </div>
+          <button className="btn-secondary text-xs w-full" disabled={busy} onClick={syncBlocked}>
+            همگام‌سازی مخاطبین بلاک‌شده
+          </button>
+        </div>
       )}
     </div>
   );
