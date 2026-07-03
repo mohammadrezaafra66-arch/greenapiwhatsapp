@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { Dashboard as DashApi, Inbox as InboxApi, AiApi } from "../api.js";
 import { Spinner } from "../ui.jsx";
 import {
@@ -415,6 +416,29 @@ export default function Dashboard() {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ── QUICK START GUIDE ──────────────────────────────── */}
+      <div className="card">
+        <h3 className="font-bold mb-3">راهنمای سریع</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <Link to="/accounts" className="rounded-lg border border-slate-700 hover:border-brand/50 hover:bg-slate-800/50 p-3 transition-colors">
+            <div className="text-xs text-slate-500 mb-1">گام ۱</div>
+            <div className="font-bold text-slate-200">📱 حساب واتس‌اپ اضافه کن</div>
+          </Link>
+          <Link to="/contacts" className="rounded-lg border border-slate-700 hover:border-brand/50 hover:bg-slate-800/50 p-3 transition-colors">
+            <div className="text-xs text-slate-500 mb-1">گام ۲</div>
+            <div className="font-bold text-slate-200">👥 مخاطبین را آپلود کن</div>
+          </Link>
+          <Link to="/campaigns" className="rounded-lg border border-slate-700 hover:border-brand/50 hover:bg-slate-800/50 p-3 transition-colors">
+            <div className="text-xs text-slate-500 mb-1">گام ۳</div>
+            <div className="font-bold text-slate-200">📨 گروه پیام بساز</div>
+          </Link>
+          <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3">
+            <div className="text-xs text-slate-500 mb-1">گام ۴</div>
+            <div className="font-bold text-emerald-300">🚀 شروع کن!</div>
+          </div>
         </div>
       </div>
     </div>

@@ -255,11 +255,12 @@ function AddCampaignModal({ onClose, onDone }) {
           <input type="checkbox" checked={f.use_gpt} onChange={set("use_gpt")} />
           نوشتن پیام با هوش مصنوعی
         </label>
+        <p className="text-xs text-slate-500 -mt-1">سیستم با هوش مصنوعی یک پیام منحصربه‌فرد برای هر مخاطب می‌نویسد</p>
 
         {f.use_gpt ? (
           <div>
             <label className="label">توضیح برای هوش مصنوعی</label>
-            <textarea className="input h-20" value={f.gpt_prompt} onChange={set("gpt_prompt")} placeholder="مثلا: تخفیف ویژه یخچال‌های ساید بای ساید را معرفی کن" />
+            <textarea className="input h-20" value={f.gpt_prompt} onChange={set("gpt_prompt")} placeholder="مثال: یک پیام صمیمی و کوتاه برای مشتری عمده‌فروش لوازم خانگی بنویس که از خرید از افراکالا تشکر کند" />
           </div>
         ) : (
           <div>
@@ -272,6 +273,7 @@ function AddCampaignModal({ onClose, onDone }) {
           <input type="checkbox" checked={f.include_products} onChange={set("include_products")} />
           افزودن محصولات روز افراکالا
         </label>
+        <p className="text-xs text-slate-500 -mt-1">قیمت لحظه‌ای محصولات افراکالا در پیام درج می‌شود</p>
 
         {f.include_products && (
           <div>
@@ -363,6 +365,7 @@ function TestModal({ campaign, onClose }) {
           <label className="label">پیام دلخواه (اختیاری)</label>
           <textarea className="input h-20" value={message} onChange={(e) => setMessage(e.target.value)} />
         </div>
+        <p className="text-xs text-slate-500">پیام آزمایشی با همین تنظیمات GPT و محصولات ارسال می‌شود</p>
         <button className="btn-primary w-full" disabled={sending} onClick={send}>
           {sending ? "در حال ارسال..." : "ارسال تست"}
         </button>

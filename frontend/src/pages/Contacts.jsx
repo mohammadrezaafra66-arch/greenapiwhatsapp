@@ -10,6 +10,7 @@ export default function Contacts() {
   const [importing, setImporting] = React.useState(false);
   const [addToCampaign, setAddToCampaign] = React.useState(false);
   const [addManual, setAddManual] = React.useState(false);
+  const [showGuide, setShowGuide] = React.useState(false);
   const fileRef = React.useRef();
 
   const load = React.useCallback(() => {
@@ -72,6 +73,62 @@ export default function Contacts() {
             افزودن به گروه پیام ({selected.size})
           </button>
         </div>
+      </div>
+
+      <div className="card p-0 overflow-hidden">
+        <button
+          className="w-full flex items-center justify-between p-3 text-sm text-slate-300 hover:bg-slate-800/50"
+          onClick={() => setShowGuide((v) => !v)}
+        >
+          <span className="flex items-center gap-2">
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand/20 text-brand text-xs font-bold">؟</span>
+            راهنمای آپلود اکسل
+          </span>
+          <span className="text-slate-500">{showGuide ? "▲" : "▼"}</span>
+        </button>
+        {showGuide && (
+          <div className="border-t border-slate-700 p-4 space-y-3 text-sm text-slate-300">
+            <ul className="space-y-1.5 list-disc pr-5">
+              <li><b>فرمت فایل:</b> xlsx یا xls</li>
+              <li><b>ستون اجباری:</b> phone یا شماره یا موبایل</li>
+              <li><b>ستون‌های اختیاری:</b> first_name/نام، last_name/فامیلی، province/استان، city/شهر</li>
+              <li><b>فرمت شماره:</b> 09xxxxxxxxx یا 989xxxxxxxxx یا +98xxxxxxxxx (هر فرمتی قبول می‌شه)</li>
+              <li>شماره‌های تکراری خودکار حذف می‌شن</li>
+            </ul>
+            <div>
+              <p className="text-xs text-slate-500 mb-1">نمونه:</p>
+              <div className="overflow-x-auto">
+                <table className="text-xs border border-slate-700 rounded">
+                  <thead className="text-slate-400 bg-slate-800/60">
+                    <tr>
+                      <th className="p-2 border border-slate-700 text-right">phone</th>
+                      <th className="p-2 border border-slate-700 text-right">first_name</th>
+                      <th className="p-2 border border-slate-700 text-right">last_name</th>
+                      <th className="p-2 border border-slate-700 text-right">province</th>
+                      <th className="p-2 border border-slate-700 text-right">city</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-slate-300">
+                    <tr>
+                      <td className="p-2 border border-slate-700 font-mono">09121234567</td>
+                      <td className="p-2 border border-slate-700">علی</td>
+                      <td className="p-2 border border-slate-700">رضایی</td>
+                      <td className="p-2 border border-slate-700">تهران</td>
+                      <td className="p-2 border border-slate-700">تهران</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 border border-slate-700 font-mono">989351234567</td>
+                      <td className="p-2 border border-slate-700">مریم</td>
+                      <td className="p-2 border border-slate-700">احمدی</td>
+                      <td className="p-2 border border-slate-700">اصفهان</td>
+                      <td className="p-2 border border-slate-700">کاشان</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <input className="input" placeholder="جستجو بر اساس نام یا شماره..." value={search} onChange={(e) => setSearch(e.target.value)} />

@@ -26,6 +26,10 @@ export default function KeywordRules() {
         <button className="btn-primary" onClick={() => setEdit({})}>+ افزودن قانون</button>
       </div>
 
+      <div className="card text-sm text-slate-300 bg-sky-500/10 border-sky-500/30">
+        هر پیام ورودی با این کلیدواژه‌ها بررسی می‌شود. اولین تطابق پاسخ می‌دهد.
+      </div>
+
       {loading && <Spinner />}
       {error && <div className="card text-red-400">{error}</div>}
       {data && data.length === 0 && <Empty label="قانونی وجود ندارد." />}
@@ -124,6 +128,7 @@ function RuleModal({ rule, onClose, onDone }) {
               <option value="contains">شامل</option>
               <option value="exact">دقیق</option>
             </select>
+            <p className="text-xs text-slate-500 mt-1">دقیق = پیام باید عیناً همان کلیدواژه باشد | شامل = پیام حاوی کلیدواژه باشد</p>
           </div>
           <div>
             <label className="label">حوزه</label>
@@ -132,6 +137,7 @@ function RuleModal({ rule, onClose, onDone }) {
               <option value="pv">خصوصی</option>
               <option value="group">گروه</option>
             </select>
+            <p className="text-xs text-slate-500 mt-1">خصوصی = فقط پیام‌های مستقیم | گروه = فقط پیام‌های گروهی | هر دو = همه پیام‌ها</p>
           </div>
         </div>
         <label className="flex items-center gap-2 text-sm">

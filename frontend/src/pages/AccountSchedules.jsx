@@ -64,8 +64,8 @@ export default function AccountSchedules() {
         {accountId && <button className="btn-primary" onClick={() => setEdit({})}>+ افزودن بازه</button>}
       </div>
 
-      <div className="card text-sm text-slate-400">
-        بازه‌های تعریف‌شده اینجا برای این اکانت جایگزین زمان‌بندی پیش‌فرض می‌شوند.
+      <div className="card text-sm text-slate-300 bg-sky-500/10 border-sky-500/30">
+        بازه‌های زمانی که اینجا تعریف می‌کنید جایگزین زمان‌بندی پیش‌فرض سیستم می‌شوند. ساعت‌هایی که بازه تعریف نشده باشد، ارسال متوقف می‌ماند.
       </div>
 
       <div className="card">
@@ -203,10 +203,11 @@ function SlotModal({ slot, accountId, onClose, onDone }) {
     <Modal title={isEdit ? "ویرایش بازه" : "بازه جدید"} onClose={onClose}>
       <div className="space-y-3">
         <div className="grid grid-cols-3 gap-3">
-          <div><label className="label">از ساعت (۰-۲۳)</label><input type="number" min="0" max="23" className="input" value={f.hour_start} onChange={set("hour_start")} /></div>
-          <div><label className="label">تا ساعت (۱-۲۴)</label><input type="number" min="1" max="24" className="input" value={f.hour_end} onChange={set("hour_end")} /></div>
+          <div><label className="label">از ساعت</label><input type="number" min="0" max="23" className="input" value={f.hour_start} onChange={set("hour_start")} /></div>
+          <div><label className="label">تا ساعت</label><input type="number" min="1" max="24" className="input" value={f.hour_end} onChange={set("hour_end")} /></div>
           <div><label className="label">حداکثر/ساعت</label><input type="number" min="0" className="input" value={f.max_per_hour} onChange={set("max_per_hour")} /></div>
         </div>
+        <p className="text-xs text-slate-500 -mt-1">(ساعت تهران، ۰ تا ۲۳)</p>
         <div><label className="label">توضیح برای هوش مصنوعی (اختیاری)</label><textarea className="input h-20" value={f.gpt_prompt} onChange={set("gpt_prompt")} /></div>
         <div><label className="label">قالب پیام (اختیاری)</label><textarea className="input h-20" value={f.message_template} onChange={set("message_template")} /></div>
         <label className="flex items-center gap-2 text-sm">
