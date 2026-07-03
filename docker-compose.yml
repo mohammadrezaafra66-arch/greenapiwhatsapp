@@ -27,6 +27,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://afrakala:password@db:5432/whatsapp_sender
       SYNC_DATABASE_URL: postgresql://afrakala:password@db:5432/whatsapp_sender
       REDIS_URL: redis://redis:6379/0
+      WEBHOOK_BASE_URL: https://abc123.ngrok.io
     ports:
       - "8002:8000"   # host 8002 (8000 is taken locally) -> container 8000
     depends_on:
@@ -44,6 +45,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://afrakala:password@db:5432/whatsapp_sender
       SYNC_DATABASE_URL: postgresql://afrakala:password@db:5432/whatsapp_sender
       REDIS_URL: redis://redis:6379/0
+      WEBHOOK_BASE_URL: https://abc123.ngrok.io
     depends_on:
       - db
       - redis
@@ -59,6 +61,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://afrakala:password@db:5432/whatsapp_sender
       SYNC_DATABASE_URL: postgresql://afrakala:password@db:5432/whatsapp_sender
       REDIS_URL: redis://redis:6379/0
+      WEBHOOK_BASE_URL: https://abc123.ngrok.io
     depends_on:
       - redis
     volumes:
