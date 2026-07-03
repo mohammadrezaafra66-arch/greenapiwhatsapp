@@ -58,7 +58,7 @@ async def create_account(
     webhook_url = f"{settings.webhook_base_url}/api/v1/webhook/{instance_id}"
     client = GreenAPIClient(instance_id, api_token)
     try:
-        await client.set_webhook(webhook_url)
+        await client.set_webhook(webhook_url, delay_ms=15000)
     except Exception as e:
         print(f"Warning: Could not set webhook: {e}")
 

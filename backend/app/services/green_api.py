@@ -41,13 +41,13 @@ class GreenAPIClient:
         r = await self._post("setSettings", settings_dict)
         return r.get("saveSettings", False)
 
-    async def set_webhook(self, webhook_url: str) -> bool:
+    async def set_webhook(self, webhook_url: str, delay_ms: int = 15000) -> bool:
         return await self.set_settings({
             "webhookUrl": webhook_url,
             "outgoingWebhook": "yes",
             "incomingWebhook": "yes",
             "stateWebhook": "yes",
-            "delaySendMessagesMilliseconds": 3000
+            "delaySendMessagesMilliseconds": delay_ms
         })
 
     async def reboot(self) -> bool:
