@@ -151,7 +151,7 @@ function LiveLog({ campaignId }) {
 function AddCampaignModal({ onClose, onDone }) {
   const [f, setF] = React.useState({
     name: "", campaign_type: "text", use_gpt: true, gpt_prompt: "",
-    message_template: "", include_products: false, image_url: "",
+    message_template: "", include_products: false, product_count: 3, image_url: "",
     poll_question: "", poll_options: "", buttons: "", footer_text: "",
     campaign_scope: "pv", group_ids: "",
   });
@@ -198,6 +198,7 @@ function AddCampaignModal({ onClose, onDone }) {
         gpt_prompt: f.gpt_prompt || null,
         message_template: f.message_template || null,
         include_products: f.include_products,
+        product_count: Number(f.product_count) || 3,
         image_url: f.image_url || null,
         poll_question: f.poll_question || null,
         poll_options: f.poll_options ? f.poll_options.split("\n").map((s) => s.trim()).filter(Boolean) : null,
@@ -271,6 +272,20 @@ function AddCampaignModal({ onClose, onDone }) {
           <input type="checkbox" checked={f.include_products} onChange={set("include_products")} />
           افزودن محصولات روز افراکالا
         </label>
+
+        {f.include_products && (
+          <div>
+            <label className="label">تعداد محصول</label>
+            <input
+              type="number"
+              className="input"
+              min={1}
+              max={10}
+              value={f.product_count}
+              onChange={set("product_count")}
+            />
+          </div>
+        )}
 
         {f.campaign_type === "image" && (
           <div>
