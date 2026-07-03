@@ -116,6 +116,16 @@ async def logout_account(account_id: str, db: AsyncSession = Depends(get_db)):
     return {"logged_out": ok}
 
 
+@router.post("/{account_id}/apply-settings")
+async def apply_account_settings(account_id: str, db: AsyncSession = Depends(get_db)):
+    """Re-apply Green API settings (webhook + 15000ms queue send delay) for this account."""
+    account = await _get_account(account_id, db)
+    webhook_url = f"{settings.webhook_base_url}/api/v1/webhook/{account.instance_id}"
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    ok = await client.set_webhook(webhook_url, delay_ms=15000)
+    return {"applied": ok, "webhook_url": webhook_url, "delay_ms": 15000}
+
+
 @router.post("/{account_id}/check-whatsapp-bulk")
 async def check_whatsapp_bulk(
     account_id: str,
