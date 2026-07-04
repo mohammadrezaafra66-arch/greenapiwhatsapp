@@ -76,6 +76,77 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     }
 
 
+@router.get("/deliverability")
+async def deliverability(days: int = 7, db: AsyncSession = Depends(get_db)):
+    """Delivery-status breakdown for sent campaign messages over the last N days.
+    Buckets come from campaign_contacts.delivery_status (set by the
+    outgoingMessageStatus webhook): delivered / read / yellowCard / failed / pending."""
+    from datetime import datetime, timedelta
+    from sqlalchemy import case
+    from app.models.campaign import CampaignContact
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    ds = CampaignContact.delivery_status
+
+    def bucket(cond):
+        return func.coalesce(func.sum(case((cond, 1), else_=0)), 0)
+
+    rows = (await db.execute(
+        select(
+            CampaignContact.account_id,
+            func.count().label("total"),
+            bucket(ds == "delivered").label("delivered"),
+            bucket(ds == "read").label("read"),
+            bucket(ds == "yellowCard").label("yellow_card"),
+            bucket(ds == "failed").label("failed"),
+            bucket((ds.is_(None)) | (ds == "sent")).label("pending"),
+        )
+        .where(CampaignContact.sent_at.isnot(None), CampaignContact.sent_at >= cutoff)
+        .group_by(CampaignContact.account_id)
+    )).all()
+
+    # account names
+    accs = (await db.execute(select(Account))).scalars().all()
+    names = {a.id: a.name for a in accs}
+
+    def pct(n, total):
+        return round(n / total * 100, 1) if total else 0.0
+
+    total_sent = sum(r.total for r in rows)
+    total_delivered = sum(r.delivered for r in rows)
+    total_read = sum(r.read for r in rows)
+    total_yellow = sum(r.yellow_card for r in rows)
+    total_failed = sum(r.failed for r in rows)
+    total_pending = sum(r.pending for r in rows)
+
+    per_account = [
+        {
+            "account_id": str(r.account_id) if r.account_id else None,
+            "name": names.get(r.account_id, "نامشخص"),
+            "total": r.total,
+            "delivered": r.delivered,
+            "read": r.read,
+            "yellow_card": r.yellow_card,
+            "failed": r.failed,
+            "pending": r.pending,
+            "yellow_card_pct": pct(r.yellow_card, r.total),
+        }
+        for r in rows
+    ]
+    per_account.sort(key=lambda x: x["total"], reverse=True)
+
+    return {
+        "window_days": days,
+        "total_sent": total_sent,
+        "delivered": {"count": total_delivered, "pct": pct(total_delivered, total_sent)},
+        "read": {"count": total_read, "pct": pct(total_read, total_sent)},
+        "yellow_card": {"count": total_yellow, "pct": pct(total_yellow, total_sent)},
+        "failed": {"count": total_failed, "pct": pct(total_failed, total_sent)},
+        "pending": {"count": total_pending, "pct": pct(total_pending, total_sent)},
+        "per_account": per_account,
+    }
+
+
 @router.get("/product-mentions/recent")
 async def get_product_mentions(limit: int = 50, db: AsyncSession = Depends(get_db)):
     from app.models.reporting import ProductMentionLog

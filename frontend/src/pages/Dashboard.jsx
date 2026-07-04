@@ -77,6 +77,24 @@ const CHART_TOOLTIP = {
   itemStyle: { color: "#e2e8f0" },
 };
 
+// Stacked delivery bar: green = delivered+read, amber = sent/pending/other, red = yellowCard
+function DeliverBar({ d }) {
+  const total = d.total || 0;
+  const green = (d.delivered || 0) + (d.read || 0);
+  const red = d.yellow_card || 0;
+  const amber = Math.max(0, total - green - red - (d.failed || 0));
+  const gray = d.failed || 0;
+  const w = (n) => (total > 0 ? (n / total) * 100 : 0);
+  return (
+    <div className="w-full h-3 rounded-full overflow-hidden bg-slate-700 flex" dir="ltr" title={`تحویل/خوانده ${green} · در انتظار ${amber} · یلوکارت ${red}`}>
+      <div className="bg-emerald-500 h-3" style={{ width: `${w(green)}%` }} />
+      <div className="bg-amber-500 h-3" style={{ width: `${w(amber)}%` }} />
+      <div className="bg-red-500 h-3" style={{ width: `${w(red)}%` }} />
+      <div className="bg-slate-500 h-3" style={{ width: `${w(gray)}%` }} />
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [stats, setStats] = React.useState(null);
   const [rl, setRl] = React.useState(null);
@@ -119,6 +137,21 @@ export default function Dashboard() {
     const t = setInterval(loadAi, 30000);
     return () => clearInterval(t);
   }, [loadAi]);
+
+  // Deliverability polls on a 30s cadence
+  const [deliver, setDeliver] = React.useState(null);
+  const loadDeliver = React.useCallback(async () => {
+    try {
+      setDeliver(await DashApi.deliverability());
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
+  React.useEffect(() => {
+    loadDeliver();
+    const t = setInterval(loadDeliver, 30000);
+    return () => clearInterval(t);
+  }, [loadDeliver]);
 
   if (!stats && !err) return <Spinner />;
   if (err && !stats)
@@ -192,6 +225,12 @@ export default function Dashboard() {
           ⚠️ حساب {a.name} مسدود شده — فوراً بررسی کنید
         </div>
       ))}
+
+      {deliver && deliver.total_sent > 0 && deliver.yellow_card.pct > 50 && (
+        <div className="card bg-red-500/10 border-red-500/40 text-red-300">
+          🚨 نرخ یلوکارت {fa(deliver.yellow_card.pct)}٪ است — پیام‌های شما مشکوک علامت خورده‌اند. سرعت ارسال را کم کنید و گرم‌سازی/پروکسی را فعال کنید.
+        </div>
+      )}
 
       {/* ── TOP ROW: KPI cards ─────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -287,6 +326,65 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* ── DELIVERABILITY PANEL ───────────────────────────── */}
+      {deliver && (
+        <div className="card space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h3 className="font-bold">تحویل پیام‌ها (۷ روز اخیر)</h3>
+            <div className="flex items-center gap-3 text-xs text-slate-400 flex-wrap">
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-emerald-500" /> تحویل/خوانده</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-amber-500" /> ارسال‌شده</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-red-500" /> یلوکارت</span>
+            </div>
+          </div>
+
+          {deliver.total_sent === 0 ? (
+            <p className="text-slate-500 text-sm">در ۷ روز اخیر پیامی ارسال نشده است.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <p className="text-slate-400 text-sm">کل ارسال</p>
+                  <p className="text-3xl font-bold mt-1"><AnimatedNumber value={deliver.total_sent} /></p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-sm">خوانده‌شده</p>
+                  <p className="text-3xl font-bold mt-1 text-emerald-400"><AnimatedNumber value={deliver.read.count} /> <span className="text-base text-slate-500">({fa(deliver.read.pct)}٪)</span></p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-sm">تحویل‌شده</p>
+                  <p className="text-3xl font-bold mt-1 text-emerald-300"><AnimatedNumber value={deliver.delivered.count} /> <span className="text-base text-slate-500">({fa(deliver.delivered.pct)}٪)</span></p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-sm">یلوکارت</p>
+                  <p className={`text-3xl font-bold mt-1 ${deliver.yellow_card.pct > 50 ? "text-red-400" : "text-amber-400"}`}>
+                    <AnimatedNumber value={deliver.yellow_card.count} /> <span className="text-base text-slate-500">({fa(deliver.yellow_card.pct)}٪)</span>
+                  </p>
+                </div>
+              </div>
+
+              <DeliverBar d={{ total: deliver.total_sent, delivered: deliver.delivered.count, read: deliver.read.count, yellow_card: deliver.yellow_card.count, failed: deliver.failed.count }} />
+
+              {/* Per-account breakdown */}
+              <div className="space-y-2">
+                <p className="text-xs text-slate-500">به تفکیک حساب:</p>
+                {deliver.per_account.map((a) => (
+                  <div key={a.account_id || a.name} className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-300">{a.name}</span>
+                      <span className="text-slate-500">
+                        {fa(a.total)} ارسال · خوانده {fa(a.read)} · یلوکارت <span className={a.yellow_card_pct > 50 ? "text-red-400" : "text-amber-400"}>{fa(a.yellow_card)} ({fa(a.yellow_card_pct)}٪)</span>
+                      </span>
+                    </div>
+                    <DeliverBar d={a} />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ── RATE LIMITER PANEL ─────────────────────────────── */}
       <div className="card space-y-4">
