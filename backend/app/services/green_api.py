@@ -22,9 +22,9 @@ class GreenAPIClient:
             r.raise_for_status()
             return r.json()
 
-    async def _post(self, endpoint: str, data: dict = None) -> dict:
+    async def _post(self, endpoint: str, data: dict = None, timeout: int = 30) -> dict:
         url = f"{self.base_url}/{endpoint}/{self.api_token}"
-        async with httpx.AsyncClient(timeout=30) as c:
+        async with httpx.AsyncClient(timeout=timeout) as c:
             r = await c.post(url, json=data or {})
             r.raise_for_status()
             return r.json()
@@ -362,13 +362,14 @@ class GreenAPIClient:
         return r if isinstance(r, list) else []
 
     async def add_contact(self, phone: str, first_name: str, last_name: str = "", company: str = "افراکالا") -> bool:
-        """Add a contact to the WhatsApp phone book of this account."""
+        """Add a contact to the WhatsApp phone book of this account.
+        addContact can be slow on Green API, so use a longer 60s timeout."""
         r = await self._post("addContact", {
             "phoneContact": int(self._normalize(phone)),
             "firstName": first_name,
             "lastName": last_name,
             "company": company
-        })
+        }, timeout=60)
         return r.get("saveContact", False) or "contactId" in r
 
     async def edit_contact(self, phone: str, first_name: str, last_name: str = "", company: str = "") -> bool:

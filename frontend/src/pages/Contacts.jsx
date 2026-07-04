@@ -20,13 +20,21 @@ export default function Contacts() {
   const [showGuide, setShowGuide] = React.useState(false);
   const [showCheckInfo, setShowCheckInfo] = React.useState(false);
   const [disappearing, setDisappearing] = React.useState(null); // contact | null
+  const [phonebookBusy, setPhonebookBusy] = React.useState(null); // contact id being added
 
   const addToPhonebook = async (id) => {
+    if (phonebookBusy) return; // avoid double-submit
+    setPhonebookBusy(id);
     try {
       const r = await ContactExtrasApi.addToPhonebook(id);
       alert(r.added ? "به مخاطبین واتساپ اضافه شد" : "افزودن ناموفق بود");
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      const msg = e?.code === "ECONNABORTED"
+        ? "افزودن مخاطب بیش از حد طول کشید؛ لطفاً دوباره تلاش کنید."
+        : e?.response?.data?.detail || e.message;
+      alert(msg);
+    } finally {
+      setPhonebookBusy(null);
     }
   };
 
@@ -199,7 +207,14 @@ export default function Contacts() {
                   <td className="p-3">
                     <div className="flex gap-2 flex-wrap">
                       <button className="text-sky-400 hover:underline text-xs" title="پیام ناپدیدشونده" onClick={() => setDisappearing(c)}>⏱️</button>
-                      <button className="text-emerald-400 hover:underline text-xs" title="افزودن به مخاطبین واتساپ" onClick={() => addToPhonebook(c.id)}>📱</button>
+                      <button
+                        className="text-emerald-400 hover:underline text-xs disabled:opacity-50"
+                        title="افزودن به مخاطبین واتساپ"
+                        disabled={phonebookBusy === c.id}
+                        onClick={() => addToPhonebook(c.id)}
+                      >
+                        {phonebookBusy === c.id ? "⏳" : "📱"}
+                      </button>
                       <button className="text-red-400 hover:underline text-xs" onClick={async () => { if (confirm("این مخاطب مسدود شود؟")) { await Api.blacklist(c.id); load(); } }}>لیست سیاه</button>
                     </div>
                   </td>

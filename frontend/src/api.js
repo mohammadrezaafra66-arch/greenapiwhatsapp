@@ -169,7 +169,7 @@ export const ProxyApi = {
 // ── Contact extras (disappearing / phonebook) ──────────────
 export const ContactExtrasApi = {
   setDisappearing: (id, ephemeral) => http.post(`/contacts/${id}/disappearing?ephemeral=${ephemeral}`).then((r) => r.data),
-  addToPhonebook: (id) => http.post(`/contacts/${id}/add-to-phonebook`).then((r) => r.data),
+  addToPhonebook: (id) => http.post(`/contacts/${id}/add-to-phonebook`, null, { timeout: 65000 }).then((r) => r.data),
   editPhonebook: (id, first_name, last_name = "") =>
     http.put(`/contacts/${id}/phonebook`, null, { params: { first_name, last_name } }).then((r) => r.data),
 };
