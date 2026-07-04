@@ -25,9 +25,27 @@ def test_computed_daily_limit_caps():
 
 
 def test_computed_daily_limit_mixed():
-    acc = _make_account(days_active=5, received_yesterday=8, quick_replies_yesterday=2)
-    # 5 + 8 + min(2*5, 50)=10 => 23
-    assert acc.computed_daily_limit == 23
+    # Past the warm-up week (days_active >= 7) the full formula applies.
+    acc = _make_account(days_active=8, received_yesterday=8, quick_replies_yesterday=2)
+    # min(8,10)=8 + 8 + min(2*5, 50)=10 => 26
+    assert acc.computed_daily_limit == 26
+
+
+def test_computed_daily_limit_warmup_week_cap():
+    # During week 1 (days_active < 7) the limit is hard-capped at 5,
+    # even when the formula would allow far more.
+    acc = _make_account(days_active=5, received_yesterday=20, quick_replies_yesterday=10)
+    assert acc.computed_daily_limit == 5
+
+
+def test_computed_daily_limit_cap_overrides_configured_floor():
+    # A configured daily_limit floor does NOT bypass the week-1 cap.
+    acc = _make_account(days_active=3)
+    acc.daily_limit = 50
+    assert acc.computed_daily_limit == 5
+    # …but once warm-up completes, the floor applies again.
+    acc.days_active = 7
+    assert acc.computed_daily_limit == 50
 
 
 @pytest.mark.parametrize("raw,expected", [

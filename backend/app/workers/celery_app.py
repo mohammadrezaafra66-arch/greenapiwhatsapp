@@ -8,7 +8,8 @@ celery_app.conf.update(task_serializer="json", result_serializer="json", accept_
 
 celery_app.conf.beat_schedule = {
     "reset-daily-counters": {"task": "tasks.reset_daily_counters", "schedule": 86400.0},
-    "warmup-accounts": {"task": "tasks.warmup_accounts", "schedule": 3600.0},
+    # Daily status post + warm-up increment at 10:00 Tehran (once per day)
+    "warmup-accounts": {"task": "tasks.warmup_accounts", "schedule": crontab(hour=10, minute=0)},
     "sync-account-states": {"task": "tasks.sync_account_states", "schedule": 300.0},
     "poll-accounts": {"task": "tasks.poll_accounts", "schedule": 10.0},
     "clear-product-mentions": {"task": "tasks.clear_old_product_mentions", "schedule": 86400.0},

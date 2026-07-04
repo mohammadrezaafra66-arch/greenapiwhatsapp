@@ -53,4 +53,9 @@ class Account(Base):
         # The manually-configured daily_limit column acts as a floor, so an
         # account that isn't warming up (days_active=0) can still send up to its
         # configured limit instead of being stuck at 0.
-        return max(warmup, self.daily_limit or 0)
+        limit = max(warmup, self.daily_limit or 0)
+        # Anti-ban: during the first week of warm-up, hard-cap at 5 messages/day
+        # (overriding the configured floor) to keep a fresh account under the radar.
+        if (self.days_active or 0) < 7:
+            return min(limit, 5)
+        return limit
