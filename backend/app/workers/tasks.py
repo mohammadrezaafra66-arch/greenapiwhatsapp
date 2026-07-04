@@ -66,6 +66,7 @@ def task_backfill_group_member_counts():
             )).scalars().all()
 
             acct_cache = {}
+            phone_cache = {}
             updated = 0
             for i in range(0, len(rows), 10):
                 batch = rows[i:i + 10]
@@ -80,11 +81,28 @@ def task_backfill_group_member_counts():
                         continue
                     try:
                         client = GreenAPIClient(account.instance_id, account.api_token)
+                        # This account's own phone (fetched once), for admin detection.
+                        if grp.account_id not in phone_cache:
+                            try:
+                                wa = await client.get_wa_settings()
+                                phone_cache[grp.account_id] = str(wa.get("phone") or wa.get("wid") or "").split("@")[0]
+                            except Exception:
+                                phone_cache[grp.account_id] = ""
+                        my_phone = phone_cache[grp.account_id]
+
                         data = await client.get_group_data(grp.green_group_id)
-                        grp.member_count = len(data.get("participants", []))
+                        participants = data.get("participants", [])
+                        grp.member_count = len(participants)
+                        grp.participant_count = len(participants)
                         desc = data.get("description")
                         if desc:
                             grp.description = desc
+                        if my_phone:
+                            grp.is_admin = any(
+                                str(p.get("id", "")).split("@")[0] == my_phone
+                                and (p.get("isAdmin", False) or p.get("isSuperAdmin", False))
+                                for p in participants
+                            )
                         grp.synced_at = datetime.utcnow()
                         updated += 1
                     except Exception as e:

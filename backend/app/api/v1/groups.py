@@ -200,14 +200,6 @@ async def sync_groups_from_wa(account_id: str, db: AsyncSession = Depends(get_db
     except Exception as e:
         raise HTTPException(502, f"Green API error: {e}")
 
-    # This account's own phone — used to detect admin status in groups.
-    my_phone = ""
-    try:
-        wa = await client.get_wa_settings()
-        my_phone = str(wa.get("phone") or wa.get("wid") or "").split("@")[0]
-    except Exception:
-        my_phone = ""
-
     saved = 0
     updated = 0
 
@@ -225,28 +217,11 @@ async def sync_groups_from_wa(account_id: str, db: AsyncSession = Depends(get_db
             continue  # Skip private chats
 
         name = chat.get("name", "") or chat_id
+        # Fast path: use participantsCount straight from getChats. Do NOT call
+        # getGroupData per group here — 500+ sequential calls would time out.
+        # Accurate member_count / description / is_admin are filled asynchronously
+        # by the background backfill task (tasks.backfill_group_member_counts).
         member_count = chat.get("participantsCount", 0) or 0
-        description = ""
-        is_admin = False
-        participant_count = 0
-
-        # For groups, fetch getGroupData when we lack a member count — reuse that
-        # call to also compute participant_count and this account's admin status.
-        if chat_type == "group" and member_count == 0:
-            try:
-                group_data = await client.get_group_data(chat_id)
-                participants = group_data.get("participants", [])
-                member_count = len(participants)
-                participant_count = len(participants)
-                description = group_data.get("description", "") or ""
-                if my_phone:
-                    is_admin = any(
-                        str(p.get("id", "")).split("@")[0] == my_phone
-                        and (p.get("isAdmin", False) or p.get("isSuperAdmin", False))
-                        for p in participants
-                    )
-            except Exception:
-                description = ""
 
         existing_result = await db.execute(
             select(WhatsAppGroup).where(WhatsAppGroup.green_group_id == chat_id)
@@ -257,11 +232,6 @@ async def sync_groups_from_wa(account_id: str, db: AsyncSession = Depends(get_db
             existing.name = name
             existing.member_count = member_count
             existing.chat_type = chat_type
-            if description:
-                existing.description = description
-            if participant_count:
-                existing.participant_count = participant_count
-                existing.is_admin = is_admin
             existing.account_id = uuid.UUID(account_id)
             existing.synced_at = datetime.utcnow()
             updated += 1
@@ -272,9 +242,6 @@ async def sync_groups_from_wa(account_id: str, db: AsyncSession = Depends(get_db
                 name=name,
                 member_count=member_count,
                 chat_type=chat_type,
-                description=description,
-                is_admin=is_admin,
-                participant_count=participant_count,
                 synced_at=datetime.utcnow(),
             )
             db.add(grp)

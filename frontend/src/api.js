@@ -110,7 +110,7 @@ export const Groups = {
   send: (id, message) =>
     http.post(`/groups/${id}/send`, { message }).then((r) => r.data),
   info: (id) => http.get(`/groups/${id}/info`).then((r) => r.data),
-  sync: (accountId) => http.post(`/groups/sync/${accountId}`).then((r) => r.data),
+  sync: (accountId) => http.post(`/groups/sync/${accountId}`, null, { timeout: 120000 }).then((r) => r.data),
   // V8 F40 — add members to an admin group. group_id is the chatId (…@g.us).
   autoAddMembers: (group_id, account_id, phones) => {
     const p = new URLSearchParams();
