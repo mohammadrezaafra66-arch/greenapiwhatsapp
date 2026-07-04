@@ -34,16 +34,31 @@ async def _client_for_group(group: WhatsAppGroup, db: AsyncSession) -> GreenAPIC
 
 
 @router.get("/")
-async def list_groups(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(WhatsAppGroup).order_by(WhatsAppGroup.created_at.desc()))
+async def list_groups(
+    account_id: str | None = None,
+    chat_type: str | None = None,  # filter: group | broadcast | all
+    min_members: int | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(WhatsAppGroup).order_by(WhatsAppGroup.member_count.desc())
+    if account_id:
+        query = query.where(WhatsAppGroup.account_id == uuid.UUID(account_id))
+    if chat_type and chat_type != "all":
+        query = query.where(WhatsAppGroup.chat_type == chat_type)
+    if min_members is not None:
+        query = query.where(WhatsAppGroup.member_count >= min_members)
+
+    result = await db.execute(query)
     groups = result.scalars().all()
     return [
         {
             "id": str(g.id),
             "green_group_id": g.green_group_id,
+            "group_chat_id": g.green_group_id,
             "account_id": str(g.account_id),
             "name": g.name,
             "description": g.description,
+            "chat_type": g.chat_type,
             "member_count": g.member_count,
         }
         for g in groups
@@ -167,7 +182,7 @@ async def leave_group(group_id: str, account_id: str, db: AsyncSession = Depends
 
 @router.post("/sync/{account_id}")
 async def sync_groups_from_wa(account_id: str, db: AsyncSession = Depends(get_db)):
-    """Fetch all WhatsApp groups this account is member of and save to DB."""
+    """Fetch all WhatsApp groups/broadcasts and save to DB with member counts."""
     account = await db.get(Account, uuid.UUID(account_id))
     if not account:
         raise HTTPException(404, "Account not found")
@@ -179,26 +194,83 @@ async def sync_groups_from_wa(account_id: str, db: AsyncSession = Depends(get_db
         raise HTTPException(502, f"Green API error: {e}")
 
     saved = 0
+    updated = 0
+
     for chat in chats:
         chat_id = chat.get("id", "")
-        if "@g.us" not in chat_id:
-            continue  # skip PV chats
 
-        existing = await db.execute(
+        # Determine type
+        if "@g.us" in chat_id:
+            chat_type = "group"
+        elif "@broadcast" in chat_id:
+            chat_type = "broadcast"
+        elif "@newsletter" in chat_id:
+            continue  # Skip WhatsApp Channels — can't post
+        else:
+            continue  # Skip private chats
+
+        name = chat.get("name", "") or chat_id
+        member_count = chat.get("participantsCount", 0) or 0
+        description = ""
+
+        # For groups, try to get accurate member count from getGroupData
+        if chat_type == "group" and member_count == 0:
+            try:
+                group_data = await client.get_group_data(chat_id)
+                participants = group_data.get("participants", [])
+                member_count = len(participants)
+                description = group_data.get("description", "") or ""
+            except Exception:
+                description = ""
+
+        existing_result = await db.execute(
             select(WhatsAppGroup).where(WhatsAppGroup.green_group_id == chat_id)
         )
-        if not existing.scalar_one_or_none():
+        existing = existing_result.scalar_one_or_none()
+
+        if existing:
+            existing.name = name
+            existing.member_count = member_count
+            existing.chat_type = chat_type
+            if description:
+                existing.description = description
+            existing.account_id = uuid.UUID(account_id)
+            updated += 1
+        else:
             grp = WhatsAppGroup(
                 green_group_id=chat_id,
                 account_id=uuid.UUID(account_id),
-                name=chat.get("name", chat_id),
-                member_count=chat.get("participantsCount", 0)
+                name=name,
+                member_count=member_count,
+                chat_type=chat_type,
+                description=description,
             )
             db.add(grp)
             saved += 1
 
     await db.commit()
-    return {"synced": saved, "total_chats": len(chats)}
+    return {"synced_new": saved, "updated": updated, "total_chats": len(chats)}
+
+
+@router.post("/{group_id}/refresh-members")
+async def refresh_group_members(group_id: str, db: AsyncSession = Depends(get_db)):
+    """Fetch fresh member count for one group from Green API."""
+    grp = await db.get(WhatsAppGroup, uuid.UUID(group_id))
+    if not grp:
+        raise HTTPException(404, "Group not found")
+    account = await db.get(Account, grp.account_id)
+    if not account:
+        raise HTTPException(400, "Account not found")
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    try:
+        group_data = await client.get_group_data(grp.green_group_id)
+        participants = group_data.get("participants", [])
+        grp.member_count = len(participants)
+        grp.description = group_data.get("description", grp.description)
+        await db.commit()
+        return {"member_count": grp.member_count, "name": grp.name}
+    except Exception as e:
+        raise HTTPException(500, f"Green API error: {e}")
 
 
 @router.get("/{group_id}/info")

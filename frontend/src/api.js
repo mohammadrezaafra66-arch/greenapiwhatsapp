@@ -83,7 +83,13 @@ export const Inbox = {
 
 // ── Groups ─────────────────────────────────────────────
 export const Groups = {
-  list: () => http.get("/groups/").then((r) => r.data),
+  list: (params = {}) => {
+    const q = new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ""))
+    ).toString();
+    return http.get(`/groups/${q ? `?${q}` : ""}`).then((r) => r.data);
+  },
+  refreshMembers: (groupId) => http.post(`/groups/${groupId}/refresh-members`).then((r) => r.data),
   create: (body) => http.post("/groups/", body).then((r) => r.data),
   addMembers: (id, phones) =>
     http.post(`/groups/${id}/members`, { phones }).then((r) => r.data),

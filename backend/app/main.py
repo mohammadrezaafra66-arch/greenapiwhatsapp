@@ -217,6 +217,8 @@ async def lifespan(app: FastAPI):
         ddl_v7 = [
             "ALTER TABLE account_hour_schedules ADD COLUMN IF NOT EXISTS include_products boolean DEFAULT false",
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_default boolean DEFAULT false",
+            "ALTER TABLE whatsapp_groups ADD COLUMN IF NOT EXISTS chat_type varchar(20) DEFAULT 'group'",
+            "ALTER TABLE whatsapp_groups ADD COLUMN IF NOT EXISTS description text",
         ]
         for stmt in ddl_v7:
             try:
