@@ -36,6 +36,10 @@ export default function Accounts() {
         <button className="btn-primary" onClick={() => setShowAdd(true)}>+ افزودن حساب</button>
       </div>
 
+      <div className="card text-sm text-slate-300 bg-sky-500/10 border-sky-500/30">
+        هر حساب یک شماره واتساپ مستقل است. می‌توانید چندین حساب همزمان فعال داشته باشید. کمپین‌ها به‌صورت چرخشی (round-robin) بین حساب‌های فعال ارسال می‌شوند.
+      </div>
+
       {loading && <Spinner />}
       {error && <div className="card text-red-400">{error}</div>}
       {data && data.length === 0 && <Empty label="هیچ حسابی ثبت نشده است." />}
@@ -44,7 +48,12 @@ export default function Accounts() {
         {data?.map((a) => (
           <div key={a.id} className="card space-y-3">
             <div className="flex items-center justify-between">
-              <span className="font-bold">{a.name}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-bold">{a.name}</span>
+                {a.is_default && (
+                  <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">پیش‌فرض ⭐</span>
+                )}
+              </div>
               <Badge status={a.status} />
             </div>
             <div className="text-sm text-slate-400 space-y-0.5">
@@ -58,6 +67,9 @@ export default function Accounts() {
               <button className="btn-secondary" disabled={busy === a.id} onClick={() => act(() => Api.status(a.id), a.id)}>بررسی وضعیت</button>
               <button className="btn-secondary" onClick={() => showQr(a.id)}>QR</button>
               <button className="btn-secondary" disabled={busy === a.id} onClick={() => act(() => Api.reboot(a.id), a.id)}>ری‌بوت</button>
+              {!a.is_default && (
+                <button className="btn-secondary" disabled={busy === a.id} onClick={() => act(() => Api.setDefault(a.id), a.id)}>تنظیم به‌عنوان پیش‌فرض</button>
+              )}
               <button className="btn-danger" disabled={busy === a.id} onClick={() => {
                 if (confirm("حذف این حساب؟")) act(() => Api.remove(a.id), a.id);
               }}>حذف</button>
@@ -190,6 +202,12 @@ function AddAccountModal({ onClose, onDone }) {
   return (
     <Modal title="افزودن حساب جدید" onClose={onClose}>
       <div className="space-y-3">
+        <div className="text-xs text-slate-400 space-y-1">
+          <p>گام ۱: در green-api.com وارد شوید</p>
+          <p>گام ۲: یک Instance جدید بسازید</p>
+          <p>گام ۳: Instance ID و API Token را کپی کنید</p>
+          <p>گام ۴: اینجا وارد کنید و سپس QR را اسکن کنید</p>
+        </div>
         <div>
           <label className="label">نام حساب</label>
           <input className="input" value={form.name} onChange={set("name")} />

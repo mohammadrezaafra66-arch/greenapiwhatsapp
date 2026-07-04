@@ -7,6 +7,13 @@ export default function Groups() {
   const [showAdd, setShowAdd] = React.useState(false);
   const [send, setSend] = React.useState(null);
   const [syncing, setSyncing] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+
+  const filtered = (data || []).filter(
+    (g) =>
+      g.name?.toLowerCase().includes(search.toLowerCase()) ||
+      g.green_group_id?.includes(search)
+  );
 
   const syncWhatsapp = async () => {
     setSyncing(true);
@@ -40,12 +47,22 @@ export default function Groups() {
         برای نمایش گروه‌های واتساپ، ابتدا روی «همگام‌سازی با واتساپ» کلیک کنید.
       </div>
 
+      <input
+        className="input"
+        placeholder="جستجو بر اساس نام گروه یا شناسه..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+
       {loading && <Spinner />}
       {error && <div className="card text-red-400">{error}</div>}
       {data && data.length === 0 && <Empty label="گروهی وجود ندارد." />}
+      {data && data.length > 0 && (
+        <p className="text-xs text-slate-500">{filtered.length} گروه پیدا شد</p>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {data?.map((g) => (
+        {filtered.map((g) => (
           <div key={g.id} className="card space-y-2">
             <div className="font-bold">{g.name}</div>
             <p className="text-sm text-slate-400">{g.description || "—"}</p>

@@ -34,6 +34,7 @@ class Account(Base):
     proxy_login: Mapped[str | None] = mapped_column(String(100))
     proxy_password: Mapped[str | None] = mapped_column(String(200))
     proxy_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     warmup_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     polling_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     auto_reply_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -5,8 +5,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
 from app.database import get_db
 from app.models.contact_group import WaGroupCollection, WaGroupCollectionMember
+from app.models.group import WhatsAppGroup
 
 router = APIRouter(prefix="/wa-collections", tags=["wa-collections"])
+
+
+@router.get("/available-groups/{account_id}")
+async def get_available_groups(account_id: str, db: AsyncSession = Depends(get_db)):
+    """Get all WhatsApp groups synced from this account — for use in WA collections."""
+    result = await db.execute(
+        select(WhatsAppGroup)
+        .where(WhatsAppGroup.account_id == uuid.UUID(account_id))
+        .order_by(WhatsAppGroup.name)
+    )
+    groups = result.scalars().all()
+    return [
+        {
+            "id": str(g.id),
+            "group_chat_id": g.green_group_id,
+            "name": g.name,
+            "member_count": g.member_count,
+        }
+        for g in groups
+    ]
 
 
 class CollectionBody(BaseModel):

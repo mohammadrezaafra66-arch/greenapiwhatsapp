@@ -117,11 +117,15 @@ async def run_campaign(campaign_id: str):
                 await db.commit()
 
                 # Per-account per-hour override: if the account has a schedule for this
-                # hour with a custom prompt/template, it takes precedence.
+                # hour with a custom prompt/template/include_products, it takes precedence.
                 from app.services.rate_limiter import get_hour_prompt_for_account
-                hour_gpt_prompt, hour_template = await get_hour_prompt_for_account(str(account.id))
+                hour_gpt_prompt, hour_template, hour_include_products = await get_hour_prompt_for_account(str(account.id))
                 effective_gpt_prompt = hour_gpt_prompt or campaign.gpt_prompt
                 effective_template = hour_template or campaign.message_template
+                effective_include_products = campaign.include_products or hour_include_products
+                # Lazily fetch products if this hour's slot wants them but the campaign didn't.
+                if effective_include_products and not products:
+                    products = await get_products(campaign.product_count)
 
                 # Generate message text
                 if campaign.use_gpt and settings.openai_api_key:
@@ -129,7 +133,7 @@ async def run_campaign(campaign_id: str):
                         first_name=contact.first_name or "",
                         last_name=contact.last_name or "",
                         gpt_prompt=effective_gpt_prompt or "یک پیام تبلیغاتی مختصر بنویس",
-                        products=products if campaign.include_products else None,
+                        products=products if effective_include_products else None,
                         emoji_level=campaign.emoji_level or "medium",
                     )
                 else:

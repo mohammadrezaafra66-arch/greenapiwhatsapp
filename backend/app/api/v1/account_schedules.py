@@ -10,6 +10,40 @@ from app.models.account_send_config import AccountSendConfig
 router = APIRouter(prefix="/account-schedules", tags=["account-schedules"])
 
 
+HOUR_PRESETS = {
+    "morning_energy": {
+        "label": "صبح‌بخیر و انرژی مثبت",
+        "gpt_prompt": "یک پیام صبح‌بخیر انرژی‌بخش و انگیزشی کوتاه فارسی برای مشتری بنویس. شروع پیام باید با سلام و صبح‌بخیر باشد. یک جمله انگیزشی مرتبط با موفقیت در کسب‌وکار اضافه کن.",
+        "example": "صبح‌بخیر {نام} جان! امیدوارم روزتون پر از انرژی و موفقیت باشه 🌅",
+    },
+    "company_intro": {
+        "label": "معرفی شرکت افراکالا",
+        "gpt_prompt": "یک پیام کوتاه معرفی شرکت افراکالا (عمده‌فروشی لوازم خانگی) برای مشتری بنویس. نقاط قوت: قیمت مناسب، تنوع محصول، تحویل سریع.",
+        "example": "سلام {نام} عزیز، افراکالا با بیش از ۲۰۰ برند لوازم خانگی در خدمت شماست 🏠",
+    },
+    "product_showcase": {
+        "label": "معرفی محصولات با قیمت",
+        "gpt_prompt": "یک پیام معرفی محصولات لوازم خانگی با قیمت روز برای مشتری بنویس. محصولات را با قیمت ذکر کن. لحن فروشندگی داشته باشد.",
+        "example": "پیشنهاد ویژه امروز افراکالا: {محصول۱} {قیمت۱} | {محصول۲} {قیمت۲} 🛒",
+    },
+    "follow_up": {
+        "label": "پیگیری و سوال از مشتری",
+        "gpt_prompt": "یک پیام پیگیری دوستانه برای مشتری بنویس. بپرس آیا به محصول خاصی نیاز دارند یا سوالی دارند. لحن صمیمی.",
+        "example": "سلام {نام}، امیدوارم حالتون خوب باشه. آیا در این روزها به لوازم خانگی نیاز دارید؟ 😊",
+    },
+    "discount_offer": {
+        "label": "پیشنهاد تخفیف ویژه",
+        "gpt_prompt": "یک پیام اعلام تخفیف و پیشنهاد ویژه فروش لوازم خانگی بنویس. احساس فوریت ایجاد کن. محصولات درج شده را با قیمت ذکر کن.",
+        "example": "فرصت محدود! تخفیف ویژه تا آخر هفته روی {محصول} 🔥",
+    },
+    "evening_wrap": {
+        "label": "جمع‌بندی پایان روز",
+        "gpt_prompt": "یک پیام کوتاه پایان روز برای مشتری بنویس. یادآوری پیشنهاد روز، آرزوی شب‌بخیر، اعلام ساعات کاری فردا.",
+        "example": "شب‌بخیر {نام} جان! فردا از ساعت ۸ در خدمتیم 🌙",
+    },
+}
+
+
 class ScheduleCreate(BaseModel):
     account_id: str
     hour_start: int
@@ -18,11 +52,34 @@ class ScheduleCreate(BaseModel):
     gpt_prompt: str | None = None
     message_template: str | None = None
     is_active: bool = True
+    include_products: bool = False  # attach products to this hour's messages
 
 
 class DelayUpdate(BaseModel):
     min_delay_seconds: int = 45
     max_delay_seconds: int = 110
+
+
+@router.get("/presets")
+async def get_hour_presets():
+    """Return available hour message presets."""
+    return [
+        {"key": k, "label": v["label"], "example": v["example"], "gpt_prompt": v["gpt_prompt"]}
+        for k, v in HOUR_PRESETS.items()
+    ]
+
+
+@router.post("/{slot_id}/apply-preset")
+async def apply_preset_to_slot(slot_id: str, preset_key: str, db: AsyncSession = Depends(get_db)):
+    """Apply a preset GPT prompt to an existing schedule slot."""
+    if preset_key not in HOUR_PRESETS:
+        raise HTTPException(400, f"Unknown preset: {preset_key}")
+    slot = await db.get(AccountHourSchedule, uuid.UUID(slot_id))
+    if not slot:
+        raise HTTPException(404, "Slot not found")
+    slot.gpt_prompt = HOUR_PRESETS[preset_key]["gpt_prompt"]
+    await db.commit()
+    return {"applied": True, "preset": preset_key, "label": HOUR_PRESETS[preset_key]["label"]}
 
 
 @router.get("/{account_id}")
@@ -52,6 +109,7 @@ async def get_account_schedule(account_id: str, db: AsyncSession = Depends(get_d
                 "gpt_prompt": r.gpt_prompt,
                 "message_template": r.message_template,
                 "is_active": r.is_active,
+                "include_products": r.include_products,
             }
             for r in rows
         ],
@@ -68,6 +126,7 @@ async def create_schedule_slot(body: ScheduleCreate, db: AsyncSession = Depends(
         gpt_prompt=body.gpt_prompt,
         message_template=body.message_template,
         is_active=body.is_active,
+        include_products=body.include_products,
     )
     db.add(slot)
     await db.commit()
@@ -86,6 +145,7 @@ async def update_schedule_slot(slot_id: str, body: ScheduleCreate, db: AsyncSess
     slot.gpt_prompt = body.gpt_prompt
     slot.message_template = body.message_template
     slot.is_active = body.is_active
+    slot.include_products = body.include_products
     await db.commit()
     return {"updated": True}
 

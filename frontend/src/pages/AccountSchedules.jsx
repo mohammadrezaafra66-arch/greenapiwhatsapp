@@ -1,5 +1,5 @@
 import React from "react";
-import { AccountSchedulesApi as Api, Accounts } from "../api.js";
+import { AccountSchedulesApi as Api, Accounts, PresetsApi } from "../api.js";
 import { Spinner, Empty, Modal, useAsync } from "../ui.jsx";
 
 export default function AccountSchedules() {
@@ -129,7 +129,12 @@ export default function AccountSchedules() {
                       <td className="p-2">{s.hour_start}</td>
                       <td className="p-2">{s.hour_end}</td>
                       <td className="p-2">{s.max_per_hour}</td>
-                      <td className="p-2 text-slate-300">{(s.gpt_prompt || "").slice(0, 30)}{(s.gpt_prompt || "").length > 30 ? "…" : ""}</td>
+                      <td className="p-2 text-slate-300">
+                        {(s.gpt_prompt || "").slice(0, 50)}{(s.gpt_prompt || "").length > 50 ? "…" : ""}
+                        {s.include_products && (
+                          <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40 mr-1">🛒 محصولات</span>
+                        )}
+                      </td>
                       <td className="p-2 text-slate-300">{(s.message_template || "").slice(0, 30)}{(s.message_template || "").length > 30 ? "…" : ""}</td>
                       <td className="p-2">
                         <span className={`badge ${s.is_active ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-slate-500/20 text-slate-300 border-slate-500/40"}`}>
@@ -172,9 +177,15 @@ function SlotModal({ slot, accountId, onClose, onDone }) {
     gpt_prompt: slot.gpt_prompt || "",
     message_template: slot.message_template || "",
     is_active: slot.is_active !== undefined ? slot.is_active : true,
+    include_products: slot.include_products ?? false,
   });
   const [saving, setSaving] = React.useState(false);
+  const [presets, setPresets] = React.useState([]);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+
+  React.useEffect(() => {
+    PresetsApi.list().then((r) => setPresets(r || [])).catch(() => setPresets([]));
+  }, []);
 
   const submit = async () => {
     setSaving(true);
@@ -187,6 +198,7 @@ function SlotModal({ slot, accountId, onClose, onDone }) {
         gpt_prompt: f.gpt_prompt || null,
         message_template: f.message_template || null,
         is_active: f.is_active,
+        include_products: f.include_products,
       };
       if (isEdit) await Api.updateSlot(slot.id, body);
       else await Api.createSlot(body);
@@ -208,8 +220,37 @@ function SlotModal({ slot, accountId, onClose, onDone }) {
           <div><label className="label">حداکثر/ساعت</label><input type="number" min="0" className="input" value={f.max_per_hour} onChange={set("max_per_hour")} /></div>
         </div>
         <p className="text-xs text-slate-500 -mt-1">(ساعت تهران، ۰ تا ۲۳)</p>
+
+        {presets.length > 0 && (
+          <div className="space-y-2">
+            <label className="label">پیش‌نویس‌های آماده</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {presets.map((p) => {
+                const selected = f.gpt_prompt && f.gpt_prompt === p.gpt_prompt;
+                return (
+                  <div
+                    key={p.key}
+                    onClick={() => setF({ ...f, gpt_prompt: p.gpt_prompt })}
+                    className={`card cursor-pointer hover:border-emerald-500/50 transition ${selected ? "border-emerald-500 ring-1 ring-emerald-500" : ""}`}
+                  >
+                    <div className="font-bold text-sm">{p.label}</div>
+                    <div className="text-xs text-slate-400 mt-1">{p.example}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-xs text-slate-500">
+              💡 مثال: ساعت ۸-۹ پیش‌نویس «صبح‌بخیر» → پیام انگیزشی؛ ساعت ۱۱-۱۲ پیش‌نویس «محصولات با قیمت» + تیک «افزودن محصولات» → قیمت لحظه‌ای درج می‌شود.
+            </p>
+          </div>
+        )}
+
         <div><label className="label">توضیح برای هوش مصنوعی (اختیاری)</label><textarea className="input h-20" value={f.gpt_prompt} onChange={set("gpt_prompt")} /></div>
         <div><label className="label">قالب پیام (اختیاری)</label><textarea className="input h-20" value={f.message_template} onChange={set("message_template")} /></div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={f.include_products} onChange={set("include_products")} />
+          افزودن محصولات به پیام
+        </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={f.is_active} onChange={set("is_active")} />
           فعال

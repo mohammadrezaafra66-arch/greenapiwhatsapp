@@ -26,6 +26,7 @@ export const Accounts = {
   logout: (id) => http.post(`/accounts/${id}/logout`).then((r) => r.data),
   updateAutoReply: (id, payload) =>
     http.put(`/accounts/${id}/auto-reply`, payload).then((r) => r.data),
+  setDefault: (id) => http.post(`/accounts/${id}/set-default`).then((r) => r.data),
   queue: (id) => http.get(`/accounts/${id}/queue`).then((r) => r.data),
   clearQueue: (id) => http.delete(`/accounts/${id}/queue`).then((r) => r.data),
   remove: (id) => http.delete(`/accounts/${id}`).then((r) => r.data),
@@ -186,6 +187,14 @@ export const WaCollectionsApi = {
   addGroup: (id, body) => http.post(`/wa-collections/${id}/groups`, body).then((r) => r.data),
   removeGroup: (id, chat_id) => http.delete(`/wa-collections/${id}/groups/${encodeURIComponent(chat_id)}`).then((r) => r.data),
   groups: (id) => http.get(`/wa-collections/${id}/groups`).then((r) => r.data),
+  availableGroups: (accountId) => http.get(`/wa-collections/available-groups/${accountId}`).then((r) => r.data),
+};
+
+// ── Hour-schedule presets ──────────────────────────────────
+export const PresetsApi = {
+  list: () => http.get("/account-schedules/presets").then((r) => r.data),
+  applyToSlot: (slotId, presetKey) =>
+    http.post(`/account-schedules/${slotId}/apply-preset?preset_key=${presetKey}`).then((r) => r.data),
 };
 
 // ── Reporting ──────────────────────────────────────────────

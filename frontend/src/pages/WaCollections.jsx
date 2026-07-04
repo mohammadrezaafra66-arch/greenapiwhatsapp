@@ -101,8 +101,10 @@ function GroupsModal({ collection, onClose, onDone }) {
   const { data: current, loading, error, reload } = useAsync(() => Api.groups(collection.id), [collection.id]);
   const [accounts, setAccounts] = React.useState([]);
   const [accountId, setAccountId] = React.useState("");
-  const [waGroups, setWaGroups] = React.useState(null);
+  const [syncedGroups, setSyncedGroups] = React.useState(null);
+  const [selected, setSelected] = React.useState([]);
   const [syncing, setSyncing] = React.useState(false);
+  const [adding, setAdding] = React.useState(false);
   const [manual, setManual] = React.useState({ group_chat_id: "", group_name: "" });
 
   React.useEffect(() => {
@@ -114,13 +116,15 @@ function GroupsModal({ collection, onClose, onDone }) {
       .catch(() => {});
   }, []);
 
+  // Step 1: sync WhatsApp groups then load available groups
   const sync = async () => {
     if (!accountId) return alert("ابتدا یک حساب انتخاب کنید");
     setSyncing(true);
     try {
       await GroupsApi.sync(accountId);
-      const list = await GroupsApi.list();
-      setWaGroups(list);
+      const gs = await Api.availableGroups(accountId);
+      setSyncedGroups(gs);
+      setSelected([]);
     } catch (e) {
       alert(e?.response?.data?.detail || e.message);
     } finally {
@@ -128,14 +132,29 @@ function GroupsModal({ collection, onClose, onDone }) {
     }
   };
 
-  const addGroup = async (group_chat_id, group_name) => {
-    if (!group_chat_id) return alert("شناسه گروه لازم است");
+  const toggle = (chatId) => {
+    setSelected((prev) =>
+      prev.includes(chatId) ? prev.filter((c) => c !== chatId) : [...prev, chatId]
+    );
+  };
+
+  // Step 2: add all selected groups to the collection
+  const addSelected = async () => {
+    if (selected.length === 0) return alert("ابتدا گروهی را انتخاب کنید");
+    setAdding(true);
     try {
-      await Api.addGroup(collection.id, { group_chat_id, group_name });
+      const chosen = (syncedGroups || []).filter((g) => selected.includes(g.group_chat_id));
+      for (const g of chosen) {
+        await Api.addGroup(collection.id, { group_chat_id: g.group_chat_id, group_name: g.name });
+      }
       await reload();
       await onDone();
+      setSelected([]);
+      alert(`${chosen.length} گروه افزوده شد`);
     } catch (e) {
       alert(e?.response?.data?.detail || e.message);
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -150,8 +169,16 @@ function GroupsModal({ collection, onClose, onDone }) {
   };
 
   const addManual = async () => {
-    await addGroup(manual.group_chat_id.trim(), manual.group_name.trim());
-    setManual({ group_chat_id: "", group_name: "" });
+    const group_chat_id = manual.group_chat_id.trim();
+    if (!group_chat_id) return alert("شناسه گروه لازم است");
+    try {
+      await Api.addGroup(collection.id, { group_chat_id, group_name: manual.group_name.trim() });
+      await reload();
+      await onDone();
+      setManual({ group_chat_id: "", group_name: "" });
+    } catch (e) {
+      alert(e?.response?.data?.detail || e.message);
+    }
   };
 
   return (
@@ -177,6 +204,8 @@ function GroupsModal({ collection, onClose, onDone }) {
 
         <div className="border-t border-slate-700 pt-4 space-y-2">
           <h4 className="font-bold text-sm">افزودن از واتساپ</h4>
+
+          {/* Step 1: pick account + sync */}
           <div className="flex gap-2">
             <select className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
               {accounts.length === 0 && <option value="">حسابی موجود نیست</option>}
@@ -185,21 +214,32 @@ function GroupsModal({ collection, onClose, onDone }) {
               ))}
             </select>
             <button className="btn-secondary whitespace-nowrap" disabled={syncing} onClick={sync}>
-              {syncing ? "..." : "همگام‌سازی گروه‌های واتساپ"}
+              {syncing ? "در حال همگام‌سازی..." : "همگام‌سازی گروه‌ها"}
             </button>
           </div>
-          {waGroups && waGroups.length === 0 && <p className="text-slate-500 text-sm">گروهی یافت نشد.</p>}
-          {waGroups && waGroups.length > 0 && (
-            <div className="space-y-1 max-h-52 overflow-y-auto">
-              {waGroups.map((g) => (
-                <div key={g.id} className="flex items-center gap-2 text-sm border-b border-slate-800 py-1">
-                  <span className="font-bold">{g.name || "بدون نام"}</span>
-                  <span className="text-slate-500 text-xs" dir="ltr">{g.green_group_id}</span>
-                  {g.member_count != null && <span className="text-slate-500">{g.member_count} عضو</span>}
-                  <button className="text-emerald-400 hover:underline mr-auto" onClick={() => addGroup(g.green_group_id, g.name)}>افزودن</button>
-                </div>
-              ))}
-            </div>
+
+          {/* Step 2: checkbox list of synced groups */}
+          {syncedGroups && syncedGroups.length === 0 && <p className="text-slate-500 text-sm">گروهی یافت نشد.</p>}
+          {syncedGroups && syncedGroups.length > 0 && (
+            <>
+              <div className="space-y-1 max-h-52 overflow-y-auto border border-slate-700 rounded-lg p-2">
+                {syncedGroups.map((g) => (
+                  <label key={g.group_chat_id} className="flex items-center gap-2 cursor-pointer border-b border-slate-800 py-1 last:border-0">
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(g.group_chat_id)}
+                      onChange={() => toggle(g.group_chat_id)}
+                    />
+                    <span>{g.name}</span>
+                    <span className="text-xs text-slate-400">{g.member_count} عضو</span>
+                    <span className="text-[10px] text-slate-500 font-mono mr-auto" dir="ltr">{g.group_chat_id}</span>
+                  </label>
+                ))}
+              </div>
+              <button className="btn-primary w-full" disabled={adding} onClick={addSelected}>
+                {adding ? "در حال افزودن..." : `افزودن گروه‌های انتخابی (${selected.length})`}
+              </button>
+            </>
           )}
         </div>
 

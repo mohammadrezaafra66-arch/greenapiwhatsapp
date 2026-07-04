@@ -104,8 +104,9 @@ async def get_max_per_hour_for_account(account_id: str) -> int:
     return get_max_per_hour()
 
 
-async def get_hour_prompt_for_account(account_id: str) -> tuple[str | None, str | None]:
-    """Returns (gpt_prompt, message_template) for account at current hour, or (None, None)."""
+async def get_hour_prompt_for_account(account_id: str) -> tuple[str | None, str | None, bool]:
+    """Returns (gpt_prompt, message_template, include_products) for account at current
+    hour, or (None, None, False) when no active slot matches."""
     from app.database import AsyncSessionLocal
     from app.models.account_hour_schedule import AccountHourSchedule
     from sqlalchemy import select
@@ -122,8 +123,8 @@ async def get_hour_prompt_for_account(account_id: str) -> tuple[str | None, str 
         )
         row = result.scalar_one_or_none()
         if row:
-            return row.gpt_prompt, row.message_template
-    return None, None
+            return row.gpt_prompt, row.message_template, bool(row.include_products)
+    return None, None, False
 
 
 async def can_send(account_id: str) -> bool:

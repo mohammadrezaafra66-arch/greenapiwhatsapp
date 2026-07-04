@@ -15,4 +15,5 @@ class AccountHourSchedule(Base):
     gpt_prompt: Mapped[str | None] = mapped_column(Text)
     message_template: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    include_products: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

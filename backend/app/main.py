@@ -214,6 +214,15 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V6] {e}")
+        ddl_v7 = [
+            "ALTER TABLE account_hour_schedules ADD COLUMN IF NOT EXISTS include_products boolean DEFAULT false",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_default boolean DEFAULT false",
+        ]
+        for stmt in ddl_v7:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V7] {e}")
     yield
 
 app = FastAPI(title="Afrakala WhatsApp Sender", version="2.0.0", lifespan=lifespan)

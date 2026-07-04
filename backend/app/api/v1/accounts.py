@@ -38,6 +38,8 @@ async def list_accounts(db: AsyncSession = Depends(get_db)):
             "warmup_enabled": a.warmup_enabled,
             "auto_reply_enabled": a.auto_reply_enabled,
             "auto_reply_outside_hours": a.auto_reply_outside_hours,
+            "is_default": a.is_default,
+            "proxy_enabled": a.proxy_enabled,
         }
         for a in accounts
     ]
@@ -198,6 +200,17 @@ async def get_blocked_contacts(account_id: str, db: AsyncSession = Depends(get_d
             db.add(WaBlockedContact(account_id=uuid.UUID(account_id), phone=phone))
     await db.commit()
     return {"count": len(blocked), "blocked": blocked}
+
+
+@router.post("/{account_id}/set-default")
+async def set_default_account(account_id: str, db: AsyncSession = Depends(get_db)):
+    """Set one account as default (used for single-account operations like checkWhatsapp)."""
+    from sqlalchemy import update
+    account = await _get_account(account_id, db)
+    await db.execute(update(Account).values(is_default=False))
+    account.is_default = True
+    await db.commit()
+    return {"default_account": str(account.id), "name": account.name}
 
 
 @router.post("/{account_id}/check-whatsapp-bulk")

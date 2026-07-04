@@ -167,6 +167,10 @@ export default function Dashboard() {
     (a) => a.quota_exceeded_at && now - new Date(a.quota_exceeded_at).getTime() < 24 * 3600 * 1000
   );
 
+  // banned accounts + total sent today (Feature 32 — multi-account dashboard)
+  const bannedAccounts = detail.filter((a) => a.status === "banned");
+  const totalSentToday = detail.reduce((s, a) => s + (a.sent_today || 0), 0);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -180,6 +184,12 @@ export default function Dashboard() {
       {quotaHit.map((a) => (
         <div key={a.id} className="card bg-red-500/10 border-red-500/40 text-red-300">
           ⚠️ حساب {a.name} به سقف ارسال رسیده — تا فردا صبر کنید
+        </div>
+      ))}
+
+      {bannedAccounts.map((a) => (
+        <div key={`ban-${a.id}`} className="card bg-red-500/10 border-red-500/40 text-red-300">
+          ⚠️ حساب {a.name} مسدود شده — فوراً بررسی کنید
         </div>
       ))}
 
@@ -390,31 +400,61 @@ export default function Dashboard() {
           {detail.length === 0 ? (
             <p className="text-slate-500 text-sm">حسابی ثبت نشده است.</p>
           ) : (
-            <div className="space-y-3 max-h-96 overflow-y-auto">
-              {detail.map((a) => (
-                <div key={a.id} className="rounded-lg border border-slate-700 p-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="flex items-center gap-2 font-bold">
-                      <span className={`inline-block w-2.5 h-2.5 rounded-full ${STATUS_DOT[a.status] || "bg-slate-400"} ${a.status === "active" ? "animate-pulse" : ""}`} />
-                      {a.name}
-                      {a.warmup_enabled && <span className="badge bg-orange-500/20 text-orange-300 border-orange-500/40">🔥 گرم‌سازی</span>}
-                    </span>
-                    <span className="text-xs text-slate-400">{STATUS_FA[a.status] || a.status}</span>
-                  </div>
-                  <p className="text-xs text-slate-500 mb-2">{a.phone || "بدون شماره"}</p>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-400">ارسال امروز</span>
-                    <span className="font-bold"><AnimatedNumber value={a.sent_today} /> / {fa(a.daily_limit)}</span>
-                  </div>
-                  <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="bg-emerald-500 h-2 rounded-full transition-all duration-700"
-                      style={{ width: `${a.daily_limit > 0 ? Math.min(100, (a.sent_today / a.daily_limit) * 100) : 0}%` }}
-                    />
-                  </div>
+            <>
+              {/* summary line + active/total progress bar */}
+              <div className="mb-3">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-slate-300 font-bold">
+                    <AnimatedNumber value={activeCount} /> حساب فعال از {fa(totalCount)} کل
+                  </span>
+                  <span className="text-slate-500">
+                    {fa(totalCount > 0 ? Math.round((activeCount / totalCount) * 100) : 0)}٪
+                  </span>
                 </div>
-              ))}
-            </div>
+                <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-emerald-500 h-2 rounded-full transition-all duration-700"
+                    style={{ width: `${totalCount > 0 ? (activeCount / totalCount) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {detail.map((a) => (
+                  <div key={a.id} className="rounded-lg border border-slate-700 p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="flex items-center gap-2 font-bold flex-wrap">
+                        <span className={`inline-block w-2.5 h-2.5 rounded-full ${STATUS_DOT[a.status] || "bg-slate-400"} ${a.status === "active" ? "animate-pulse" : ""}`} />
+                        {a.name}
+                        {a.is_default && <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">پیش‌فرض ⭐</span>}
+                        {a.warmup_enabled && <span className="badge bg-orange-500/20 text-orange-300 border-orange-500/40">🔥 گرم‌سازی</span>}
+                        {a.days_active != null && <span className="badge bg-slate-600/40 text-slate-300 border-slate-500/40">{fa(a.days_active)} روز فعال</span>}
+                      </span>
+                      <span className="text-xs text-slate-400">{STATUS_FA[a.status] || a.status}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-2">{a.phone || "بدون شماره"}</p>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-400">ارسال امروز</span>
+                      <span className="font-bold"><AnimatedNumber value={a.sent_today} /> / {fa(a.daily_limit)}</span>
+                    </div>
+                    <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-emerald-500 h-2 rounded-full transition-all duration-700"
+                        style={{ width: `${a.daily_limit > 0 ? Math.min(100, (a.sent_today / a.daily_limit) * 100) : 0}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* total sent today across all accounts */}
+              <div className="mt-3 pt-3 border-t border-slate-700 flex items-center justify-between">
+                <span className="text-slate-400 text-sm">مجموع ارسال امروز</span>
+                <span className="text-2xl font-bold text-emerald-400">
+                  <AnimatedNumber value={totalSentToday} />
+                </span>
+              </div>
+            </>
           )}
         </div>
       </div>
