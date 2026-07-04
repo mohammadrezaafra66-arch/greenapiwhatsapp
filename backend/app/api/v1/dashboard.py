@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -73,6 +73,85 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
             "max_per_hour": max_per_hour,
             "is_sending_allowed": max_per_hour > 0,
         }
+    }
+
+
+@router.post("/validate-campaign")
+async def validate_campaign(
+    contact_count: int,
+    account_ids: list[str] = Query(default=[]),
+    min_delay: int = 45,
+    max_delay: int = 110,
+    hours_available: int = 14,  # e.g. 08:00-22:00 = 14 hours
+    db: AsyncSession = Depends(get_db),
+):
+    """Pre-send feasibility analysis with color code, warnings, recommendations."""
+    import uuid as _uuid
+    import math
+    from app.services.rate_limiter import DEFAULT_SCHEDULE
+
+    accounts = []
+    for aid in account_ids:
+        try:
+            a = await db.get(Account, _uuid.UUID(aid))
+        except Exception:
+            a = None
+        if a and a.status == AccountStatus.active:
+            accounts.append(a)
+
+    if not accounts:
+        return {"feasible": False, "reason": "هیچ حساب فعالی انتخاب نشده", "color": "red",
+                "status": "❌ هیچ حساب فعالی انتخاب نشده", "summary": {}, "warnings": [], "recommendations": []}
+
+    avg_limit = sum(a.computed_daily_limit for a in accounts) / len(accounts)
+    total_daily_capacity = sum(min(a.computed_daily_limit, a.max_daily_absolute or 200) for a in accounts)
+    avg_delay = (min_delay + max_delay) / 2
+    msgs_per_hour = 3600 / avg_delay if avg_delay else 0
+    days_needed = math.ceil(contact_count / total_daily_capacity) if total_daily_capacity > 0 else 999
+    hours_needed_raw = (contact_count * avg_delay) / 3600
+
+    warnings = []
+    if total_daily_capacity < 10:
+        warnings.append("⚠️ محدودیت روزانه بسیار پایین — حساب‌ها نیاز به warm-up دارند")
+    if avg_delay < 30:
+        warnings.append("⚠️ تاخیر کمتر از ۳۰ ثانیه خطر بلاک دارد")
+    if contact_count / len(accounts) > 100:
+        warnings.append(f"⚠️ هر حساب باید {contact_count // len(accounts)} پیام بفرستد — در چند روز تقسیم کنید")
+    if days_needed > 30:
+        warnings.append(f"⛔ با این تنظیمات {days_needed} روز طول می‌کشد")
+
+    recommendations = []
+    if days_needed > 7 and total_daily_capacity > 0:
+        per_acc = total_daily_capacity / len(accounts)
+        extra = math.ceil(contact_count / (7 * per_acc)) - len(accounts) if per_acc else 0
+        if extra > 0:
+            recommendations.append(f"💡 برای تکمیل در ۷ روز: {extra} حساب اضافی نیاز دارید")
+    if avg_delay < 45:
+        recommendations.append("💡 تاخیر را به حداقل ۴۵ ثانیه افزایش دهید")
+
+    if days_needed <= 7 and len(warnings) == 0:
+        color, feasible, status = "green", True, "✅ تنظیمات مناسب است"
+    elif days_needed <= 30 and not any("⛔" in w for w in warnings):
+        color, feasible, status = "amber", True, "⚠️ ممکن است اما نیاز به بررسی دارد"
+    else:
+        color, feasible, status = "red", False, "❌ تنظیمات مناسب نیست — تغییر لازم است"
+
+    return {
+        "feasible": feasible,
+        "color": color,
+        "status": status,
+        "summary": {
+            "contact_count": contact_count,
+            "active_accounts": len(accounts),
+            "total_daily_capacity": total_daily_capacity,
+            "avg_daily_per_account": round(avg_limit, 1),
+            "avg_delay_seconds": avg_delay,
+            "msgs_per_hour_per_account": round(msgs_per_hour, 1),
+            "estimated_days": days_needed,
+            "estimated_hours_raw": round(hours_needed_raw, 1),
+        },
+        "warnings": warnings,
+        "recommendations": recommendations,
     }
 
 

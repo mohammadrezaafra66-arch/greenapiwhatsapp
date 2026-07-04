@@ -21,6 +21,12 @@ const TYPE_TABS = [
   { key: "broadcast", label: "📢 انتشار" },
 ];
 
+const ADMIN_TABS = [
+  { label: "همه", val: null },
+  { label: "👑 ادمین", val: true },
+  { label: "عضو عادی", val: false },
+];
+
 const fa = (n) => Number(n || 0).toLocaleString("fa-IR");
 
 export default function Groups() {
@@ -29,6 +35,7 @@ export default function Groups() {
   const [error, setError] = React.useState(null);
   const [search, setSearch] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState("all");
+  const [isAdminFilter, setIsAdminFilter] = React.useState(null);
   const [minMembers, setMinMembers] = React.useState(0);
   const [accounts, setAccounts] = React.useState([]);
   const [selectedAccount, setSelectedAccount] = React.useState("");
@@ -36,6 +43,7 @@ export default function Groups() {
   const [showAdd, setShowAdd] = React.useState(false);
   const [send, setSend] = React.useState(null);
   const [busy, setBusy] = React.useState(null);
+  const [addMembers, setAddMembers] = React.useState(null);
 
   const loadGroups = React.useCallback(async () => {
     setLoading(true);
@@ -43,6 +51,7 @@ export default function Groups() {
     try {
       const params = {};
       if (typeFilter !== "all") params.chat_type = typeFilter;
+      if (isAdminFilter !== null) params.is_admin = isAdminFilter;
       if (minMembers > 0) params.min_members = minMembers;
       setGroups(await Api.list(params));
     } catch (e) {
@@ -50,7 +59,7 @@ export default function Groups() {
     } finally {
       setLoading(false);
     }
-  }, [typeFilter, minMembers]);
+  }, [typeFilter, isAdminFilter, minMembers]);
 
   React.useEffect(() => {
     AccApi.list()
@@ -137,6 +146,17 @@ export default function Groups() {
             </button>
           ))}
         </div>
+        <div className="flex gap-1 bg-slate-800 rounded-lg p-1">
+          {ADMIN_TABS.map((t) => (
+            <button
+              key={String(t.val)}
+              onClick={() => setIsAdminFilter(t.val)}
+              className={`px-3 py-1 rounded text-sm ${isAdminFilter === t.val ? "bg-brand text-white" : "text-slate-400 hover:text-slate-200"}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
         <select className="input w-auto" value={minMembers} onChange={(e) => setMinMembers(Number(e.target.value))}>
           {MEMBER_FILTERS.map((f) => <option key={f.min} value={f.min}>{f.label}</option>)}
         </select>
@@ -159,7 +179,10 @@ export default function Groups() {
           return (
             <div key={g.id} className="card space-y-2">
               <div className="flex justify-between items-start gap-2">
-                <h3 className="font-bold text-sm leading-tight">{g.name}</h3>
+                <h3 className="font-bold text-sm leading-tight">
+                  {g.name}
+                  {g.is_admin && <span className="text-xs text-amber-400 font-bold mr-2">👑 ادمین</span>}
+                </h3>
                 <span className={`text-xs whitespace-nowrap ${t.cls}`}>{t.icon} {t.label}</span>
               </div>
               <div className="flex items-center gap-2">
@@ -180,6 +203,11 @@ export default function Groups() {
                 <button className="btn-secondary flex-1 text-xs" onClick={() => setSend(g)}>ارسال پیام</button>
                 <button className="btn-secondary text-xs px-2" title="کپی شناسه" onClick={() => copyId(g.group_chat_id)}>📋</button>
               </div>
+              {g.is_admin && (
+                <button className="btn-secondary text-xs w-full" onClick={() => setAddMembers(g)}>
+                  ➕ افزودن اعضا از اکسل
+                </button>
+              )}
             </div>
           );
         })}
@@ -187,7 +215,61 @@ export default function Groups() {
 
       {showAdd && <AddGroupModal onClose={() => setShowAdd(false)} onDone={loadGroups} />}
       {send && <SendModal group={send} onClose={() => setSend(null)} />}
+      {addMembers && <AddMembersModal group={addMembers} onClose={() => setAddMembers(null)} />}
     </div>
+  );
+}
+
+function AddMembersModal({ group, onClose }) {
+  const [membersFile, setMembersFile] = React.useState(null);
+  const [running, setRunning] = React.useState(false);
+  const [result, setResult] = React.useState(null);
+
+  const start = async () => {
+    if (!membersFile) return alert("ابتدا فایل اکسل را انتخاب کنید");
+    if (!group.account_id) return alert("حساب گروه مشخص نیست");
+    setRunning(true);
+    try {
+      const r = await Api.importExcelToGroup(group.group_chat_id, group.account_id, membersFile);
+      setResult(r);
+    } catch (e) {
+      alert(e?.response?.data?.detail || e.message);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <Modal title={`افزودن اعضا به ${group.name}`} onClose={onClose}>
+      <div className="space-y-3">
+        <p className="text-xs text-slate-400">
+          فایل اکسل با ستون phone آپلود کنید. اعضا به‌صورت خودکار اضافه می‌شوند. فقط در گروه‌هایی که ادمین هستید کار می‌کند.
+        </p>
+        <input
+          type="file"
+          accept=".xlsx,.xls"
+          onChange={(e) => setMembersFile(e.target.files[0])}
+          className="input"
+        />
+        <button className="btn-primary w-full" disabled={running} onClick={start}>
+          {running ? "در حال افزودن..." : "شروع افزودن"}
+        </button>
+        {result && (
+          <div className="space-y-2">
+            <p className="text-sm">
+              ✅ {fa(result.added)} نفر اضافه شد | ❌ {fa(result.failed)} خطا
+            </p>
+            {Array.isArray(result.errors) && result.errors.length > 0 && (
+              <div className="text-xs text-red-400 space-y-1">
+                {result.errors.slice(0, 5).map((err, i) => (
+                  <p key={i}>{typeof err === "string" ? err : JSON.stringify(err)}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 

@@ -12,6 +12,15 @@ export const Dashboard = {
   deliverability: () => http.get("/dashboard/deliverability").then((r) => r.data),
   updateRateLimits: (schedule) =>
     http.put("/dashboard/rate-limits", schedule).then((r) => r.data),
+  // V8 F36 — pre-send feasibility check. account_ids repeats in the query string.
+  validateCampaign: ({ contact_count, account_ids = [], min_delay = 45, max_delay = 110 }) => {
+    const p = new URLSearchParams();
+    p.append("contact_count", contact_count);
+    p.append("min_delay", min_delay);
+    p.append("max_delay", max_delay);
+    account_ids.forEach((id) => p.append("account_ids", id));
+    return http.post(`/dashboard/validate-campaign?${p.toString()}`).then((r) => r.data);
+  },
 };
 
 // ── Accounts ───────────────────────────────────────────
@@ -28,6 +37,8 @@ export const Accounts = {
   updateAutoReply: (id, payload) =>
     http.put(`/accounts/${id}/auto-reply`, payload).then((r) => r.data),
   setDefault: (id) => http.post(`/accounts/${id}/set-default`).then((r) => r.data),
+  dailyLimitDetail: (id) => http.get(`/accounts/${id}/daily-limit-detail`).then((r) => r.data),
+  updateLimits: (id, body) => http.put(`/accounts/${id}/limits`, body).then((r) => r.data),
   queue: (id) => http.get(`/accounts/${id}/queue`).then((r) => r.data),
   clearQueue: (id) => http.delete(`/accounts/${id}/queue`).then((r) => r.data),
   remove: (id) => http.delete(`/accounts/${id}`).then((r) => r.data),
@@ -100,6 +111,25 @@ export const Groups = {
     http.post(`/groups/${id}/send`, { message }).then((r) => r.data),
   info: (id) => http.get(`/groups/${id}/info`).then((r) => r.data),
   sync: (accountId) => http.post(`/groups/sync/${accountId}`).then((r) => r.data),
+  // V8 F40 — add members to an admin group. group_id is the chatId (…@g.us).
+  autoAddMembers: (group_id, account_id, phones) => {
+    const p = new URLSearchParams();
+    p.append("group_id", group_id);
+    p.append("account_id", account_id);
+    phones.forEach((ph) => p.append("contact_phones", ph));
+    return http.post(`/groups/auto-add-members?${p.toString()}`).then((r) => r.data);
+  },
+  importExcelToGroup: (group_id, account_id, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const p = new URLSearchParams({ group_id, account_id });
+    return http
+      .post(`/groups/import-excel-to-group?${p.toString()}`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 120000,
+      })
+      .then((r) => r.data);
+  },
 };
 
 // ── Statuses ───────────────────────────────────────────

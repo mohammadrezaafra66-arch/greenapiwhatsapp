@@ -1,6 +1,6 @@
 import uuid, enum
 from datetime import datetime, date
-from sqlalchemy import String, Integer, Boolean, Date, DateTime, Text, Enum as SAEnum
+from sqlalchemy import String, Integer, Float, Boolean, Date, DateTime, Text, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 from app.database import Base
@@ -25,6 +25,10 @@ class Account(Base):
     received_yesterday: Mapped[int] = mapped_column(Integer, default=0)
     quick_replies_yesterday: Mapped[int] = mapped_column(Integer, default=0)
     days_active: Mapped[int] = mapped_column(Integer, default=0)
+    # V8 Feature 39 — Meta-standard per-account send limits
+    max_daily_absolute: Mapped[int] = mapped_column(Integer, default=200)
+    incoming_ratio_multiplier: Mapped[float] = mapped_column(Float, default=0.5)
+    max_sends_per_minute: Mapped[float] = mapped_column(Float, default=2.0)
     last_reset_date: Mapped[date | None] = mapped_column(Date)
     banned_at: Mapped[datetime | None] = mapped_column(DateTime)
     ban_reason: Mapped[str | None] = mapped_column(Text)
@@ -46,16 +50,16 @@ class Account(Base):
 
     @property
     def computed_daily_limit(self) -> int:
-        base = min(self.days_active, 10)
-        incoming = min(self.received_yesterday, 20)
-        replies = min(self.quick_replies_yesterday * 5, 50)
-        warmup = base + incoming + replies
-        # The manually-configured daily_limit column acts as a floor, so an
-        # account that isn't warming up (days_active=0) can still send up to its
-        # configured limit instead of being stuck at 0.
-        limit = max(warmup, self.daily_limit or 0)
-        # Anti-ban: during the first week of warm-up, hard-cap at 5 messages/day
-        # (overriding the configured floor) to keep a fresh account under the radar.
-        if (self.days_active or 0) < 7:
-            return min(limit, 5)
-        return limit
+        """Daily send limit following Meta best practices (V8 Feature 39)."""
+        days = self.days_active or 0
+        absolute = self.max_daily_absolute or 200
+        # Week 1 (warm-up): hard-cap at 5 messages/day to keep a fresh account
+        # under the radar — this overrides the formula and the configured limit.
+        if days < 7:
+            return min(5, absolute)
+        base = min(days, 10)
+        incoming = min(int((self.received_yesterday or 0) * (self.incoming_ratio_multiplier or 0.5)), 20)
+        replies = min((self.quick_replies_yesterday or 0) * 5, 50)
+        calculated = base + incoming + replies
+        # Never exceed the absolute per-account maximum.
+        return min(calculated, absolute)

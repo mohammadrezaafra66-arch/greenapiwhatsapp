@@ -135,9 +135,68 @@ async def clear_product_mentions(db: AsyncSession = Depends(get_db)):
 
 # ── Products (for the Products page) ───────────────────────
 @router.get("/products")
-async def list_products():
-    from app.services.price_service import get_products
-    return await get_products(200)
+async def get_products_by_brand():
+    """Products grouped by brand, sorted cheap→expensive within each brand (Feature 43).
+    Degrades gracefully (brand → 'سایر', empty list) if Supabase is unreachable."""
+    import httpx
+    from app.config import settings
+
+    headers = {
+        "apikey": settings.supabase_anon_key,
+        "Authorization": f"Bearer {settings.supabase_anon_key}",
+    }
+    products_url = (
+        f"{settings.supabase_url}/rest/v1/products"
+        f"?is_active=eq.true&stock_status=neq.unavailable"
+        f"&select=id,name,model,capacity,brand_id,category"
+    )
+    brands_url = f"{settings.supabase_url}/rest/v1/brands?select=id,name&is_active=eq.true"
+
+    products, brands = [], {}
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            pr = await c.get(products_url, headers=headers)
+            products = pr.json() if pr.status_code == 200 else []
+            try:
+                br = await c.get(brands_url, headers=headers)
+                if br.status_code == 200:
+                    brands = {b["id"]: b["name"] for b in br.json()}
+            except Exception:
+                brands = {}  # brands table may not be granted to anon — fall back
+    except Exception as e:
+        print(f"[Reporting] products-by-brand fetch failed: {e}")
+        return []
+
+    # Prices
+    price_map = {}
+    try:
+        prices_url = f"{settings.supabase_url}/rest/v1/product_computed_prices_public?select=product_id,rounded_sale_price"
+        async with httpx.AsyncClient(timeout=10) as c:
+            pr2 = await c.get(prices_url, headers=headers)
+            if pr2.status_code == 200:
+                for row in pr2.json():
+                    price_map[row["product_id"]] = row.get("rounded_sale_price")
+    except Exception:
+        pass
+
+    grouped = {}
+    for p in products:
+        brand_name = brands.get(p.get("brand_id", ""), "سایر")
+        price = price_map.get(p["id"])
+        grouped.setdefault(brand_name, []).append({
+            "id": p["id"],
+            "name": p.get("name", ""),
+            "model": p.get("model", ""),
+            "capacity": p.get("capacity", ""),
+            "price": price,
+            "price_formatted": f"{price:,}" if price else None,
+        })
+
+    result = []
+    for brand_name in sorted(grouped.keys()):
+        items = sorted(grouped[brand_name], key=lambda x: (x["price"] is None, x["price"] or 0))
+        result.append({"brand": brand_name, "product_count": len(items), "products": items})
+    return result
 
 
 # ── Product labels (self-hosted Supabase) ──────────────────

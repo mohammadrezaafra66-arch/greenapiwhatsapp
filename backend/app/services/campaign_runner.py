@@ -16,14 +16,145 @@ NO_ACCOUNT_REASON = "هیچ اکانت فعالی متصل نیست — کمپی
 WINDOW_WAIT_REASON = "خارج از بازه مجاز ارسال این اکانت — ادامه خودکار در بازه بعدی"
 
 
+async def _deliver_message(db, campaign, cc, contact, account, products, poll_options, buttons):
+    """Generate + send one message for (cc, contact) using `account`; mutates state
+    and commits. Returns the (possibly lazily-fetched) products list for reuse."""
+    try:
+        cc.status = MessageStatus.generating
+        await db.commit()
+
+        # Per-account per-hour override: if the account has a schedule for this
+        # hour with a custom prompt/template/include_products, it takes precedence.
+        from app.services.rate_limiter import get_hour_prompt_for_account
+        hour_gpt_prompt, hour_template, hour_include_products = await get_hour_prompt_for_account(str(account.id))
+        effective_gpt_prompt = hour_gpt_prompt or campaign.gpt_prompt
+        effective_template = hour_template or campaign.message_template
+        effective_include_products = campaign.include_products or hour_include_products
+        # Lazily fetch products if this hour's slot wants them but the campaign didn't.
+        if effective_include_products and not products:
+            products = await get_products(campaign.product_count)
+
+        # Generate message text
+        if campaign.use_gpt and settings.openai_api_key:
+            message = await generate_message(
+                first_name=contact.first_name or "",
+                last_name=contact.last_name or "",
+                gpt_prompt=effective_gpt_prompt or "یک پیام تبلیغاتی مختصر بنویس",
+                products=products if effective_include_products else None,
+                emoji_level=campaign.emoji_level or "medium",
+                show_prices=campaign.show_product_prices,
+            )
+        else:
+            message = (effective_template or "سلام {{first_name}} جان!")
+            message = message.replace("{{first_name}}", contact.first_name or "")
+            message = message.replace("{{last_name}}", contact.last_name or "")
+
+        # Append seller signature if configured
+        if campaign.append_seller_name and campaign.seller_name:
+            message += f"\n\n👤 {campaign.seller_name}"
+        if campaign.append_seller_phone and campaign.seller_phone:
+            message += f"\n📱 {campaign.seller_phone}"
+            if campaign.seller_phone2:
+                message += f"\n☎️ {campaign.seller_phone2}"
+
+        # Append Shamsi (Jalali) date if configured
+        if campaign.append_date:
+            try:
+                import jdatetime
+                message += f"\n\n📅 {jdatetime.date.today().strftime('%Y/%m/%d')}"
+            except Exception:
+                pass
+
+        cc.generated_message = message
+        client = GreenAPIClient(account.instance_id, account.api_token)
+
+        # Show "typing..." for 2-4 seconds before sending (more human-like)
+        try:
+            typing_secs = random.randint(2, 4)
+            await client.send_typing(contact.phone, typing_secs)
+            await asyncio.sleep(typing_secs)
+        except Exception:
+            pass  # Non-fatal — never block sending
+
+        msg_id = None
+        if campaign.campaign_type == CampaignType.text:
+            msg_id = await client.send_message(contact.phone, message)
+        elif campaign.campaign_type == CampaignType.image and campaign.image_url:
+            msg_id = await client.send_image(contact.phone, campaign.image_url, message)
+        elif campaign.campaign_type == CampaignType.poll and campaign.poll_question:
+            msg_id = await client.send_poll(contact.phone, campaign.poll_question, poll_options)
+        elif campaign.campaign_type == CampaignType.interactive_buttons and buttons:
+            msg_id = await client.send_interactive_buttons(contact.phone, message, buttons, campaign.footer_text or "")
+        else:
+            msg_id = await client.send_message(contact.phone, message)
+
+        if msg_id:
+            cc.status = MessageStatus.sent
+            cc.sent_at = datetime.utcnow()
+            cc.green_api_message_id = msg_id
+            cc.account_id = account.id
+            account.sent_today += 1
+            campaign.sent_count += 1
+            await record_send(str(account.id))
+
+            # Log to daily_send_logs for the night report
+            from app.models.reporting import DailySendLog
+            db.add(DailySendLog(
+                account_id=account.id,
+                account_name=account.name,
+                campaign_name=campaign.name,
+                recipient_phone=contact.phone,
+                recipient_name=contact.full_name,
+                status="sent",
+            ))
+        else:
+            cc.status = MessageStatus.failed
+            cc.error_message = "No message ID returned"
+            campaign.failed_count += 1
+
+    except Exception as e:
+        cc.status = MessageStatus.failed
+        cc.error_message = str(e)
+        cc.retry_count += 1
+        campaign.failed_count += 1
+    finally:
+        await db.commit()
+    return products
+
+
 async def run_campaign(campaign_id: str):
     async with AsyncSessionLocal() as db:
         campaign = await db.get(Campaign, uuid.UUID(campaign_id))
         if not campaign:
             return
-        # Auto-resume a campaign that was parked waiting for the send window to
-        # open (this task was rescheduled via eta/countdown for exactly that).
-        if campaign.status == CampaignStatus.paused and campaign.pause_reason == WINDOW_WAIT_REASON:
+
+        # Feature 35 — scheduled campaign window
+        from app.utils.shamsi import to_shamsi
+        now = datetime.utcnow()
+        if campaign.schedule_end and now > campaign.schedule_end:
+            campaign.status = CampaignStatus.completed
+            campaign.completed_at = now
+            await db.commit()
+            return
+        if campaign.schedule_start and now < campaign.schedule_start:
+            # Not started yet — park and self-reschedule for the start time.
+            wait = int((campaign.schedule_start - now).total_seconds())
+            campaign.status = CampaignStatus.paused
+            campaign.pause_reason = f"زمان شروع: {to_shamsi(campaign.schedule_start)}"
+            await db.commit()
+            try:
+                from app.workers.tasks import task_run_campaign
+                task_run_campaign.apply_async(args=[campaign_id], countdown=max(1, wait))
+            except Exception as e:
+                print(f"[Campaign {campaign_id}] schedule reschedule failed (non-fatal): {e}")
+            return
+
+        # Auto-resume a campaign that was parked waiting for the send window OR a
+        # scheduled start time (this task was rescheduled for exactly that).
+        if campaign.status == CampaignStatus.paused and (
+            campaign.pause_reason == WINDOW_WAIT_REASON
+            or (campaign.pause_reason or "").startswith("زمان شروع")
+        ):
             campaign.status = CampaignStatus.running
             campaign.pause_reason = None
             await db.commit()
@@ -112,108 +243,7 @@ async def run_campaign(campaign_id: str):
                 await asyncio.sleep(60)
                 continue
 
-            try:
-                cc.status = MessageStatus.generating
-                await db.commit()
-
-                # Per-account per-hour override: if the account has a schedule for this
-                # hour with a custom prompt/template/include_products, it takes precedence.
-                from app.services.rate_limiter import get_hour_prompt_for_account
-                hour_gpt_prompt, hour_template, hour_include_products = await get_hour_prompt_for_account(str(account.id))
-                effective_gpt_prompt = hour_gpt_prompt or campaign.gpt_prompt
-                effective_template = hour_template or campaign.message_template
-                effective_include_products = campaign.include_products or hour_include_products
-                # Lazily fetch products if this hour's slot wants them but the campaign didn't.
-                if effective_include_products and not products:
-                    products = await get_products(campaign.product_count)
-
-                # Generate message text
-                if campaign.use_gpt and settings.openai_api_key:
-                    message = await generate_message(
-                        first_name=contact.first_name or "",
-                        last_name=contact.last_name or "",
-                        gpt_prompt=effective_gpt_prompt or "یک پیام تبلیغاتی مختصر بنویس",
-                        products=products if effective_include_products else None,
-                        emoji_level=campaign.emoji_level or "medium",
-                    )
-                else:
-                    message = (effective_template or "سلام {{first_name}} جان!")
-                    message = message.replace("{{first_name}}", contact.first_name or "")
-                    message = message.replace("{{last_name}}", contact.last_name or "")
-
-                # Append seller signature if configured
-                if campaign.append_seller_name and campaign.seller_name:
-                    message += f"\n\n👤 {campaign.seller_name}"
-                if campaign.append_seller_phone and campaign.seller_phone:
-                    message += f"\n📱 {campaign.seller_phone}"
-                    if campaign.seller_phone2:
-                        message += f"\n☎️ {campaign.seller_phone2}"
-
-                # Append Shamsi (Jalali) date if configured
-                if campaign.append_date:
-                    try:
-                        import jdatetime
-                        today_jalali = jdatetime.date.today().strftime('%Y/%m/%d')
-                        message += f"\n\n📅 {today_jalali}"
-                    except Exception:
-                        pass
-
-                cc.generated_message = message
-                client = GreenAPIClient(account.instance_id, account.api_token)
-
-                # Show "typing..." for 2-4 seconds before sending (more human-like)
-                try:
-                    typing_secs = random.randint(2, 4)
-                    await client.send_typing(contact.phone, typing_secs)
-                    await asyncio.sleep(typing_secs)
-                except Exception:
-                    pass  # Non-fatal — never block sending
-
-                msg_id = None
-
-                # Send based on campaign type
-                if campaign.campaign_type == CampaignType.text:
-                    msg_id = await client.send_message(contact.phone, message)
-                elif campaign.campaign_type == CampaignType.image and campaign.image_url:
-                    msg_id = await client.send_image(contact.phone, campaign.image_url, message)
-                elif campaign.campaign_type == CampaignType.poll and campaign.poll_question:
-                    msg_id = await client.send_poll(contact.phone, campaign.poll_question, poll_options)
-                elif campaign.campaign_type == CampaignType.interactive_buttons and buttons:
-                    msg_id = await client.send_interactive_buttons(contact.phone, message, buttons, campaign.footer_text or "")
-                else:
-                    msg_id = await client.send_message(contact.phone, message)
-
-                if msg_id:
-                    cc.status = MessageStatus.sent
-                    cc.sent_at = datetime.utcnow()
-                    cc.green_api_message_id = msg_id
-                    cc.account_id = account.id
-                    account.sent_today += 1
-                    campaign.sent_count += 1
-                    await record_send(str(account.id))
-
-                    # Log to daily_send_logs for the night report
-                    from app.models.reporting import DailySendLog
-                    db.add(DailySendLog(
-                        account_id=account.id,
-                        account_name=account.name,
-                        campaign_name=campaign.name,
-                        recipient_phone=contact.phone,
-                        recipient_name=contact.full_name,
-                        status="sent",
-                    ))
-                else:
-                    cc.status = MessageStatus.failed
-                    cc.error_message = "No message ID returned"
-                    campaign.failed_count += 1
-
-            except Exception as e:
-                cc.status = MessageStatus.failed
-                cc.error_message = str(e)
-                cc.retry_count += 1
-                campaign.failed_count += 1
-            finally:
-                await db.commit()
+            products = await _deliver_message(db, campaign, cc, contact, account, products, poll_options, buttons)
 
             from app.services.delay_service import get_delay
             min_d, max_d = await get_delay(str(account.id))
@@ -230,3 +260,107 @@ async def run_campaign(campaign_id: str):
             campaign.status = CampaignStatus.completed
             campaign.completed_at = datetime.utcnow()
             await db.commit()
+
+
+# ── Feature 37: parallel multi-account sending ─────────────────────────────
+async def run_campaign_parallel(campaign_id: str, account_ids: list[str]):
+    """Split pending contacts across the given accounts and send concurrently,
+    one independent DB session + send loop per account."""
+    async with AsyncSessionLocal() as db:
+        campaign = await db.get(Campaign, uuid.UUID(campaign_id))
+        if not campaign or campaign.status != CampaignStatus.running:
+            return
+        result = await db.execute(
+            select(CampaignContact, Contact)
+            .join(Contact, CampaignContact.contact_id == Contact.id)
+            .where(
+                CampaignContact.campaign_id == campaign.id,
+                CampaignContact.status == MessageStatus.pending,
+            )
+        )
+        pending = result.all()
+
+    if not account_ids:
+        await run_campaign(campaign_id)
+        return
+    if not pending:
+        # Nothing to send → let the sequential path mark completion.
+        await run_campaign(campaign_id)
+        return
+
+    # Round-robin split (store ids only — ORM objects are bound to the closed session).
+    chunks = {aid: [] for aid in account_ids}
+    for i, (cc, contact) in enumerate(pending):
+        aid = account_ids[i % len(account_ids)]
+        chunks[aid].append((str(cc.id), str(contact.id)))
+
+    await asyncio.gather(
+        *[_send_chunk(campaign_id, aid, items) for aid, items in chunks.items() if items],
+        return_exceptions=True,
+    )
+
+    # Completion check
+    async with AsyncSessionLocal() as db2:
+        camp = await db2.get(Campaign, uuid.UUID(campaign_id))
+        if not camp:
+            return
+        remaining = await db2.execute(
+            select(CampaignContact).where(
+                CampaignContact.campaign_id == camp.id,
+                CampaignContact.status == MessageStatus.pending,
+            )
+        )
+        if not remaining.scalars().first():
+            camp.status = CampaignStatus.completed
+            camp.completed_at = datetime.utcnow()
+            await db2.commit()
+
+
+async def _send_chunk(campaign_id: str, account_id: str, items: list):
+    """Send a chunk of (campaign_contact_id, contact_id) pairs using one fixed account."""
+    async with AsyncSessionLocal() as db:
+        campaign = await db.get(Campaign, uuid.UUID(campaign_id))
+        account = await db.get(Account, uuid.UUID(account_id))
+        if not campaign or not account or account.status != AccountStatus.active:
+            return
+
+        products = []
+        if campaign.include_products:
+            if campaign.product_label_filter:
+                from app.services.price_service import get_products_by_label
+                products = await get_products_by_label(campaign.product_label_filter, campaign.product_count)
+            else:
+                products = await get_products(campaign.product_count)
+
+        poll_options = []
+        if campaign.poll_options:
+            try:
+                poll_options = json.loads(campaign.poll_options)
+            except Exception:
+                poll_options = []
+
+        buttons = [b for b in [campaign.button1_text, campaign.button2_text, campaign.button3_text] if b]
+
+        for cc_id, contact_id in items:
+            await db.refresh(campaign)
+            if campaign.status != CampaignStatus.running:
+                break
+            cc = await db.get(CampaignContact, uuid.UUID(cc_id))
+            contact = await db.get(Contact, uuid.UUID(contact_id))
+            if not cc or not contact or cc.status != MessageStatus.pending:
+                continue
+            if contact.blacklisted or contact.has_whatsapp is False:
+                cc.status = MessageStatus.skipped
+                await db.commit()
+                continue
+            if account.sent_today >= account.computed_daily_limit:
+                break  # this account has hit its daily cap
+            if not await can_send(str(account.id)):
+                await asyncio.sleep(60)
+                continue
+
+            products = await _deliver_message(db, campaign, cc, contact, account, products, poll_options, buttons)
+
+            from app.services.delay_service import get_delay
+            min_d, max_d = await get_delay(str(account.id))
+            await asyncio.sleep(random.uniform(min_d, max_d))

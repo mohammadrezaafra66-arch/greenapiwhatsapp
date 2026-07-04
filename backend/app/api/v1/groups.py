@@ -1,6 +1,7 @@
 import uuid
+import asyncio
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -39,6 +40,7 @@ async def list_groups(
     account_id: str | None = None,
     chat_type: str | None = None,  # filter: group | broadcast | all
     min_members: int | None = None,
+    is_admin: bool | None = None,  # filter: only groups where this account is admin
     db: AsyncSession = Depends(get_db),
 ):
     query = select(WhatsAppGroup).order_by(WhatsAppGroup.member_count.desc())
@@ -48,6 +50,8 @@ async def list_groups(
         query = query.where(WhatsAppGroup.chat_type == chat_type)
     if min_members is not None:
         query = query.where(WhatsAppGroup.member_count >= min_members)
+    if is_admin is not None:
+        query = query.where(WhatsAppGroup.is_admin == is_admin)
 
     result = await db.execute(query)
     groups = result.scalars().all()
@@ -61,6 +65,8 @@ async def list_groups(
             "description": g.description,
             "chat_type": g.chat_type,
             "member_count": g.member_count,
+            "is_admin": g.is_admin,
+            "participant_count": g.participant_count,
         }
         for g in groups
     ]
@@ -194,6 +200,14 @@ async def sync_groups_from_wa(account_id: str, db: AsyncSession = Depends(get_db
     except Exception as e:
         raise HTTPException(502, f"Green API error: {e}")
 
+    # This account's own phone — used to detect admin status in groups.
+    my_phone = ""
+    try:
+        wa = await client.get_wa_settings()
+        my_phone = str(wa.get("phone") or wa.get("wid") or "").split("@")[0]
+    except Exception:
+        my_phone = ""
+
     saved = 0
     updated = 0
 
@@ -213,14 +227,24 @@ async def sync_groups_from_wa(account_id: str, db: AsyncSession = Depends(get_db
         name = chat.get("name", "") or chat_id
         member_count = chat.get("participantsCount", 0) or 0
         description = ""
+        is_admin = False
+        participant_count = 0
 
-        # For groups, try to get accurate member count from getGroupData
+        # For groups, fetch getGroupData when we lack a member count — reuse that
+        # call to also compute participant_count and this account's admin status.
         if chat_type == "group" and member_count == 0:
             try:
                 group_data = await client.get_group_data(chat_id)
                 participants = group_data.get("participants", [])
                 member_count = len(participants)
+                participant_count = len(participants)
                 description = group_data.get("description", "") or ""
+                if my_phone:
+                    is_admin = any(
+                        str(p.get("id", "")).split("@")[0] == my_phone
+                        and (p.get("isAdmin", False) or p.get("isSuperAdmin", False))
+                        for p in participants
+                    )
             except Exception:
                 description = ""
 
@@ -235,6 +259,9 @@ async def sync_groups_from_wa(account_id: str, db: AsyncSession = Depends(get_db
             existing.chat_type = chat_type
             if description:
                 existing.description = description
+            if participant_count:
+                existing.participant_count = participant_count
+                existing.is_admin = is_admin
             existing.account_id = uuid.UUID(account_id)
             existing.synced_at = datetime.utcnow()
             updated += 1
@@ -246,6 +273,8 @@ async def sync_groups_from_wa(account_id: str, db: AsyncSession = Depends(get_db
                 member_count=member_count,
                 chat_type=chat_type,
                 description=description,
+                is_admin=is_admin,
+                participant_count=participant_count,
                 synced_at=datetime.utcnow(),
             )
             db.add(grp)
@@ -253,6 +282,65 @@ async def sync_groups_from_wa(account_id: str, db: AsyncSession = Depends(get_db
 
     await db.commit()
     return {"synced_new": saved, "updated": updated, "total_chats": len(chats)}
+
+
+@router.post("/auto-add-members")
+async def auto_add_contacts_to_group(
+    group_id: str,
+    contact_phones: list[str],
+    account_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Add phone numbers to a WhatsApp group where this account is admin (Feature 40).
+    group_id is the group chatId (e.g. 1203...@g.us)."""
+    account = await db.get(Account, uuid.UUID(account_id))
+    if not account:
+        raise HTTPException(404, "Account not found")
+
+    grp_result = await db.execute(
+        select(WhatsAppGroup).where(
+            WhatsAppGroup.green_group_id == group_id,
+            WhatsAppGroup.account_id == uuid.UUID(account_id),
+        )
+    )
+    grp = grp_result.scalar_one_or_none()
+    if not grp or not grp.is_admin:
+        raise HTTPException(403, "این حساب ادمین این گروه نیست")
+
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    added = 0
+    failed = 0
+    errors = []
+    for phone in contact_phones:
+        try:
+            result = await client.add_group_participant(group_id, phone)
+            if result:
+                added += 1
+            else:
+                failed += 1
+            await asyncio.sleep(2)  # rate limiting
+        except Exception as e:
+            failed += 1
+            errors.append(f"{phone}: {str(e)}")
+
+    return {"added": added, "failed": failed, "errors": errors[:10]}
+
+
+@router.post("/import-excel-to-group")
+async def import_excel_to_group(
+    group_id: str,
+    account_id: str,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload an Excel of phone numbers and add them all to a group (admin only)."""
+    from app.services.excel_service import parse_contacts_excel
+    content = await file.read()
+    contacts_data = parse_contacts_excel(content)
+    phones = [c["phone"] for c in contacts_data if c.get("phone")]
+    if not phones:
+        raise HTTPException(400, "شماره‌ای در فایل یافت نشد")
+    return await auto_add_contacts_to_group(group_id, phones, account_id, db)
 
 
 @router.post("/backfill-members")

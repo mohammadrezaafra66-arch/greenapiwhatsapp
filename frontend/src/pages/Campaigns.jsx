@@ -1,5 +1,5 @@
 import React from "react";
-import { Campaigns as Api, FilesApi, Accounts, ContactGroupsApi, WaCollectionsApi, LabelsApi } from "../api.js";
+import { Campaigns as Api, FilesApi, Accounts, ContactGroupsApi, WaCollectionsApi, LabelsApi, Dashboard } from "../api.js";
 import { Badge, Spinner, Empty, Modal, Progress, useAsync } from "../ui.jsx";
 
 const TYPE_FA = {
@@ -76,6 +76,9 @@ export default function Campaigns() {
               <span>پیشرفت: {c.sent_count} / {c.total_contacts}</span>
               <span>تحویل: {c.delivered_count} · خوانده: {c.read_count} · ناموفق: {c.failed_count}</span>
             </div>
+            {(c.schedule_start_shamsi || c.schedule_end_shamsi) && (
+              <div className="text-xs text-slate-400">📅 {c.schedule_start_shamsi || "—"} تا {c.schedule_end_shamsi || "—"}</div>
+            )}
             <Progress value={c.sent_count} max={c.total_contacts} />
             {(c.status === "running" || c.status === "paused") && <LiveLog campaignId={c.id} />}
           </div>
@@ -191,6 +194,8 @@ const CAMPAIGN_DEFAULTS = {
   append_seller_name: false, seller_name: "",
   append_seller_phone: false, seller_phone: "", seller_phone2: "",
   append_date: false,
+  schedule_start_shamsi: "", schedule_end_shamsi: "",
+  parallel_accounts: false, show_product_prices: true,
 };
 
 function seedCampaignForm(d) {
@@ -221,6 +226,10 @@ function seedCampaignForm(d) {
     seller_phone: d.seller_phone || "",
     seller_phone2: d.seller_phone2 || "",
     append_date: d.append_date || false,
+    schedule_start_shamsi: d.schedule_start_shamsi || "",
+    schedule_end_shamsi: d.schedule_end_shamsi || "",
+    parallel_accounts: d.parallel_accounts || false,
+    show_product_prices: d.show_product_prices !== false,
   };
 }
 
@@ -231,7 +240,30 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
   const [contactGroups, setContactGroups] = React.useState([]);
   const [waCollections, setWaCollections] = React.useState([]);
   const [labels, setLabels] = React.useState([]);
+  const [feasContactCount, setFeasContactCount] = React.useState(100);
+  const [feasResult, setFeasResult] = React.useState(null);
+  const [feasLoading, setFeasLoading] = React.useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+
+  const runFeasibility = async () => {
+    setFeasLoading(true);
+    setFeasResult(null);
+    try {
+      const accs = await Accounts.list();
+      const account_ids = accs.filter((a) => a.status === "active").map((a) => a.id);
+      const r = await Dashboard.validateCampaign({
+        contact_count: Number(feasContactCount) || 0,
+        account_ids,
+        min_delay: 45,
+        max_delay: 110,
+      });
+      setFeasResult(r);
+    } catch (e) {
+      alert(e?.response?.data?.detail || e.message);
+    } finally {
+      setFeasLoading(false);
+    }
+  };
 
   // Load dropdown data once
   React.useEffect(() => {
@@ -302,6 +334,10 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         seller_phone: f.append_seller_phone ? (f.seller_phone || null) : null,
         seller_phone2: f.append_seller_phone ? (f.seller_phone2 || null) : null,
         append_date: f.append_date,
+        schedule_start_shamsi: f.schedule_start_shamsi || null,
+        schedule_end_shamsi: f.schedule_end_shamsi || null,
+        parallel_accounts: f.parallel_accounts,
+        show_product_prices: f.show_product_prices !== false,
       };
       if (editId) {
         await Api.update(editId, body);
@@ -431,6 +467,10 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
                 ) : null;
               })()}
             </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={f.show_product_prices !== false} onChange={set("show_product_prices")} />
+              نمایش قیمت در پیام
+            </label>
           </>
         )}
 
@@ -511,6 +551,84 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
             <input type="checkbox" checked={f.append_date} onChange={set("append_date")} />
             تاریخ امروز (شمسی) آخر پیام اضافه شود
           </label>
+        </div>
+
+        <div className="border-t border-slate-700 pt-3 mt-3">
+          <p className="font-bold text-sm mb-2">⏰ زمان‌بندی ارسال</p>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              className="input"
+              dir="ltr"
+              value={f.schedule_start_shamsi}
+              onChange={set("schedule_start_shamsi")}
+              placeholder="۱۴۰۳/۰۱/۱۵ ۰۸:۰۰"
+            />
+            <input
+              className="input"
+              dir="ltr"
+              value={f.schedule_end_shamsi}
+              onChange={set("schedule_end_shamsi")}
+              placeholder="۱۴۰۳/۰۱/۲۰ ۲۲:۰۰"
+            />
+          </div>
+          <p className="text-xs text-slate-500">فرمت: YYYY/MM/DD HH:MM</p>
+        </div>
+
+        <div className="border-t border-slate-700 pt-3 mt-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={f.parallel_accounts} onChange={set("parallel_accounts")} />
+            ارسال موازی با چند حساب
+          </label>
+          {f.parallel_accounts && (
+            <p className="text-xs text-sky-300">💡 مخاطبین به‌صورت مساوی بین حساب‌های فعال تقسیم می‌شوند</p>
+          )}
+        </div>
+
+        <div className="border-t border-slate-700 pt-3 mt-3">
+          <p className="font-bold text-sm mb-2">امکان‌سنجی ارسال</p>
+          <div className="flex gap-2 items-end">
+            <div className="flex-1">
+              <label className="label">تعداد مخاطبین</label>
+              <input
+                type="number"
+                className="input"
+                min={1}
+                value={feasContactCount}
+                onChange={(e) => setFeasContactCount(e.target.value)}
+              />
+            </div>
+            <button className="btn-secondary whitespace-nowrap" disabled={feasLoading} onClick={runFeasibility}>
+              🔍 بررسی امکان‌سنجی
+            </button>
+          </div>
+          {feasLoading && <p className="text-xs text-slate-400 mt-2">در حال بررسی...</p>}
+          {!feasLoading && feasResult && (
+            <div
+              className={`card mt-2 border ${
+                feasResult.color === "green"
+                  ? "border-emerald-500 bg-emerald-500/10"
+                  : feasResult.color === "amber"
+                  ? "border-amber-500 bg-amber-500/10"
+                  : "border-red-500 bg-red-500/10"
+              }`}
+            >
+              <p className="font-bold text-sm">{feasResult.status}</p>
+              {feasResult.summary && (
+                <div className="grid grid-cols-2 gap-1 text-xs text-slate-300 mt-2">
+                  <span>مخاطبین: {feasResult.summary.contact_count}</span>
+                  <span>حساب‌های فعال: {feasResult.summary.active_accounts}</span>
+                  <span>ظرفیت روزانه کل: {feasResult.summary.total_daily_capacity}</span>
+                  <span>تخمین زمان: {feasResult.summary.estimated_days} روز</span>
+                </div>
+              )}
+              {feasResult.warnings?.map((w, i) => (
+                <p key={`w${i}`} className="text-xs text-amber-300 mt-1">⚠️ {w}</p>
+              ))}
+              {feasResult.recommendations?.map((r, i) => (
+                <p key={`r${i}`} className="text-xs text-sky-300 mt-1">💡 {r}</p>
+              ))}
+            </div>
+          )}
         </div>
 
         <button className="btn-primary w-full" disabled={saving} onClick={submit}>

@@ -75,6 +75,7 @@ export default function Accounts() {
               }}>حذف</button>
             </div>
             <ProxySection accountId={a.id} />
+            <LimitsSection accountId={a.id} />
           </div>
         ))}
       </div>
@@ -174,6 +175,99 @@ function ProxySection({ accountId }) {
           <button className="btn-secondary text-xs w-full" disabled={busy} onClick={syncBlocked}>
             همگام‌سازی مخاطبین بلاک‌شده
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LimitsSection({ accountId }) {
+  const [open, setOpen] = React.useState(false);
+  const [loaded, setLoaded] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [detail, setDetail] = React.useState(null);
+  const [f, setF] = React.useState({ max_daily_absolute: 100, incoming_ratio_multiplier: 0.5 });
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+
+  const load = async () => {
+    try {
+      const r = await Api.dailyLimitDetail(accountId);
+      setDetail(r);
+      setF((prev) => ({
+        ...prev,
+        max_daily_absolute: r?.breakdown?.absolute_cap ?? prev.max_daily_absolute,
+      }));
+    } catch (e) {
+      alert(e?.response?.data?.detail || e.message);
+    }
+    setLoaded(true);
+  };
+
+  const toggle = () => {
+    const n = !open;
+    setOpen(n);
+    if (n && !loaded) load();
+  };
+
+  const saveLimits = async () => {
+    setBusy(true);
+    try {
+      const r = await Api.updateLimits(accountId, {
+        max_daily_absolute: Number(f.max_daily_absolute),
+        incoming_ratio_multiplier: Number(f.incoming_ratio_multiplier),
+        max_sends_per_minute: 2.0,
+      });
+      await load();
+      alert(`ذخیره شد — سقف مؤثر: ${r.effective_limit}`);
+    } catch (e) {
+      alert(e?.response?.data?.detail || e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="border-t border-slate-700 pt-3">
+      <button className="text-xs text-slate-400 hover:text-slate-200" onClick={toggle}>
+        📊 محدودیت‌های ارسال {open ? "▲" : "▼"}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2">
+          {!loaded && <Spinner />}
+          {detail && (
+            <div className="bg-slate-900 rounded-lg p-3 text-xs space-y-1">
+              <p className="font-bold text-emerald-400">
+                سقف امروز: {detail.effective_limit} پیام ({detail.sent_today} ارسال، {detail.remaining_today} باقی)
+              </p>
+              <p className="text-slate-300">{detail.explanation}</p>
+              <p className={detail?.breakdown?.week1_cap_active ? "text-amber-400" : "text-emerald-400"}>
+                {detail?.meta_compliance?.status}
+              </p>
+            </div>
+          )}
+          <div>
+            <label className="label">حداکثر ارسال روزانه (مطلق)</label>
+            <input
+              className="input"
+              type="number"
+              min="1"
+              max="500"
+              value={f.max_daily_absolute}
+              onChange={set("max_daily_absolute")}
+            />
+          </div>
+          <div>
+            <label className="label">ضریب پیام‌های دریافتی (۰.۱ تا ۲.۰)</label>
+            <input
+              className="input"
+              type="number"
+              step="0.1"
+              value={f.incoming_ratio_multiplier}
+              onChange={set("incoming_ratio_multiplier")}
+            />
+            <p className="text-xs text-slate-500">بیشتر = پیام دریافتی بیشتر سقف را بالا می‌برد</p>
+          </div>
+          <button className="btn-primary text-sm" disabled={busy} onClick={saveLimits}>ذخیره محدودیت‌ها</button>
         </div>
       )}
     </div>

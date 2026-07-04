@@ -3,9 +3,13 @@ from app.workers.celery_app import celery_app
 from app.services.campaign_runner import run_campaign
 
 @celery_app.task(bind=True, name="tasks.run_campaign", max_retries=3)
-def task_run_campaign(self, campaign_id: str):
+def task_run_campaign(self, campaign_id: str, account_ids: list = None):
     try:
-        asyncio.run(run_campaign(campaign_id))
+        if account_ids:
+            from app.services.campaign_runner import run_campaign_parallel
+            asyncio.run(run_campaign_parallel(campaign_id, account_ids))
+        else:
+            asyncio.run(run_campaign(campaign_id))
     except Exception as exc:
         raise self.retry(exc=exc, countdown=60)
 

@@ -133,14 +133,17 @@ async def _chat(system: str, user: str, max_tokens: int, temperature: float) -> 
     return None
 
 
-def _fallback_message(first_name: str, products=None) -> str:
+def _fallback_message(first_name: str, products=None, show_prices: bool = True) -> str:
     name = (first_name or "").strip() or "دوست عزیز"
     lines = [f"سلام {name} جان! 🌟", "از افراکالا با پیشنهادهای ویژه در خدمت شما هستیم."]
     if products:
         lines.append("")
         for prod in products[:3]:
-            price = f"{prod['price']:,} تومان" if prod.get("price") else "تماس بگیرید"
-            lines.append(f"• {prod['name']}: {price}")
+            if show_prices:
+                price = f"{prod['price']:,} تومان" if prod.get("price") else "تماس بگیرید"
+                lines.append(f"• {prod['name']}: {price}")
+            else:
+                lines.append(f"• {prod['name']}")
     lines += ["", "برای لغو عدد ۱۱ ارسال کنید"]
     return "\n".join(lines)
 
@@ -154,13 +157,19 @@ EMOJI_INSTRUCTION = {
 
 
 async def generate_message(first_name: str, last_name: str, gpt_prompt: str,
-                           products: list[dict] = None, emoji_level: str = "medium") -> str:
+                           products: list[dict] = None, emoji_level: str = "medium",
+                           show_prices: bool = True) -> str:
     products_text = ""
     if products:
         products_text = "\n\nمحصولات امروز افراکالا:\n"
         for p in products[:3]:
-            price = f"{p['price']:,} تومان" if p.get("price") else "تماس بگیرید"
-            products_text += f"• {p['name']}: {price}\n"
+            if show_prices:
+                price = f"{p['price']:,} تومان" if p.get("price") else "تماس بگیرید"
+                products_text += f"• {p['name']}: {price}\n"
+            else:
+                products_text += f"• {p['name']}\n"
+        if not show_prices:
+            products_text += "(قیمت‌ها را در پیام درج نکن)\n"
 
     user_msg = f"اسم مشتری: {first_name} {last_name}\n{gpt_prompt}{products_text}\nپیام واتس‌اپ فارسی بنویس:"
 
@@ -168,7 +177,7 @@ async def generate_message(first_name: str, last_name: str, gpt_prompt: str,
     system_prompt = f"{SYSTEM_PROMPT}\n- درباره ایموجی: {emoji_rule}"
 
     text = await _chat(system_prompt, user_msg, max_tokens=500, temperature=0.85)
-    return text if text else _fallback_message(first_name, products)
+    return text if text else _fallback_message(first_name, products, show_prices)
 
 
 async def categorize_message(text: str) -> str:

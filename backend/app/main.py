@@ -221,11 +221,30 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE whatsapp_groups ADD COLUMN IF NOT EXISTS description text",
             "ALTER TABLE whatsapp_groups ADD COLUMN IF NOT EXISTS synced_at timestamp DEFAULT now()",
         ]
+        ddl_v8 = [
+            # Feature 37: parallel account sending
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS parallel_accounts boolean DEFAULT false",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS max_parallel_accounts integer DEFAULT 1",
+            # Feature 39: per-account send limits with Meta standards
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS max_daily_absolute integer DEFAULT 200",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS incoming_ratio_multiplier numeric DEFAULT 0.5",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS max_sends_per_minute numeric DEFAULT 2.0",
+            # Feature 40/41: group admin tracking
+            "ALTER TABLE whatsapp_groups ADD COLUMN IF NOT EXISTS is_admin boolean DEFAULT false",
+            "ALTER TABLE whatsapp_groups ADD COLUMN IF NOT EXISTS participant_count integer DEFAULT 0",
+            # Feature 42: hide price option in campaigns
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS show_product_prices boolean DEFAULT true",
+        ]
         for stmt in ddl_v7:
             try:
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V7] {e}")
+        for stmt in ddl_v8:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V8] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:

@@ -20,6 +20,12 @@ class AutoReplyUpdate(BaseModel):
     polling_enabled: bool | None = None
 
 
+class AccountLimitsUpdate(BaseModel):
+    max_daily_absolute: int = 200
+    incoming_ratio_multiplier: float = 0.5
+    max_sends_per_minute: float = 2.0
+
+
 @router.get("/")
 async def list_accounts(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Account).order_by(Account.created_at.desc()))
@@ -72,6 +78,65 @@ async def _get_account(account_id: str, db: AsyncSession) -> Account:
     if not account:
         raise HTTPException(404, "Account not found")
     return account
+
+
+@router.get("/{account_id}/daily-limit-detail")
+async def get_daily_limit_detail(account_id: str, db: AsyncSession = Depends(get_db)):
+    """Daily limit with full breakdown and Meta compliance notes (Feature 39)."""
+    account = await _get_account(account_id, db)
+    days = account.days_active or 0
+    absolute = account.max_daily_absolute or 200
+
+    base = min(days, 10)
+    incoming = min(int((account.received_yesterday or 0) * (account.incoming_ratio_multiplier or 0.5)), 20)
+    replies = min((account.quick_replies_yesterday or 0) * 5, 50)
+    calculated = base + incoming + replies
+
+    if days < 7:
+        effective = min(5, absolute)
+        week1_cap = True
+    else:
+        effective = min(calculated, absolute)
+        week1_cap = False
+
+    return {
+        "account_name": account.name,
+        "days_active": days,
+        "sent_today": account.sent_today,
+        "remaining_today": max(0, effective - account.sent_today),
+        "effective_limit": effective,
+        "breakdown": {
+            "base_days": base,
+            "incoming_bonus": incoming,
+            "reply_bonus": replies,
+            "calculated": calculated,
+            "absolute_cap": absolute,
+            "week1_cap_active": week1_cap,
+        },
+        "explanation": (
+            f"هفته اول (روز {days}/7) — سقف ۵ پیام" if week1_cap else
+            f"پایه: {base} + دریافتی: {incoming} + پاسخ: {replies} = {calculated} (سقف: {absolute})"
+        ),
+        "meta_compliance": {
+            "status": "✅ مناسب" if days >= 7 else "⚠️ دوره warm-up",
+            "notes": [
+                "هرگز بیش از ۲۰۰ پیام/روز به یک حساب جدید ارسال نکنید",
+                "تاخیر حداقل ۴۵ ثانیه بین پیام‌ها رعایت کنید",
+                "در هفته اول حداکثر ۵ پیام/روز ارسال کنید",
+                "از ارسال یک پیام یکسان به چند نفر خودداری کنید (GPT این را حل می‌کند)",
+            ],
+        },
+    }
+
+
+@router.put("/{account_id}/limits")
+async def update_account_limits(account_id: str, body: AccountLimitsUpdate, db: AsyncSession = Depends(get_db)):
+    account = await _get_account(account_id, db)
+    account.max_daily_absolute = body.max_daily_absolute
+    account.incoming_ratio_multiplier = body.incoming_ratio_multiplier
+    account.max_sends_per_minute = body.max_sends_per_minute
+    await db.commit()
+    return {"updated": True, "effective_limit": account.computed_daily_limit}
 
 
 @router.get("/{account_id}/status")

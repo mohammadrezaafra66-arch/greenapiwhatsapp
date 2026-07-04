@@ -49,6 +49,11 @@ class Campaign(Base):
     footer_text: Mapped[str | None] = mapped_column(String(200))
     schedule_start: Mapped[datetime | None] = mapped_column(DateTime)
     schedule_end: Mapped[datetime | None] = mapped_column(DateTime)
+    # V8 Feature 37 — parallel multi-account sending
+    parallel_accounts: Mapped[bool] = mapped_column(Boolean, default=False)
+    max_parallel_accounts: Mapped[int] = mapped_column(Integer, default=1)
+    # V8 Feature 42 — show product prices in generated messages
+    show_product_prices: Mapped[bool] = mapped_column(Boolean, default=True)
     total_contacts: Mapped[int] = mapped_column(Integer, default=0)
     sent_count: Mapped[int] = mapped_column(Integer, default=0)
     failed_count: Mapped[int] = mapped_column(Integer, default=0)

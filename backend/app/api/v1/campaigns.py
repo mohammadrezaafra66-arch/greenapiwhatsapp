@@ -11,6 +11,7 @@ from app.models.campaign import (
 from app.models.account import Account, AccountStatus
 from app.models.contact import Contact
 from app.workers.tasks import task_run_campaign
+from app.utils.shamsi import to_shamsi, from_shamsi
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
@@ -44,6 +45,12 @@ class CampaignCreateBody(BaseModel):
     product_label_filter: str | None = None  # filter products by label id
     is_always_on: bool = False
     is_active: bool = True
+    # V8 extensions
+    schedule_start_shamsi: str | None = None  # "1403/01/15 08:00"
+    schedule_end_shamsi: str | None = None    # "1403/01/20 22:00"
+    parallel_accounts: bool = False
+    max_parallel_accounts: int = 1
+    show_product_prices: bool = True
 
 
 class TestBody(BaseModel):
@@ -69,6 +76,9 @@ async def list_campaigns(db: AsyncSession = Depends(get_db)):
             "failed_count": c.failed_count,
             "delivered_count": c.delivered_count,
             "read_count": c.read_count,
+            "parallel_accounts": c.parallel_accounts,
+            "schedule_start_shamsi": to_shamsi(c.schedule_start),
+            "schedule_end_shamsi": to_shamsi(c.schedule_end),
             "created_at": str(c.created_at),
         }
         for c in campaigns
@@ -102,6 +112,11 @@ def _campaign_detail(c: Campaign) -> dict:
         "wa_collection_id": str(c.wa_collection_id) if c.wa_collection_id else None,
         "product_label_filter": c.product_label_filter,
         "is_always_on": c.is_always_on,
+        "parallel_accounts": c.parallel_accounts,
+        "max_parallel_accounts": c.max_parallel_accounts,
+        "show_product_prices": c.show_product_prices,
+        "schedule_start_shamsi": to_shamsi(c.schedule_start),
+        "schedule_end_shamsi": to_shamsi(c.schedule_end),
     }
 
 
@@ -151,6 +166,13 @@ async def update_campaign(campaign_id: str, body: CampaignCreateBody, db: AsyncS
     c.product_label_filter = body.product_label_filter
     c.is_always_on = body.is_always_on
     c.is_active = body.is_active
+    c.parallel_accounts = body.parallel_accounts
+    c.max_parallel_accounts = body.max_parallel_accounts
+    c.show_product_prices = body.show_product_prices
+    if body.schedule_start_shamsi is not None:
+        c.schedule_start = from_shamsi(body.schedule_start_shamsi)
+    if body.schedule_end_shamsi is not None:
+        c.schedule_end = from_shamsi(body.schedule_end_shamsi)
     await db.commit()
     return {"id": campaign_id, "updated": True}
 
@@ -203,6 +225,11 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         product_label_filter=body.product_label_filter,
         is_always_on=body.is_always_on,
         is_active=body.is_active,
+        parallel_accounts=body.parallel_accounts,
+        max_parallel_accounts=body.max_parallel_accounts,
+        show_product_prices=body.show_product_prices,
+        schedule_start=from_shamsi(body.schedule_start_shamsi) if body.schedule_start_shamsi else None,
+        schedule_end=from_shamsi(body.schedule_end_shamsi) if body.schedule_end_shamsi else None,
     )
     db.add(campaign)
     await db.commit()
@@ -282,6 +309,11 @@ async def start_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
     if campaign.campaign_scope == "group":
         from app.workers.tasks import task_run_group_campaign
         task_run_group_campaign.delay(campaign_id)
+    elif campaign.parallel_accounts:
+        # Feature 37 — split contacts across all active accounts, sent concurrently.
+        acc_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
+        active_accounts = [str(a.id) for a in acc_result.scalars().all()]
+        task_run_campaign.delay(campaign_id, active_accounts)
     else:
         task_run_campaign.delay(campaign_id)
     return {"status": "started", "campaign_id": campaign_id, "scope": campaign.campaign_scope}
