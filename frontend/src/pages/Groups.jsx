@@ -15,10 +15,11 @@ const MEMBER_FILTERS = [
   { label: "+۵۰۰ نفر", min: 500 },
 ];
 
+// NOTE: WhatsApp Broadcast lists are not returned by Green API's getChats, so
+// they can never be synced — no "broadcast" tab is offered.
 const TYPE_TABS = [
   { key: "all", label: "همه" },
   { key: "group", label: "👥 گروه" },
-  { key: "broadcast", label: "📢 انتشار" },
 ];
 
 const ADMIN_TABS = [
@@ -124,7 +125,7 @@ export default function Groups() {
       </div>
 
       <div className="card text-sm text-sky-300 bg-sky-500/10 border-sky-500/30">
-        💡 برای نمایش گروه‌ها ابتدا «همگام‌سازی با واتساپ» را بزنید. گروه‌های معمولی و لیست‌های انتشاری که عضو آن‌ها هستید نمایش داده می‌شوند. کانال‌های واتساپ پشتیبانی نمی‌شوند.
+        💡 برای نمایش گروه‌ها ابتدا «همگام‌سازی با واتساپ» را بزنید. فقط گروه‌های معمولی (که عضوشان هستید) دریافت می‌شوند. لیست‌های انتشار (Broadcast) و کانال‌های واتساپ توسط Green API ارائه نمی‌شوند و اینجا نمایش داده نمی‌شوند.
       </div>
 
       {/* Filters */}

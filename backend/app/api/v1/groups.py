@@ -206,7 +206,12 @@ async def sync_groups_from_wa(account_id: str, db: AsyncSession = Depends(get_db
     for chat in chats:
         chat_id = chat.get("id", "")
 
-        # Determine type
+        # Determine type.
+        # NOTE: Green API's getChats does NOT return WhatsApp Broadcast lists —
+        # they are a phone-local feature and never appear here (observed suffixes
+        # are only @g.us, @c.us and @newsletter). The @broadcast branch below is
+        # kept as a safety net in case an id ever surfaces, but in practice no
+        # broadcast lists can be synced via this endpoint.
         if "@g.us" in chat_id:
             chat_type = "group"
         elif "@broadcast" in chat_id:
