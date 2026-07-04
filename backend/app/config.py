@@ -11,8 +11,9 @@ class Settings(BaseSettings):
     pricing_cache_minutes: int = 5
     # Supabase REST API — primary source for product names + computed prices.
     # Self-hosted Supabase (Kong gateway) on the local network.
+    # NOTE: the anon key is a secret — set SUPABASE_ANON_KEY in .env (not committed).
     supabase_url: str = "http://192.168.170.10:8000"
-    supabase_anon_key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzc5MDA1NjkxLCJleHAiOjIwOTQzNjU2OTF9.0LMk6WGniEm92wPtTnapSIcuhZpq5au8KnEUCQFPKeI"
+    supabase_anon_key: str = ""
     secret_key: str = "change-this"
     backend_url: str = "http://localhost:8000"
     webhook_base_url: str = "http://localhost:8000"

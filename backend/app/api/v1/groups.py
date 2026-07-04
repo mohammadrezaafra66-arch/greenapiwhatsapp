@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -235,6 +236,7 @@ async def sync_groups_from_wa(account_id: str, db: AsyncSession = Depends(get_db
             if description:
                 existing.description = description
             existing.account_id = uuid.UUID(account_id)
+            existing.synced_at = datetime.utcnow()
             updated += 1
         else:
             grp = WhatsAppGroup(
@@ -244,12 +246,21 @@ async def sync_groups_from_wa(account_id: str, db: AsyncSession = Depends(get_db
                 member_count=member_count,
                 chat_type=chat_type,
                 description=description,
+                synced_at=datetime.utcnow(),
             )
             db.add(grp)
             saved += 1
 
     await db.commit()
     return {"synced_new": saved, "updated": updated, "total_chats": len(chats)}
+
+
+@router.post("/backfill-members")
+async def backfill_members():
+    """Queue the background task that fills member counts for stale/zero-count groups."""
+    from app.workers.tasks import task_backfill_group_member_counts
+    task_backfill_group_member_counts.delay()
+    return {"queued": True}
 
 
 @router.post("/{group_id}/refresh-members")
@@ -267,6 +278,7 @@ async def refresh_group_members(group_id: str, db: AsyncSession = Depends(get_db
         participants = group_data.get("participants", [])
         grp.member_count = len(participants)
         grp.description = group_data.get("description", grp.description)
+        grp.synced_at = datetime.utcnow()
         await db.commit()
         return {"member_count": grp.member_count, "name": grp.name}
     except Exception as e:

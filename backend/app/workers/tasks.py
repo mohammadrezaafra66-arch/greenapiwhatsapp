@@ -35,6 +35,61 @@ def task_send_night_report():
     from app.services.night_report import send_night_report
     asyncio.run(send_night_report())
 
+@celery_app.task(name="tasks.backfill_group_member_counts")
+def task_backfill_group_member_counts():
+    """Fill member_count/description for groups that have never been counted
+    (member_count=0) or are stale (synced >7 days ago). Processed in batches of
+    10 with a 2s pause between batches to avoid Green API rate limits."""
+    async def _b():
+        from app.database import AsyncSessionLocal
+        from app.models.group import WhatsAppGroup
+        from app.models.account import Account
+        from app.services.green_api import GreenAPIClient
+        from sqlalchemy import select, or_
+        from datetime import datetime, timedelta
+
+        cutoff = datetime.utcnow() - timedelta(days=7)
+        async with AsyncSessionLocal() as db:
+            rows = (await db.execute(
+                select(WhatsAppGroup).where(
+                    WhatsAppGroup.green_group_id.isnot(None),
+                    or_(
+                        WhatsAppGroup.member_count == 0,
+                        WhatsAppGroup.synced_at.is_(None),
+                        WhatsAppGroup.synced_at < cutoff,
+                    ),
+                )
+            )).scalars().all()
+
+            acct_cache = {}
+            updated = 0
+            for i in range(0, len(rows), 10):
+                batch = rows[i:i + 10]
+                for grp in batch:
+                    # getGroupData only works for real groups (@g.us), not broadcasts
+                    if not grp.green_group_id or "@g.us" not in grp.green_group_id:
+                        continue
+                    if grp.account_id not in acct_cache:
+                        acct_cache[grp.account_id] = await db.get(Account, grp.account_id)
+                    account = acct_cache[grp.account_id]
+                    if not account:
+                        continue
+                    try:
+                        client = GreenAPIClient(account.instance_id, account.api_token)
+                        data = await client.get_group_data(grp.green_group_id)
+                        grp.member_count = len(data.get("participants", []))
+                        desc = data.get("description")
+                        if desc:
+                            grp.description = desc
+                        grp.synced_at = datetime.utcnow()
+                        updated += 1
+                    except Exception as e:
+                        print(f"[Backfill] group {grp.green_group_id} error: {e}")
+                await db.commit()
+                await asyncio.sleep(2)  # pause between batches
+            print(f"[Backfill] updated {updated}/{len(rows)} groups")
+    asyncio.run(_b())
+
 @celery_app.task(name="tasks.reset_daily_counters")
 def task_reset_daily_counters():
     async def _r():

@@ -3,6 +3,18 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        // Split heavy vendor libs into their own cached chunks
+        manualChunks: {
+          react: ["react", "react-dom", "react-router-dom"],
+          recharts: ["recharts"],
+          vendor: ["axios"],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

@@ -14,4 +14,5 @@ class WhatsAppGroup(Base):
     description: Mapped[str | None] = mapped_column(Text)
     chat_type: Mapped[str] = mapped_column(String(20), default="group")  # group | broadcast | community
     member_count: Mapped[int] = mapped_column(Integer, default=0)
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime, default=datetime.utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

@@ -219,12 +219,17 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_default boolean DEFAULT false",
             "ALTER TABLE whatsapp_groups ADD COLUMN IF NOT EXISTS chat_type varchar(20) DEFAULT 'group'",
             "ALTER TABLE whatsapp_groups ADD COLUMN IF NOT EXISTS description text",
+            "ALTER TABLE whatsapp_groups ADD COLUMN IF NOT EXISTS synced_at timestamp DEFAULT now()",
         ]
         for stmt in ddl_v7:
             try:
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V7] {e}")
+    # Startup config sanity checks
+    from app.config import settings as _settings
+    if not _settings.supabase_anon_key:
+        print("[WARN] SUPABASE_ANON_KEY is empty — set it in .env; product prices will be unavailable.")
     yield
 
 app = FastAPI(title="Afrakala WhatsApp Sender", version="2.0.0", lifespan=lifespan)
