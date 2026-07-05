@@ -228,6 +228,8 @@ export const WaCollectionsApi = {
   removeGroup: (id, chat_id) => http.delete(`/wa-collections/${id}/groups/${encodeURIComponent(chat_id)}`).then((r) => r.data),
   groups: (id) => http.get(`/wa-collections/${id}/groups`).then((r) => r.data),
   availableGroups: (accountId) => http.get(`/wa-collections/available-groups/${accountId}`).then((r) => r.data),
+  importAllMembers: (id) =>
+    http.post(`/wa-collections/${id}/import-all-members`, null, { timeout: 300000 }).then((r) => r.data),
 };
 
 // ── Hour-schedule presets ──────────────────────────────────

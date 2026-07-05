@@ -6,6 +6,7 @@ export default function WaCollections() {
   const { data, loading, error, reload } = useAsync(() => Api.list(), []);
   const [edit, setEdit] = React.useState(null); // null | {} (new) | collection (edit)
   const [groups, setGroups] = React.useState(null); // null | collection
+  const [importing, setImporting] = React.useState(null); // collection id being imported
 
   const remove = async (id) => {
     if (!confirm("حذف مجموعه؟")) return;
@@ -14,6 +15,24 @@ export default function WaCollections() {
       await reload();
     } catch (e) {
       alert(e?.response?.data?.detail || e.message);
+    }
+  };
+
+  const importAll = async (c) => {
+    if (!confirm(`استخراج اعضای همه گروه‌های «${c.name}» و افزودن به مخاطبین؟ ممکن است چند دقیقه طول بکشد.`)) return;
+    setImporting(c.id);
+    try {
+      const r = await Api.importAllMembers(c.id);
+      alert(
+        `مجموعه «${r.collection}»\n` +
+          `گروه‌ها: ${r.groups_ok} موفق از ${r.groups_total}\n` +
+          `شماره یکتا: ${r.unique_phones}\n` +
+          `✅ ${r.added} مخاطب جدید · ${r.skipped} تکراری · ${r.invalid} نامعتبر`
+      );
+    } catch (e) {
+      alert(e?.response?.data?.detail || e.message);
+    } finally {
+      setImporting(null);
     }
   };
 
@@ -50,6 +69,13 @@ export default function WaCollections() {
                 <button className="text-sky-400 hover:underline" onClick={() => setEdit(c)}>ویرایش</button>
                 <button className="text-red-400 hover:underline" onClick={() => remove(c.id)}>حذف</button>
               </div>
+              <button
+                className="btn-secondary text-xs w-full disabled:opacity-50"
+                disabled={importing === c.id}
+                onClick={() => importAll(c)}
+              >
+                {importing === c.id ? "در حال استخراج..." : "👥 استخراج اعضا → مخاطبین"}
+              </button>
             </div>
           ))}
         </div>

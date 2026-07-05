@@ -134,3 +134,87 @@ async def collection_groups(collection_id: str, db: AsyncSession = Depends(get_d
         {"id": str(m.id), "group_chat_id": m.group_chat_id, "group_name": m.group_name}
         for m in members
     ]
+
+
+@router.post("/{collection_id}/import-all-members")
+async def import_all_members(collection_id: str, db: AsyncSession = Depends(get_db)):
+    """Extract members from every group in the collection, merge + dedupe phone
+    numbers, and bulk-insert them into contacts (tagged with the collection)."""
+    col = await db.get(WaGroupCollection, uuid.UUID(collection_id))
+    if not col:
+        raise HTTPException(404, "Collection not found")
+
+    members = (await db.execute(
+        select(WaGroupCollectionMember).where(WaGroupCollectionMember.collection_id == col.id)
+    )).scalars().all()
+    if not members:
+        raise HTTPException(400, "این مجموعه هیچ گروهی ندارد")
+
+    from app.models.account import Account
+    from app.models.contact import Contact
+    from app.services.green_api import GreenAPIClient
+    from app.services.excel_service import normalize_phone
+
+    all_phones = set()
+    groups_ok = 0
+    groups_failed = 0
+    account_cache = {}
+
+    for m in members:
+        grp = (await db.execute(
+            select(WhatsAppGroup).where(WhatsAppGroup.green_group_id == m.group_chat_id)
+        )).scalar_one_or_none()
+        if not grp:
+            groups_failed += 1
+            continue
+        if grp.account_id not in account_cache:
+            account_cache[grp.account_id] = await db.get(Account, grp.account_id)
+        account = account_cache[grp.account_id]
+        if not account:
+            groups_failed += 1
+            continue
+        try:
+            client = GreenAPIClient(account.instance_id, account.api_token)
+            data = await client.get_group_data(grp.green_group_id)
+            for p in (data.get("participants", []) or []):
+                phone = str(p.get("id", "")).split("@")[0]  # strip @c.us
+                if phone and phone.isdigit():
+                    all_phones.add(phone)
+            groups_ok += 1
+        except Exception as e:
+            groups_failed += 1
+            print(f"[CollectionImport] group {m.group_chat_id} error: {e}")
+
+    # Bulk-insert merged phones into contacts (dedupe against existing + invalid).
+    source = f"collection_import_{col.name}"[:200]
+    added = 0
+    skipped = 0
+    invalid = 0
+    added_set = set()
+    for raw in all_phones:
+        phone = normalize_phone(raw)
+        if not phone:
+            invalid += 1
+            continue
+        if phone in added_set:
+            continue
+        existing = (await db.execute(select(Contact).where(Contact.phone == phone))).scalar_one_or_none()
+        if existing:
+            skipped += 1
+            continue
+        db.add(Contact(phone=phone, source=source))
+        added_set.add(phone)
+        added += 1
+    await db.commit()
+
+    return {
+        "collection": col.name,
+        "groups_total": len(members),
+        "groups_ok": groups_ok,
+        "groups_failed": groups_failed,
+        "unique_phones": len(all_phones),
+        "added": added,
+        "skipped": skipped,
+        "invalid": invalid,
+        "source": source,
+    }
