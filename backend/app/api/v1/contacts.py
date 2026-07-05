@@ -39,7 +39,8 @@ async def list_contacts(
     db: AsyncSession = Depends(get_db)
 ):
     skip = max(0, skip)
-    limit = max(1, limit)
+    # Default 1000/page; clamp to [1, 20000] as an OOM safety ceiling.
+    limit = max(1, min(limit, 20000))
 
     base = select(Contact)
     # By default hide blacklisted; pass blacklisted=true to include everyone.
