@@ -9,10 +9,15 @@ const DISAPPEARING_OPTS = [
   { label: "۹۰ روز", value: 7776000 },
 ];
 
+const fa = (n) => Number(n || 0).toLocaleString("fa-IR");
+
 export default function Contacts() {
   const [search, setSearch] = React.useState("");
   const [data, setData] = React.useState(null);
+  const [total, setTotal] = React.useState(0);
+  const [loadingMore, setLoadingMore] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
+  const PAGE_SIZE = 500;
   const [selected, setSelected] = React.useState(new Set());
   const [importing, setImporting] = React.useState(false);
   const [addToCampaign, setAddToCampaign] = React.useState(false);
@@ -51,10 +56,21 @@ export default function Contacts() {
 
   const load = React.useCallback(() => {
     setLoading(true);
-    Api.list({ search: search || undefined })
-      .then(setData)
+    Api.list({ search: search || undefined, skip: 0, limit: PAGE_SIZE })
+      .then((res) => {
+        setData(res.items);
+        setTotal(res.total);
+      })
       .finally(() => setLoading(false));
   }, [search]);
+
+  const loadMore = () => {
+    if (!data) return;
+    setLoadingMore(true);
+    Api.list({ search: search || undefined, skip: data.length, limit: PAGE_SIZE })
+      .then((res) => setData((prev) => [...(prev || []), ...res.items]))
+      .finally(() => setLoadingMore(false));
+  };
 
   React.useEffect(() => {
     const t = setTimeout(load, 300);
@@ -176,6 +192,12 @@ export default function Contacts() {
 
       <input className="input" placeholder="جستجو بر اساس نام یا شماره..." value={search} onChange={(e) => setSearch(e.target.value)} />
 
+      {data && (
+        <p className="text-xs text-slate-400">
+          نمایش {fa(data.length)} از {fa(total)} مخاطب
+        </p>
+      )}
+
       {loading && <Spinner />}
       {data && data.length === 0 && <Empty label="مخاطبی یافت نشد." />}
 
@@ -223,6 +245,12 @@ export default function Contacts() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {data && data.length < total && (
+        <button className="btn-secondary w-full" disabled={loadingMore} onClick={loadMore}>
+          {loadingMore ? "در حال بارگذاری..." : `بارگذاری بیشتر (${fa(total - data.length)} باقی‌مانده)`}
+        </button>
       )}
 
       {addToCampaign && (

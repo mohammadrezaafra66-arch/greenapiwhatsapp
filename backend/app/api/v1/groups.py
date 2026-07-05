@@ -407,7 +407,15 @@ async def import_members_to_contacts(group_id: str, body: ImportMembersBody, db:
         added_phones.add(phone)
         added += 1
     await db.commit()
-    return {"added": added, "skipped": skipped, "invalid": invalid, "total": len(body.phones), "source": source}
+    # `inserted` is the exact number of NEW contact rows created (== added).
+    return {
+        "inserted": added,
+        "added": added,
+        "skipped": skipped,
+        "invalid": invalid,
+        "submitted": len(body.phones),
+        "source": source,
+    }
 
 
 @router.get("/{group_id}/info")

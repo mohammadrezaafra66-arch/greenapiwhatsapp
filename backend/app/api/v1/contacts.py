@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, func
 from app.database import get_db
 from app.models.contact import Contact
 from app.models.account import Account, AccountStatus
@@ -27,11 +27,17 @@ async def list_contacts(
     search: str = None,
     has_whatsapp: bool = None,
     province: str = None,
+    skip: int = 0,
+    limit: int = 500,
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(Contact).where(Contact.blacklisted == False)
+    # Clamp pagination — default 500 per page, hard cap 2000.
+    limit = max(1, min(limit, 2000))
+    skip = max(0, skip)
+
+    base = select(Contact).where(Contact.blacklisted == False)
     if search:
-        query = query.where(
+        base = base.where(
             or_(
                 Contact.phone.contains(search),
                 Contact.first_name.ilike(f"%{search}%"),
@@ -39,26 +45,34 @@ async def list_contacts(
             )
         )
     if has_whatsapp is not None:
-        query = query.where(Contact.has_whatsapp == has_whatsapp)
+        base = base.where(Contact.has_whatsapp == has_whatsapp)
     if province:
-        query = query.where(Contact.province == province)
+        base = base.where(Contact.province == province)
 
-    result = await db.execute(query.limit(500))
+    total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar() or 0
+    result = await db.execute(
+        base.order_by(Contact.created_at.desc()).offset(skip).limit(limit)
+    )
     contacts = result.scalars().all()
-    return [
-        {
-            "id": str(c.id),
-            "phone": c.phone,
-            "name": c.full_name,
-            "first_name": c.first_name,
-            "last_name": c.last_name,
-            "has_whatsapp": c.has_whatsapp,
-            "province": c.province,
-            "city": c.city,
-            "segment": c.segment,
-        }
-        for c in contacts
-    ]
+    return {
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "items": [
+            {
+                "id": str(c.id),
+                "phone": c.phone,
+                "name": c.full_name,
+                "first_name": c.first_name,
+                "last_name": c.last_name,
+                "has_whatsapp": c.has_whatsapp,
+                "province": c.province,
+                "city": c.city,
+                "segment": c.segment,
+            }
+            for c in contacts
+        ],
+    }
 
 
 @router.post("/")
