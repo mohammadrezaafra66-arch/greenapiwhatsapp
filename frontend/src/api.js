@@ -102,6 +102,9 @@ export const Groups = {
     return http.get(`/groups/${q ? `?${q}` : ""}`).then((r) => r.data);
   },
   refreshMembers: (groupId) => http.post(`/groups/${groupId}/refresh-members`).then((r) => r.data),
+  extractMembers: (groupId) => http.post(`/groups/${groupId}/extract-members`, null, { timeout: 60000 }).then((r) => r.data),
+  importMembersToContacts: (groupId, phones) =>
+    http.post(`/groups/${groupId}/import-members-to-contacts`, { phones }).then((r) => r.data),
   create: (body) => http.post("/groups/", body).then((r) => r.data),
   addMembers: (id, phones) =>
     http.post(`/groups/${id}/members`, { phones }).then((r) => r.data),

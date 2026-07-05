@@ -345,6 +345,71 @@ async def refresh_group_members(group_id: str, db: AsyncSession = Depends(get_db
         raise HTTPException(500, f"Green API error: {e}")
 
 
+@router.post("/{group_id}/extract-members")
+async def extract_group_members(group_id: str, db: AsyncSession = Depends(get_db)):
+    """Fetch the group's participants from Green API and return their phone numbers
+    (@c.us suffix stripped). group_id is the DB uuid."""
+    grp = await db.get(WhatsAppGroup, uuid.UUID(group_id))
+    if not grp:
+        raise HTTPException(404, "Group not found")
+    account = await db.get(Account, grp.account_id)
+    if not account:
+        raise HTTPException(400, "Account not found")
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    try:
+        data = await client.get_group_data(grp.green_group_id)
+    except Exception as e:
+        raise HTTPException(502, f"Green API error: {e}")
+
+    phones = []
+    seen = set()
+    for p in (data.get("participants", []) or []):
+        phone = str(p.get("id", "")).split("@")[0]  # strip @c.us
+        if phone and phone.isdigit() and phone not in seen:
+            seen.add(phone)
+            phones.append(phone)
+    return {"group_id": group_id, "group_name": grp.name, "count": len(phones), "phones": phones}
+
+
+class ImportMembersBody(BaseModel):
+    phones: list[str]
+
+
+@router.post("/{group_id}/import-members-to-contacts")
+async def import_members_to_contacts(group_id: str, body: ImportMembersBody, db: AsyncSession = Depends(get_db)):
+    """Bulk-insert the given phone numbers into contacts, tagged with the group as
+    source. Normalizes Iranian numbers and skips duplicates/invalid entries."""
+    grp = await db.get(WhatsAppGroup, uuid.UUID(group_id))
+    if not grp:
+        raise HTTPException(404, "Group not found")
+
+    from app.models.contact import Contact
+    from app.services.excel_service import normalize_phone
+
+    source = f"group_import_{grp.name}"[:200]
+    added = 0
+    skipped = 0
+    invalid = 0
+    added_phones = set()
+    for raw in body.phones:
+        phone = normalize_phone(raw)
+        if not phone:
+            invalid += 1
+            continue
+        if phone in added_phones:
+            skipped += 1
+            continue
+        existing = await db.execute(select(Contact).where(Contact.phone == phone))
+        if existing.scalar_one_or_none():
+            skipped += 1
+            continue
+        db.add(Contact(phone=phone, source=source))
+        added_phones.add(phone)
+        added += 1
+    await db.commit()
+    return {"added": added, "skipped": skipped, "invalid": invalid, "total": len(body.phones), "source": source}
+
+
 @router.get("/{group_id}/info")
 async def group_info(group_id: str, db: AsyncSession = Depends(get_db)):
     group = await db.get(WhatsAppGroup, uuid.UUID(group_id))

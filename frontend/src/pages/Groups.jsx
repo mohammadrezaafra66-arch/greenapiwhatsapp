@@ -45,6 +45,20 @@ export default function Groups() {
   const [send, setSend] = React.useState(null);
   const [busy, setBusy] = React.useState(null);
   const [addMembers, setAddMembers] = React.useState(null);
+  const [extracting, setExtracting] = React.useState(null); // group id being extracted
+  const [extracted, setExtracted] = React.useState(null); // { group, phones, count } | null
+
+  const extractMembers = async (g) => {
+    setExtracting(g.id);
+    try {
+      const r = await Api.extractMembers(g.id);
+      setExtracted({ group: g, phones: r.phones, count: r.count });
+    } catch (e) {
+      alert(e?.response?.data?.detail || e.message);
+    } finally {
+      setExtracting(null);
+    }
+  };
 
   const loadGroups = React.useCallback(async () => {
     setLoading(true);
@@ -204,6 +218,13 @@ export default function Groups() {
                 <button className="btn-secondary flex-1 text-xs" onClick={() => setSend(g)}>ارسال پیام</button>
                 <button className="btn-secondary text-xs px-2" title="کپی شناسه" onClick={() => copyId(g.group_chat_id)}>📋</button>
               </div>
+              <button
+                className="btn-secondary text-xs w-full disabled:opacity-50"
+                disabled={extracting === g.id}
+                onClick={() => extractMembers(g)}
+              >
+                {extracting === g.id ? "در حال استخراج..." : "👥 استخراج اعضا"}
+              </button>
               {g.is_admin && (
                 <button className="btn-secondary text-xs w-full" onClick={() => setAddMembers(g)}>
                   ➕ افزودن اعضا از اکسل
@@ -217,7 +238,50 @@ export default function Groups() {
       {showAdd && <AddGroupModal onClose={() => setShowAdd(false)} onDone={loadGroups} />}
       {send && <SendModal group={send} onClose={() => setSend(null)} />}
       {addMembers && <AddMembersModal group={addMembers} onClose={() => setAddMembers(null)} />}
+      {extracted && <ExtractedMembersModal data={extracted} onClose={() => setExtracted(null)} />}
     </div>
+  );
+}
+
+function ExtractedMembersModal({ data, onClose }) {
+  const { group, phones, count } = data;
+  const [importing, setImporting] = React.useState(false);
+  const [result, setResult] = React.useState(null);
+
+  const importToContacts = async () => {
+    setImporting(true);
+    try {
+      const r = await Api.importMembersToContacts(group.id, phones);
+      setResult(r);
+    } catch (e) {
+      alert(e?.response?.data?.detail || e.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <Modal title={`اعضای گروه: ${group.name}`} onClose={onClose}>
+      <div className="space-y-3">
+        <p className="text-sm text-slate-300">{fa(count)} شماره استخراج شد</p>
+        <div className="max-h-64 overflow-y-auto bg-slate-900 rounded-lg p-2 text-xs font-mono text-slate-400 space-y-0.5" dir="ltr">
+          {phones.length === 0 ? (
+            <p className="text-slate-500">شماره‌ای یافت نشد.</p>
+          ) : (
+            phones.map((p) => <div key={p}>{p}</div>)
+          )}
+        </div>
+        {result ? (
+          <div className="card bg-emerald-500/10 border-emerald-500/30 text-sm text-emerald-300">
+            ✅ {fa(result.added)} مخاطب جدید افزوده شد · {fa(result.skipped)} تکراری · {fa(result.invalid)} نامعتبر
+          </div>
+        ) : (
+          <button className="btn-primary w-full" disabled={importing || phones.length === 0} onClick={importToContacts}>
+            {importing ? "در حال افزودن..." : "افزودن به مخاطبین"}
+          </button>
+        )}
+      </div>
+    </Modal>
   );
 }
 
