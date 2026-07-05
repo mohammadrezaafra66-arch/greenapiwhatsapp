@@ -238,6 +238,25 @@ async def lifespan(app: FastAPI):
         ddl_v9 = [
             "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS group_source varchar(500)",
         ]
+        # A4 — indexes on hot query columns (idempotent). Column names verified
+        # against the models (ai_usage_logs uses used_at, not created_at).
+        ddl_indexes = [
+            "CREATE INDEX IF NOT EXISTS idx_contacts_blacklisted ON contacts(blacklisted)",
+            "CREATE INDEX IF NOT EXISTS idx_contacts_has_whatsapp ON contacts(has_whatsapp)",
+            "CREATE INDEX IF NOT EXISTS idx_contacts_created ON contacts(created_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_campaign_contacts_campaign ON campaign_contacts(campaign_id)",
+            "CREATE INDEX IF NOT EXISTS idx_campaign_contacts_status ON campaign_contacts(status)",
+            "CREATE INDEX IF NOT EXISTS idx_campaign_contacts_composite ON campaign_contacts(campaign_id, status)",
+            "CREATE INDEX IF NOT EXISTS idx_campaign_contacts_msgid ON campaign_contacts(green_api_message_id)",
+            "CREATE INDEX IF NOT EXISTS idx_inbox_instance ON inbox_messages(instance_id)",
+            "CREATE INDEX IF NOT EXISTS idx_inbox_timestamp ON inbox_messages(timestamp DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_inbox_sender ON inbox_messages(sender_phone)",
+            "CREATE INDEX IF NOT EXISTS idx_wa_groups_account ON whatsapp_groups(account_id)",
+            "CREATE INDEX IF NOT EXISTS idx_wa_groups_admin ON whatsapp_groups(is_admin)",
+            "CREATE INDEX IF NOT EXISTS idx_daily_send_logs_date ON daily_send_logs(date)",
+            "CREATE INDEX IF NOT EXISTS idx_ai_usage_used ON ai_usage_logs(used_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_accounts_status ON accounts(status)",
+        ]
         for stmt in ddl_v7:
             try:
                 await conn.execute(text(stmt))
@@ -253,6 +272,11 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V9] {e}")
+        for stmt in ddl_indexes:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[IDX] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:

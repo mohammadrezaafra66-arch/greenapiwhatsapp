@@ -3,11 +3,26 @@ from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
 from app.config import settings
 
-# NullPool: never reuse a connection across checkouts. Required because Celery
-# runs each task via asyncio.run() (a fresh event loop per task) and asyncpg
-# connections are bound to the loop that created them — a pooled connection
-# reused on a different loop raises "another operation is in progress".
-engine = create_async_engine(settings.database_url, echo=settings.debug, poolclass=NullPool)
+# Two pooling modes (A1 — scaling):
+#  • Celery workers (worker_mode=True): NullPool. Each task runs via asyncio.run()
+#    (a fresh event loop per task); pooled asyncpg conns are bound to the loop that
+#    created them, so a reused conn on a new loop raises "another operation in
+#    progress". NullPool sidesteps this by never reusing connections.
+#  • API (worker_mode=False): a real AsyncAdaptedQueuePool. uvicorn serves on a
+#    single persistent loop, so pooled connections stay valid — needed to handle
+#    many concurrent requests (80 accounts) without exhausting connections.
+if settings.worker_mode:
+    engine = create_async_engine(settings.database_url, echo=settings.debug, poolclass=NullPool)
+else:
+    engine = create_async_engine(
+        settings.database_url,
+        echo=settings.debug,
+        pool_size=20,          # base connections
+        max_overflow=40,       # burst capacity → 60 total
+        pool_timeout=30,
+        pool_recycle=1800,     # recycle every 30 min (avoid stale conns)
+        pool_pre_ping=True,    # validate connection before use
+    )
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 class Base(DeclarativeBase):

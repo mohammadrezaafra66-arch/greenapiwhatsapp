@@ -1,7 +1,26 @@
+# Shared config for Celery workers (WORKER_MODE=1 → NullPool, see database.py).
+x-worker-base: &worker-base
+  build: ./backend
+  restart: always
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://afrakala:password@db:5432/whatsapp_sender
+    SYNC_DATABASE_URL: postgresql://afrakala:password@db:5432/whatsapp_sender
+    REDIS_URL: redis://redis:6379/0
+    WEBHOOK_BASE_URL: https://multidisciplinary-jeri-physiognomically.ngrok-free.dev
+    WORKER_MODE: "1"
+  depends_on:
+    - db
+    - redis
+  volumes:
+    - ./backend:/app
+
 services:
   db:
     image: postgres:15-alpine
     restart: always
+    # A1 — raise connection ceiling for many concurrent workers/accounts.
+    command: postgres -c max_connections=300 -c shared_buffers=256MB
     environment:
       POSTGRES_USER: afrakala
       POSTGRES_PASSWORD: password
@@ -37,21 +56,15 @@ services:
       - ./backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  worker:
-    build: ./backend
-    restart: always
-    env_file: .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://afrakala:password@db:5432/whatsapp_sender
-      SYNC_DATABASE_URL: postgresql://afrakala:password@db:5432/whatsapp_sender
-      REDIS_URL: redis://redis:6379/0
-      WEBHOOK_BASE_URL: https://multidisciplinary-jeri-physiognomically.ngrok-free.dev
-    depends_on:
-      - db
-      - redis
-    volumes:
-      - ./backend:/app
-    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+  # A2 — queue-isolated workers. Concurrency values are modest for a single host;
+  # scale each up (esp. worker-sending) on production hardware for 80 accounts.
+  worker-general:
+    <<: *worker-base
+    command: celery -A app.workers.celery_app worker -Q campaigns,extraction,backfill,celery,sending --concurrency=4 --loglevel=info -n general@%h
+
+  worker-webhooks:
+    <<: *worker-base
+    command: celery -A app.workers.celery_app worker -Q webhooks --concurrency=4 --loglevel=info -n webhooks@%h
 
   beat:
     build: ./backend
@@ -62,6 +75,7 @@ services:
       SYNC_DATABASE_URL: postgresql://afrakala:password@db:5432/whatsapp_sender
       REDIS_URL: redis://redis:6379/0
       WEBHOOK_BASE_URL: https://multidisciplinary-jeri-physiognomically.ngrok-free.dev
+      WORKER_MODE: "1"
     depends_on:
       - redis
     volumes:

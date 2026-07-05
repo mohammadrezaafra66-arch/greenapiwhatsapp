@@ -96,6 +96,12 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
             account.sent_today += 1
             campaign.sent_count += 1
             await record_send(str(account.id))
+            # A3: also increment the scalable Redis day/hour counters (non-fatal).
+            try:
+                from app.services import redis_rate_limiter
+                await redis_rate_limiter.record_send(str(account.id))
+            except Exception:
+                pass
 
             # Log to daily_send_logs for the night report
             from app.models.reporting import DailySendLog

@@ -148,26 +148,35 @@ def task_extract_all_groups(account_id: str, instance_id: str, api_token: str, g
             try:
                 resp = await client.get_group_data(green_group_id)
                 participants = resp.get("participants", []) or []
-                async with AsyncSessionLocal() as db:
-                    seen = set()
-                    for p in participants:
-                        raw = str(p.get("id", "")).split("@")[0]
-                        phone = normalize_phone(raw)
-                        if not phone or phone in seen:
-                            total_skipped += 1
-                            continue
-                        seen.add(phone)
-                        existing = await db.execute(sa_select(Contact).where(Contact.phone == phone))
-                        if existing.scalar_one_or_none():
-                            total_skipped += 1
-                            continue
-                        db.add(Contact(
-                            phone=phone,
-                            source=f"group:{group_name[:50]}",
-                            group_source=group_name[:500],
-                        ))
-                        total_added += 1
-                    await db.commit()
+                # Normalize + in-batch dedupe (A5: no per-row SELECT; bulk insert
+                # with ON CONFLICT DO NOTHING relies on the unique index on phone).
+                phones = []
+                seen = set()
+                for p in participants:
+                    raw = str(p.get("id", "")).split("@")[0]
+                    phone = normalize_phone(raw)
+                    if not phone or phone in seen:
+                        total_skipped += 1
+                        continue
+                    seen.add(phone)
+                    phones.append(phone)
+
+                if phones:
+                    from sqlalchemy.dialects.postgresql import insert as pg_insert
+                    src = f"group:{group_name[:50]}"
+                    gsrc = group_name[:500]
+                    stmt = (
+                        pg_insert(Contact)
+                        .values([{"phone": ph, "source": src, "group_source": gsrc} for ph in phones])
+                        .on_conflict_do_nothing(index_elements=["phone"])
+                        .returning(Contact.id)
+                    )
+                    async with AsyncSessionLocal() as db:
+                        res = await db.execute(stmt)
+                        inserted = len(res.fetchall())
+                        await db.commit()
+                    total_added += inserted
+                    total_skipped += len(phones) - inserted  # existing duplicates
                 await asyncio.sleep(1)  # rate limit between groups
             except Exception as e:
                 print(f"[BulkExtract] Group {group_name}: {e}")

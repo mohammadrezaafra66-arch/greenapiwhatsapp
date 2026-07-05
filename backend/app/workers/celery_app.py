@@ -1,10 +1,32 @@
 from celery import Celery
 from celery.schedules import crontab
+from kombu import Queue
 from app.config import settings
 
 celery_app = Celery("whatsapp_sender", broker=settings.redis_url, backend=settings.redis_url, include=["app.workers.tasks"])
 celery_app.conf.update(task_serializer="json", result_serializer="json", accept_content=["json"],
     timezone="Asia/Tehran", enable_utc=True, worker_prefetch_multiplier=1, task_acks_late=True)
+
+# ── A2: per-queue task isolation (scaling to 80 accounts) ──────────────────
+# Route task types to dedicated queues so one slow/banned account or a heavy
+# extraction can't starve campaign sends or webhook polling. Workers consume
+# specific queues (see docker-compose worker-* services).
+celery_app.conf.task_queues = (
+    Queue("campaigns"),
+    Queue("sending"),     # reserved for the per-account send subtasks (future)
+    Queue("webhooks"),
+    Queue("extraction"),
+    Queue("backfill"),
+    Queue("celery"),      # default (beat/maintenance tasks)
+)
+celery_app.conf.task_default_queue = "celery"
+celery_app.conf.task_routes = {
+    "tasks.run_campaign": {"queue": "campaigns"},
+    "tasks.run_group_campaign": {"queue": "campaigns"},
+    "tasks.poll_accounts": {"queue": "webhooks"},
+    "tasks.extract_all_groups": {"queue": "extraction"},
+    "tasks.backfill_group_member_counts": {"queue": "backfill"},
+}
 
 celery_app.conf.beat_schedule = {
     # Fires at 00:00 Tehran (app timezone is Asia/Tehran) — resilient to worker

@@ -3,8 +3,45 @@ Full Green API client — ALL endpoints implemented.
 Docs: https://green-api.com/en/docs/api/
 """
 import httpx
+import asyncio
+import time
 from typing import Optional
 from app.config import settings
+
+# ── A6: Green API concurrency safety ───────────────────────────────────────
+# Each account is one Green API instance with its own rate limits. For 80
+# accounts we cap concurrent requests per instance, back off on 429, and trip a
+# circuit breaker after repeated failures so a dead/banned instance is skipped
+# for a cooldown instead of hammering the API.
+MAX_CONCURRENT_PER_INSTANCE = 5
+CB_ERROR_THRESHOLD = 5      # consecutive errors before opening the breaker
+CB_COOLDOWN_SECONDS = 300   # skip the instance for 5 minutes when open
+MAX_429_RETRIES = 3
+
+_semaphores: dict = {}   # (instance_id, loop_id) -> asyncio.Semaphore
+_cb_errors: dict = {}    # instance_id -> consecutive error count
+_cb_until: dict = {}     # instance_id -> monotonic time until which it is skipped
+
+
+def _get_semaphore(instance_id: str) -> asyncio.Semaphore:
+    # Key by (instance, loop) so each event loop (Celery runs one per task) gets
+    # its own semaphore — an asyncio primitive can't be shared across loops.
+    try:
+        loop_id = id(asyncio.get_running_loop())
+    except RuntimeError:
+        loop_id = 0
+    key = (instance_id, loop_id)
+    sem = _semaphores.get(key)
+    if sem is None:
+        sem = asyncio.Semaphore(MAX_CONCURRENT_PER_INSTANCE)
+        _semaphores[key] = sem
+    return sem
+
+
+def _register_error(instance_id: str):
+    _cb_errors[instance_id] = _cb_errors.get(instance_id, 0) + 1
+    if _cb_errors[instance_id] >= CB_ERROR_THRESHOLD:
+        _cb_until[instance_id] = time.monotonic() + CB_COOLDOWN_SECONDS
 
 
 class GreenAPIClient:
@@ -13,21 +50,45 @@ class GreenAPIClient:
         self.api_token = api_token
         self.base_url = f"https://api.green-api.com/waInstance{instance_id}"
 
+    async def _guarded(self, call):
+        """Run an httpx call under the per-instance semaphore, with 429 backoff
+        and circuit-breaker accounting. `call` is a coroutine factory returning
+        an httpx.Response."""
+        if _cb_until.get(self.instance_id, 0) > time.monotonic():
+            raise RuntimeError(f"Green API instance {self.instance_id} temporarily degraded (circuit open)")
+        async with _get_semaphore(self.instance_id):
+            for attempt in range(MAX_429_RETRIES + 1):
+                try:
+                    r = await call()
+                except Exception:
+                    _register_error(self.instance_id)
+                    raise
+                if r.status_code == 429 and attempt < MAX_429_RETRIES:
+                    await asyncio.sleep(2 ** attempt)  # 1, 2, 4s
+                    continue
+                try:
+                    r.raise_for_status()
+                except Exception:
+                    _register_error(self.instance_id)
+                    raise
+                _cb_errors[self.instance_id] = 0  # success resets the breaker
+                return r.json()
+
     async def _get(self, endpoint: str, params: dict = None) -> dict:
         # Query params must go AFTER the token segment, not inside `endpoint`
         # (Green API URL shape: /waInstance{id}/{method}/{token}?query).
         url = f"{self.base_url}/{endpoint}/{self.api_token}"
-        async with httpx.AsyncClient(timeout=30) as c:
-            r = await c.get(url, params=params)
-            r.raise_for_status()
-            return r.json()
+        async def _call():
+            async with httpx.AsyncClient(timeout=30) as c:
+                return await c.get(url, params=params)
+        return await self._guarded(_call)
 
     async def _post(self, endpoint: str, data: dict = None, timeout: int = 30) -> dict:
         url = f"{self.base_url}/{endpoint}/{self.api_token}"
-        async with httpx.AsyncClient(timeout=timeout) as c:
-            r = await c.post(url, json=data or {})
-            r.raise_for_status()
-            return r.json()
+        async def _call():
+            async with httpx.AsyncClient(timeout=timeout) as c:
+                return await c.post(url, json=data or {})
+        return await self._guarded(_call)
 
     # ── ACCOUNT ──────────────────────────────────────────
     async def get_state(self) -> str:

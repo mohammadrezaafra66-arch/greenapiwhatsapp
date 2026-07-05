@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     default_min_delay: int = 45
     default_max_delay: int = 110
     debug: bool = True
+    # When true (Celery worker/beat), use NullPool — each task runs on a fresh
+    # event loop via asyncio.run and pooled asyncpg conns can't cross loops.
+    # When false (API), use a real connection pool for concurrency.
+    worker_mode: bool = False
 
     class Config:
         env_file = ".env"
