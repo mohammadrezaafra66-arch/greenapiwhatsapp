@@ -112,6 +112,76 @@ def task_backfill_group_member_counts():
             print(f"[Backfill] updated {updated}/{len(rows)} groups")
     asyncio.run(_b())
 
+@celery_app.task(name="tasks.extract_all_groups")
+def task_extract_all_groups(account_id: str, instance_id: str, api_token: str, group_data: list):
+    """Extract members from every given group and import them to contacts (no admin
+    gate). group_data: list of [group_db_id, green_group_id, group_name]. Progress
+    is tracked in Redis under extract_progress:{account_id}."""
+    import redis
+    from app.config import settings
+    from app.services.green_api import GreenAPIClient
+    from app.services.excel_service import normalize_phone
+    from app.database import AsyncSessionLocal
+    from app.models.contact import Contact
+    from sqlalchemy import select as sa_select
+
+    r = redis.from_url(settings.redis_url)
+    progress_key = f"extract_progress:{account_id}"
+    r.hset(progress_key, mapping={
+        "status": "running", "processed": 0, "total": len(group_data),
+        "added": 0, "skipped": 0, "current_group": "",
+    })
+    r.expire(progress_key, 3600)
+
+    client = GreenAPIClient(instance_id, api_token)
+
+    async def _run():
+        total_added = 0
+        total_skipped = 0
+        for i, item in enumerate(group_data):
+            green_group_id = item[1]
+            group_name = item[2] or ""
+            r.hset(progress_key, mapping={
+                "processed": i, "current_group": group_name[:50],
+                "added": total_added, "skipped": total_skipped,
+            })
+            try:
+                resp = await client.get_group_data(green_group_id)
+                participants = resp.get("participants", []) or []
+                async with AsyncSessionLocal() as db:
+                    seen = set()
+                    for p in participants:
+                        raw = str(p.get("id", "")).split("@")[0]
+                        phone = normalize_phone(raw)
+                        if not phone or phone in seen:
+                            total_skipped += 1
+                            continue
+                        seen.add(phone)
+                        existing = await db.execute(sa_select(Contact).where(Contact.phone == phone))
+                        if existing.scalar_one_or_none():
+                            total_skipped += 1
+                            continue
+                        db.add(Contact(
+                            phone=phone,
+                            source=f"group:{group_name[:50]}",
+                            group_source=group_name[:500],
+                        ))
+                        total_added += 1
+                    await db.commit()
+                await asyncio.sleep(1)  # rate limit between groups
+            except Exception as e:
+                print(f"[BulkExtract] Group {group_name}: {e}")
+                continue
+
+        r.hset(progress_key, mapping={
+            "status": "completed", "processed": len(group_data),
+            "added": total_added, "skipped": total_skipped, "current_group": "",
+        })
+        r.expire(progress_key, 3600)
+
+    asyncio.run(_run())
+
+
 @celery_app.task(name="tasks.reset_daily_counters")
 def task_reset_daily_counters():
     async def _r():

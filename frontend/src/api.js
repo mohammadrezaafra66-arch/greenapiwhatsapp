@@ -67,6 +67,7 @@ export const Campaigns = {
 // ── Contacts ───────────────────────────────────────────
 export const Contacts = {
   list: (params = {}) => http.get("/contacts/", { params }).then((r) => r.data),
+  count: () => http.get("/contacts/count").then((r) => r.data),
   create: (body) => http.post("/contacts/", body).then((r) => r.data),
   import: (file, source = "excel_import") => {
     const fd = new FormData();
@@ -114,6 +115,9 @@ export const Groups = {
     http.post(`/groups/${id}/send`, { message }).then((r) => r.data),
   info: (id) => http.get(`/groups/${id}/info`).then((r) => r.data),
   sync: (accountId) => http.post(`/groups/sync/${accountId}`, null, { timeout: 120000 }).then((r) => r.data),
+  extractAll: (accountId, minMembers = 0) =>
+    http.post(`/groups/extract-all-members`, null, { params: { account_id: accountId, min_members: minMembers } }).then((r) => r.data),
+  extractProgress: (accountId) => http.get(`/groups/extract-all-progress/${accountId}`).then((r) => r.data),
   // V8 F40 — add members to an admin group. group_id is the chatId (…@g.us).
   autoAddMembers: (group_id, account_id, phones) => {
     const p = new URLSearchParams();

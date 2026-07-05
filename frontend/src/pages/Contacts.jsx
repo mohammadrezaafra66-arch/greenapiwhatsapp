@@ -17,7 +17,7 @@ export default function Contacts() {
   const [total, setTotal] = React.useState(0);
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
-  const PAGE_SIZE = 500;
+  const PAGE_SIZE = 1000;
   const [selected, setSelected] = React.useState(new Set());
   const [importing, setImporting] = React.useState(false);
   const [addToCampaign, setAddToCampaign] = React.useState(false);
@@ -58,7 +58,7 @@ export default function Contacts() {
     setLoading(true);
     Api.list({ search: search || undefined, skip: 0, limit: PAGE_SIZE })
       .then((res) => {
-        setData(res.items);
+        setData(res.contacts);
         setTotal(res.total);
       })
       .finally(() => setLoading(false));
@@ -68,7 +68,7 @@ export default function Contacts() {
     if (!data) return;
     setLoadingMore(true);
     Api.list({ search: search || undefined, skip: data.length, limit: PAGE_SIZE })
-      .then((res) => setData((prev) => [...(prev || []), ...res.items]))
+      .then((res) => setData((prev) => [...(prev || []), ...res.contacts]))
       .finally(() => setLoadingMore(false));
   };
 
@@ -213,6 +213,7 @@ export default function Contacts() {
                 <th className="p-3 text-right">شماره</th>
                 <th className="p-3 text-right">استان</th>
                 <th className="p-3 text-right">واتس‌اپ</th>
+                <th className="p-3 text-right">منبع</th>
                 <th className="p-3 text-right"></th>
               </tr>
             </thead>
@@ -225,6 +226,9 @@ export default function Contacts() {
                   <td className="p-3">{c.province || "—"}</td>
                   <td className="p-3">
                     {c.has_whatsapp === true ? <span className="text-emerald-400">✓</span> : c.has_whatsapp === false ? <span className="text-red-400">✗</span> : <span className="text-slate-500">?</span>}
+                  </td>
+                  <td className="p-3 text-xs text-slate-500 max-w-[10rem] truncate" title={c.group_source || c.source || ""}>
+                    {c.group_source || c.source || "—"}
                   </td>
                   <td className="p-3">
                     <div className="flex gap-2 flex-wrap">

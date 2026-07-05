@@ -235,6 +235,9 @@ async def lifespan(app: FastAPI):
             # Feature 42: hide price option in campaigns
             "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS show_product_prices boolean DEFAULT true",
         ]
+        ddl_v9 = [
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS group_source varchar(500)",
+        ]
         for stmt in ddl_v7:
             try:
                 await conn.execute(text(stmt))
@@ -245,6 +248,11 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V8] {e}")
+        for stmt in ddl_v9:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V9] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:

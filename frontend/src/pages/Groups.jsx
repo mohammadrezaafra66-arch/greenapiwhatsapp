@@ -60,6 +60,42 @@ export default function Groups() {
     }
   };
 
+  // Bulk extract members from ALL of this account's groups → contacts (background)
+  const [extractingAll, setExtractingAll] = React.useState(false);
+  const [extractProgress, setExtractProgress] = React.useState(null);
+  const pollRef = React.useRef(null);
+
+  React.useEffect(() => () => clearInterval(pollRef.current), []);
+
+  const extractAllGroups = async () => {
+    if (!selectedAccount) return alert("حساب فعالی انتخاب نشده است");
+    if (!confirm("استخراج اعضای همه گروه‌های این حساب و افزودن به مخاطبین؟ این کار در پس‌زمینه اجرا می‌شود.")) return;
+    setExtractingAll(true);
+    setExtractProgress(null);
+    try {
+      await Api.extractAll(selectedAccount, 0);
+      clearInterval(pollRef.current);
+      pollRef.current = setInterval(async () => {
+        try {
+          const prog = await Api.extractProgress(selectedAccount);
+          setExtractProgress(prog);
+          if (prog.status === "completed" || prog.status === "idle") {
+            clearInterval(pollRef.current);
+            setExtractingAll(false);
+            if (prog.status === "completed") {
+              alert(`استخراج تکمیل شد!\nافزوده‌شده: ${prog.added}\nتکراری/نامعتبر: ${prog.skipped}`);
+            }
+          }
+        } catch {
+          /* keep polling */
+        }
+      }, 3000);
+    } catch (e) {
+      setExtractingAll(false);
+      alert(e?.response?.data?.detail || e.message);
+    }
+  };
+
   const loadGroups = React.useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -134,9 +170,30 @@ export default function Groups() {
           <button className="btn-secondary" disabled={syncing} onClick={syncGroups}>
             {syncing ? "در حال همگام‌سازی..." : "🔄 همگام‌سازی با واتساپ"}
           </button>
+          <button className="btn-secondary" disabled={extractingAll} onClick={extractAllGroups}>
+            {extractingAll
+              ? `⏳ استخراج... (${fa(extractProgress?.processed ?? 0)}/${fa(extractProgress?.total ?? 0)})`
+              : "📥 استخراج اعضای همه گروه‌ها"}
+          </button>
           <button className="btn-primary" onClick={() => setShowAdd(true)}>+ ساخت گروه</button>
         </div>
       </div>
+
+      {extractProgress && extractProgress.status === "running" && (
+        <div className="card bg-amber-500/10 border-amber-500/30 space-y-1">
+          <div className="flex justify-between text-sm text-amber-200">
+            <span className="truncate">در حال استخراج: {extractProgress.current_group || "…"}</span>
+            <span>{fa(extractProgress.processed)}/{fa(extractProgress.total)} گروه</span>
+          </div>
+          <div className="w-full bg-slate-700 rounded-full h-2">
+            <div
+              className="bg-amber-500 h-2 rounded-full transition-all"
+              style={{ width: `${extractProgress.total ? (extractProgress.processed / extractProgress.total) * 100 : 0}%` }}
+            />
+          </div>
+          <p className="text-xs text-slate-400">افزوده‌شده: {fa(extractProgress.added)} · تکراری/نامعتبر: {fa(extractProgress.skipped)}</p>
+        </div>
+      )}
 
       <div className="card text-sm text-sky-300 bg-sky-500/10 border-sky-500/30">
         💡 برای نمایش گروه‌ها ابتدا «همگام‌سازی با واتساپ» را بزنید. فقط گروه‌های معمولی (که عضوشان هستید) دریافت می‌شوند. لیست‌های انتشار (Broadcast) و کانال‌های واتساپ توسط Green API ارائه نمی‌شوند و اینجا نمایش داده نمی‌شوند.

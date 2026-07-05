@@ -22,6 +22,7 @@ class Contact(Base):
     blacklist_reason: Mapped[str | None] = mapped_column(Text)
     last_replied_at: Mapped[datetime | None] = mapped_column(DateTime)
     source: Mapped[str | None] = mapped_column(String(200))
+    group_source: Mapped[str | None] = mapped_column(String(500))  # V9: originating group name
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     @property

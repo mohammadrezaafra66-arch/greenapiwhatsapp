@@ -22,20 +22,29 @@ class ContactCreate(BaseModel):
     city: str | None = None
 
 
+@router.get("/count")
+async def count_contacts(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(func.count()).select_from(Contact).where(Contact.blacklisted == False))
+    return {"total": result.scalar() or 0}
+
+
 @router.get("/")
 async def list_contacts(
     search: str = None,
     has_whatsapp: bool = None,
     province: str = None,
+    blacklisted: bool = None,
     skip: int = 0,
-    limit: int = 500,
+    limit: int = 1000,  # default 1000, scale-friendly
     db: AsyncSession = Depends(get_db)
 ):
-    # Clamp pagination — default 500 per page, hard cap 2000.
-    limit = max(1, min(limit, 2000))
     skip = max(0, skip)
+    limit = max(1, limit)
 
-    base = select(Contact).where(Contact.blacklisted == False)
+    base = select(Contact)
+    # By default hide blacklisted; pass blacklisted=true to include everyone.
+    if not blacklisted:
+        base = base.where(Contact.blacklisted == False)
     if search:
         base = base.where(
             or_(
@@ -58,7 +67,7 @@ async def list_contacts(
         "total": total,
         "skip": skip,
         "limit": limit,
-        "items": [
+        "contacts": [
             {
                 "id": str(c.id),
                 "phone": c.phone,
@@ -69,6 +78,10 @@ async def list_contacts(
                 "province": c.province,
                 "city": c.city,
                 "segment": c.segment,
+                "source": c.source,
+                "group_source": c.group_source,
+                "blacklisted": c.blacklisted,
+                "created_at": str(c.created_at),
             }
             for c in contacts
         ],

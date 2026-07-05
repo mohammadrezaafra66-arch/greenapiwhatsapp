@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.group import WhatsAppGroup
 from app.models.account import Account, AccountStatus
 from app.services.green_api import GreenAPIClient
+from app.config import settings
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 
@@ -321,6 +322,57 @@ async def backfill_members():
     from app.workers.tasks import task_backfill_group_member_counts
     task_backfill_group_member_counts.delay()
     return {"queued": True}
+
+
+@router.post("/extract-all-members")
+async def extract_all_groups_members(
+    account_id: str,
+    min_members: int = 0,  # 0 = all groups
+    db: AsyncSession = Depends(get_db),
+):
+    """Extract phone numbers from ALL of this account's groups and import to contacts,
+    in the background. No is_admin restriction — works for any group you're a member of."""
+    from app.workers.tasks import task_extract_all_groups
+
+    account = await db.get(Account, uuid.UUID(account_id))
+    if not account:
+        raise HTTPException(404, "Account not found")
+
+    query = select(WhatsAppGroup).where(
+        WhatsAppGroup.account_id == uuid.UUID(account_id),
+        WhatsAppGroup.green_group_id.isnot(None),
+    )
+    if min_members > 0:
+        query = query.where(WhatsAppGroup.member_count >= min_members)
+    query = query.order_by(WhatsAppGroup.member_count.desc())
+    groups = (await db.execute(query)).scalars().all()
+
+    group_data = [[str(g.id), g.green_group_id, g.name] for g in groups]
+    task = task_extract_all_groups.delay(str(account.id), account.instance_id, account.api_token, group_data)
+
+    return {
+        "task_id": task.id,
+        "groups_to_process": len(groups),
+        "message": f"استخراج {len(groups)} گروه در پس‌زمینه شروع شد",
+    }
+
+
+@router.get("/extract-all-progress/{account_id}")
+async def get_extract_progress(account_id: str):
+    """Live progress of a bulk extraction (from Redis)."""
+    import redis
+    r = redis.from_url(settings.redis_url)
+    data = r.hgetall(f"extract_progress:{account_id}")
+    if not data:
+        return {"status": "idle", "processed": 0, "total": 0, "added": 0, "skipped": 0, "current_group": ""}
+    return {
+        "status": data.get(b"status", b"idle").decode(),
+        "processed": int(data.get(b"processed", 0)),
+        "total": int(data.get(b"total", 0)),
+        "added": int(data.get(b"added", 0)),
+        "skipped": int(data.get(b"skipped", 0)),
+        "current_group": data.get(b"current_group", b"").decode(),
+    }
 
 
 @router.post("/{group_id}/refresh-members")
