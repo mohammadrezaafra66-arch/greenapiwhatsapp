@@ -17,6 +17,22 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     acc_result = await db.execute(select(Account))
     accounts = acc_result.scalars().all()
 
+    # Lazy daily reset: if an account's counters weren't reset today (Tehran),
+    # zero them now. Guards against the beat cron missing (e.g. worker restarts).
+    import pytz
+    from datetime import datetime as _dt
+    today_tehran = _dt.now(pytz.timezone("Asia/Tehran")).date()
+    _reset_any = False
+    for a in accounts:
+        if a.last_reset_date != today_tehran:
+            a.received_yesterday = a.received_today
+            a.sent_today = 0
+            a.received_today = 0
+            a.last_reset_date = today_tehran
+            _reset_any = True
+    if _reset_any:
+        await db.commit()
+
     camp_result = await db.execute(
         select(func.count()).where(Campaign.status == "running")
     )

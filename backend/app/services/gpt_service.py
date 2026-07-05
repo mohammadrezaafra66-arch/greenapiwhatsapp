@@ -84,8 +84,12 @@ async def _call_openai_compatible(base: str, key: str, model: str, system: str, 
         r.raise_for_status()
         d = r.json()
         text = (d["choices"][0]["message"]["content"] or "").strip()
+        # Extract token usage from the response.usage object (OpenAI/DeepSeek).
         u = d.get("usage") or {}
-        return text, u.get("prompt_tokens", 0), u.get("completion_tokens", 0), u.get("total_tokens", 0)
+        pt = int(u.get("prompt_tokens", 0) or 0)
+        ct = int(u.get("completion_tokens", 0) or 0)
+        tt = int(u.get("total_tokens", 0) or 0) or (pt + ct)
+        return text, pt, ct, tt
 
 
 async def _call_gemini(key: str, model: str, system: str, user: str,

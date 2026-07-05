@@ -7,7 +7,9 @@ celery_app.conf.update(task_serializer="json", result_serializer="json", accept_
     timezone="Asia/Tehran", enable_utc=True, worker_prefetch_multiplier=1, task_acks_late=True)
 
 celery_app.conf.beat_schedule = {
-    "reset-daily-counters": {"task": "tasks.reset_daily_counters", "schedule": 86400.0},
+    # Fires at 00:00 Tehran (app timezone is Asia/Tehran) — resilient to worker
+    # restarts, unlike a plain 86400s interval whose timer resets on each restart.
+    "reset-daily-counters": {"task": "tasks.reset_daily_counters", "schedule": crontab(hour=0, minute=0)},
     # Daily status post + warm-up increment at 10:00 Tehran (once per day)
     "warmup-accounts": {"task": "tasks.warmup_accounts", "schedule": crontab(hour=10, minute=0)},
     "sync-account-states": {"task": "tasks.sync_account_states", "schedule": 300.0},

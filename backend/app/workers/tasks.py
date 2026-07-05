@@ -188,7 +188,9 @@ def task_reset_daily_counters():
         from app.database import AsyncSessionLocal
         from app.models.account import Account
         from sqlalchemy import select
-        from datetime import date
+        import pytz
+        from datetime import datetime
+        today_tehran = datetime.now(pytz.timezone("Asia/Tehran")).date()
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(Account))
             for account in result.scalars().all():
@@ -196,7 +198,7 @@ def task_reset_daily_counters():
                 account.received_yesterday = account.received_today
                 account.sent_today = 0
                 account.received_today = 0
-                account.last_reset_date = date.today()
+                account.last_reset_date = today_tehran
             await db.commit()
     asyncio.run(_r())
 
