@@ -38,6 +38,7 @@ celery_app.conf.beat_schedule = {
     "poll-accounts": {"task": "tasks.poll_accounts", "schedule": 10.0},
     "clear-product-mentions": {"task": "tasks.clear_old_product_mentions", "schedule": 86400.0},
     "backfill-group-members": {"task": "tasks.backfill_group_member_counts", "schedule": 21600.0},  # every 6h
+    "recover-orphaned-campaigns": {"task": "tasks.recover_orphaned_campaigns", "schedule": 600.0},  # every 10 min
     # 23:00 Tehran (celery timezone is Asia/Tehran, so crontab is interpreted there)
     "night-report": {"task": "tasks.send_night_report", "schedule": crontab(hour=23, minute=0)},
 }

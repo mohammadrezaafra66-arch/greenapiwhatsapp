@@ -129,6 +129,31 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
 
 
 async def run_campaign(campaign_id: str):
+    """Single-run guard (B1.3/B1.4): only one instance processes a campaign at a
+    time, so startup-resume and orphan-recovery re-queues can't double-send.
+    Fail-open — if Redis is unavailable, run without the lock (current behavior)."""
+    lock_key = f"campaign_lock:{campaign_id}"
+    r = None
+    try:
+        from app.services import redis_rate_limiter
+        r = await redis_rate_limiter.get_redis()
+        acquired = await r.set(lock_key, "1", nx=True, ex=14400)  # 4h TTL
+        if not acquired:
+            print(f"[Campaign {campaign_id}] already running (lock held) — skipping duplicate")
+            return
+    except Exception:
+        r = None  # Redis down → proceed without a lock
+    try:
+        await _run_campaign_inner(campaign_id)
+    finally:
+        if r is not None:
+            try:
+                await r.delete(lock_key)
+            except Exception:
+                pass
+
+
+async def _run_campaign_inner(campaign_id: str):
     async with AsyncSessionLocal() as db:
         campaign = await db.get(Campaign, uuid.UUID(campaign_id))
         if not campaign:

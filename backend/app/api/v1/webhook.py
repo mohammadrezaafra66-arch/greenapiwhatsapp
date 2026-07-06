@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime
 from fastapi import APIRouter, Request, BackgroundTasks
 from app.database import AsyncSessionLocal
@@ -7,6 +8,7 @@ from app.models.account import Account, AccountStatus
 from app.models.campaign import CampaignContact
 from sqlalchemy import select
 
+logger = logging.getLogger("afrakala.webhook")
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 
 @router.post("/{instance_id}")
@@ -15,32 +17,58 @@ async def receive_webhook(instance_id: str, request: Request, bg: BackgroundTask
     bg.add_task(process_webhook, instance_id, body)
     return {"status": "ok"}
 
+
+async def _already_processed(instance_id: str, id_message: str) -> bool:
+    """B1.2 — webhook idempotency: Green API can deliver the same event twice.
+    Mark idMessage as seen in Redis (24h TTL); return True if it was already
+    seen. Fail-open: if Redis is unavailable, never block processing."""
+    if not id_message:
+        return False
+    try:
+        from app.services import redis_rate_limiter
+        r = await redis_rate_limiter.get_redis()
+        # SET NX returns True only the first time → not-first means duplicate.
+        first = await r.set(f"webhook_seen:{instance_id}:{id_message}", "1", nx=True, ex=86400)
+        return not first
+    except Exception:
+        return False
+
+
 async def process_webhook(instance_id: str, payload: dict):
     wtype = payload.get("typeWebhook", "")
-    if wtype == "incomingMessageReceived":
-        await handle_incoming(instance_id, payload)
-    elif wtype == "stateInstanceChanged":
-        await handle_state_change(instance_id, payload)
-    elif wtype == "outgoingMessageStatus":
-        await handle_outgoing_status(instance_id, payload)
-    elif wtype == "incomingCall":
-        await handle_incoming_call(instance_id, payload)
-    elif wtype == "buttonsResponseMessage":
-        await handle_button_reply(instance_id, payload)
-    elif wtype == "pollUpdateMessage":
-        await handle_poll_update(instance_id, payload)
-    elif wtype == "quotaExceeded":
-        await handle_quota_exceeded(instance_id, payload)
-    elif wtype in ("deviceStatusChanged", "deviceWebhook"):
-        await handle_device_status(instance_id, payload)
-    elif wtype in ("statusInstanceChanged", "statusInstance"):
-        pass  # Already handled by handle_state_change — skip duplicate
-    elif wtype in ("catalogUpdate", "catalogWebhook"):
-        await handle_catalog_update(instance_id, payload)
-    elif wtype in ("incomingBlock", "incomingChatBlock"):
-        await handle_incoming_block(instance_id, payload)
-    elif wtype in ("outgoingCall", "outgoingCallReceived"):
-        await handle_outgoing_call(instance_id, payload)
+
+    # B1.2 — skip duplicate deliveries (only events carrying an idMessage).
+    if await _already_processed(instance_id, payload.get("idMessage", "")):
+        return
+
+    # B1.6 — isolate handlers: one malformed webhook must not crash the loop.
+    try:
+        if wtype == "incomingMessageReceived":
+            await handle_incoming(instance_id, payload)
+        elif wtype == "stateInstanceChanged":
+            await handle_state_change(instance_id, payload)
+        elif wtype == "outgoingMessageStatus":
+            await handle_outgoing_status(instance_id, payload)
+        elif wtype == "incomingCall":
+            await handle_incoming_call(instance_id, payload)
+        elif wtype == "buttonsResponseMessage":
+            await handle_button_reply(instance_id, payload)
+        elif wtype == "pollUpdateMessage":
+            await handle_poll_update(instance_id, payload)
+        elif wtype == "quotaExceeded":
+            await handle_quota_exceeded(instance_id, payload)
+        elif wtype in ("deviceStatusChanged", "deviceWebhook"):
+            await handle_device_status(instance_id, payload)
+        elif wtype in ("statusInstanceChanged", "statusInstance"):
+            pass  # Already handled by handle_state_change — skip duplicate
+        elif wtype in ("catalogUpdate", "catalogWebhook"):
+            await handle_catalog_update(instance_id, payload)
+        elif wtype in ("incomingBlock", "incomingChatBlock"):
+            await handle_incoming_block(instance_id, payload)
+        elif wtype in ("outgoingCall", "outgoingCallReceived"):
+            await handle_outgoing_call(instance_id, payload)
+    except Exception as e:
+        logger.warning("webhook handler failed (type=%s, instance=%s): %s", wtype, instance_id, e)
 
 async def handle_incoming(instance_id: str, payload: dict):
     data = payload.get("messageData", {})

@@ -1,5 +1,6 @@
 import asyncio
 from app.workers.celery_app import celery_app
+from app.workers.async_helper import run_async
 from app.services.campaign_runner import run_campaign
 
 @celery_app.task(bind=True, name="tasks.run_campaign", max_retries=3)
@@ -7,9 +8,9 @@ def task_run_campaign(self, campaign_id: str, account_ids: list = None):
     try:
         if account_ids:
             from app.services.campaign_runner import run_campaign_parallel
-            asyncio.run(run_campaign_parallel(campaign_id, account_ids))
+            run_async(run_campaign_parallel(campaign_id, account_ids))
         else:
-            asyncio.run(run_campaign(campaign_id))
+            run_async(run_campaign(campaign_id))
     except Exception as exc:
         raise self.retry(exc=exc, countdown=60)
 
@@ -17,7 +18,7 @@ def task_run_campaign(self, campaign_id: str, account_ids: list = None):
 def task_run_group_campaign(self, campaign_id: str):
     try:
         from app.services.group_campaign_runner import run_group_campaign
-        asyncio.run(run_group_campaign(campaign_id))
+        run_async(run_group_campaign(campaign_id))
     except Exception as exc:
         raise self.retry(exc=exc, countdown=60)
 
@@ -32,12 +33,12 @@ def task_clear_old_product_mentions():
             cutoff = datetime.utcnow() - timedelta(days=2)
             await db.execute(delete(ProductMentionLog).where(ProductMentionLog.mentioned_at < cutoff))
             await db.commit()
-    asyncio.run(_c())
+    run_async(_c())
 
 @celery_app.task(name="tasks.send_night_report")
 def task_send_night_report():
     from app.services.night_report import send_night_report
-    asyncio.run(send_night_report())
+    run_async(send_night_report())
 
 @celery_app.task(name="tasks.backfill_group_member_counts")
 def task_backfill_group_member_counts():
@@ -110,7 +111,7 @@ def task_backfill_group_member_counts():
                 await db.commit()
                 await asyncio.sleep(2)  # pause between batches
             print(f"[Backfill] updated {updated}/{len(rows)} groups")
-    asyncio.run(_b())
+    run_async(_b())
 
 @celery_app.task(name="tasks.extract_all_groups")
 def task_extract_all_groups(account_id: str, instance_id: str, api_token: str, group_data: list):
@@ -188,7 +189,48 @@ def task_extract_all_groups(account_id: str, instance_id: str, api_token: str, g
         })
         r.expire(progress_key, 3600)
 
-    asyncio.run(_run())
+    run_async(_run())
+
+
+@celery_app.task(name="tasks.recover_orphaned_campaigns")
+def task_recover_orphaned_campaigns():
+    """B1.4 — re-queue campaigns stuck in 'running' with pending contacts but no
+    active run (no Redis lock held). run_campaign's lock prevents duplicates."""
+    async def _o():
+        from app.database import AsyncSessionLocal
+        from app.models.campaign import Campaign, CampaignContact, CampaignStatus, MessageStatus
+        from app.services import redis_rate_limiter
+        from sqlalchemy import select, func
+        async with AsyncSessionLocal() as db:
+            running = (await db.execute(
+                select(Campaign).where(Campaign.status == CampaignStatus.running)
+            )).scalars().all()
+        if not running:
+            return
+        try:
+            r = await redis_rate_limiter.get_redis()
+        except Exception:
+            r = None
+        for c in running:
+            async with AsyncSessionLocal() as db:
+                pending = (await db.execute(
+                    select(func.count()).select_from(CampaignContact).where(
+                        CampaignContact.campaign_id == c.id,
+                        CampaignContact.status == MessageStatus.pending,
+                    )
+                )).scalar() or 0
+            if not pending:
+                continue
+            held = False
+            if r is not None:
+                try:
+                    held = bool(await r.exists(f"campaign_lock:{c.id}"))
+                except Exception:
+                    held = False
+            if not held:
+                task_run_campaign.delay(str(c.id))
+                print(f"[Orphan] re-queued campaign {c.id} ({pending} pending, no active run)")
+    run_async(_o())
 
 
 @celery_app.task(name="tasks.reset_daily_counters")
@@ -209,7 +251,7 @@ def task_reset_daily_counters():
                 account.received_today = 0
                 account.last_reset_date = today_tehran
             await db.commit()
-    asyncio.run(_r())
+    run_async(_r())
 
 @celery_app.task(name="tasks.warmup_accounts")
 def task_warmup_accounts():
@@ -226,7 +268,7 @@ def task_warmup_accounts():
                 await post_daily_status(client)
                 account.days_active += 1
             await db.commit()
-    asyncio.run(_w())
+    run_async(_w())
 
 @celery_app.task(name="tasks.poll_accounts")
 def task_poll_accounts():
@@ -245,7 +287,7 @@ def task_poll_accounts():
                 await poll_account_once(account)
             except Exception as e:
                 print(f"[Polling] account {account.name} error: {e}")
-    asyncio.run(_p())
+    run_async(_p())
 
 @celery_app.task(name="tasks.sync_account_states")
 def task_sync_account_states():
@@ -269,4 +311,4 @@ def task_sync_account_states():
                 except Exception:
                     pass
             await db.commit()
-    asyncio.run(_s())
+    run_async(_s())

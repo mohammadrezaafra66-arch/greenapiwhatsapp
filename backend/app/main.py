@@ -1,9 +1,18 @@
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
-from app.database import engine, Base
+from sqlalchemy import text, select
+from app.database import engine, Base, AsyncSessionLocal
 import app.models  # noqa: F401  (register all models on Base.metadata)
+
+# B2 — structured logging (one place; modules use logging.getLogger("afrakala.*")).
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+logger = logging.getLogger("afrakala")
 from app.api.v1 import (
     accounts, campaigns, contacts, webhook, dashboard,
     inbox, groups, statuses, templates, queue, blacklist,
@@ -280,7 +289,25 @@ async def lifespan(app: FastAPI):
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:
-        print("[WARN] SUPABASE_ANON_KEY is empty — set it in .env; product prices will be unavailable.")
+        logger.warning("SUPABASE_ANON_KEY is empty — set it in .env; product prices will be unavailable.")
+
+    # B1.3 — resume campaigns left in 'running' after a restart. The per-campaign
+    # Redis lock in run_campaign makes this safe (a re-queue for an already-active
+    # campaign is skipped instead of double-sending).
+    try:
+        from app.models.campaign import Campaign, CampaignStatus
+        from app.database import AsyncSessionLocal
+        from app.workers.tasks import task_run_campaign
+        async with AsyncSessionLocal() as db:
+            running = (await db.execute(
+                select(Campaign).where(Campaign.status == CampaignStatus.running)
+            )).scalars().all()
+            for c in running:
+                task_run_campaign.delay(str(c.id))
+            if running:
+                logger.info("Startup: re-queued %d running campaign(s)", len(running))
+    except Exception as e:
+        logger.warning("Startup campaign resume failed (non-fatal): %s", e)
     yield
 
 app = FastAPI(title="Afrakala WhatsApp Sender", version="2.0.0", lifespan=lifespan)
@@ -303,6 +330,50 @@ for router in [
 ]:
     app.include_router(router, prefix="/api/v1")
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """B2 — log any unhandled error with a stack trace and return clean JSON.
+    (FastAPI's own handlers for HTTPException / validation errors still apply.)"""
+    logger.error("Unhandled error on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "version": "2.0.0"}
+
+
+@app.get("/health/detailed")
+async def health_detailed():
+    """B2 — deep health check: DB, Redis, and Celery worker heartbeat."""
+    result = {"status": "ok", "checks": {}}
+
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(text("SELECT 1"))
+        result["checks"]["database"] = "ok"
+    except Exception as e:
+        result["checks"]["database"] = f"error: {e}"
+        result["status"] = "degraded"
+
+    try:
+        from app.services import redis_rate_limiter
+        r = await redis_rate_limiter.get_redis()
+        await r.ping()
+        result["checks"]["redis"] = "ok"
+    except Exception as e:
+        result["checks"]["redis"] = f"error: {e}"
+        result["status"] = "degraded"
+
+    try:
+        from app.workers.celery_app import celery_app
+        pong = celery_app.control.ping(timeout=1.0)
+        workers = [list(w.keys())[0] for w in pong] if pong else []
+        result["checks"]["workers"] = workers or "no workers responding"
+        if not workers:
+            result["status"] = "degraded"
+    except Exception as e:
+        result["checks"]["workers"] = f"error: {e}"
+        result["status"] = "degraded"
+
+    return result
