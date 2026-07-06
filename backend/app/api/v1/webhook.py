@@ -183,31 +183,29 @@ async def handle_incoming(instance_id: str, payload: dict):
                 except Exception as e:
                     print(f"[Keyword] match/reply failed (non-fatal): {e}")
 
-        # Product mention detection (only in groups)
+        # Product mention detection (only in groups). Token-based matching:
+        # a brand keyword + a capacity/model token (see product_match).
         if msg.is_group and text:
             try:
                 from app.services.price_service import get_products
+                from app.services.product_match import match_products
                 from app.models.reporting import ProductMentionLog
                 products = await get_products(200)  # get all products
-                text_lower = text.lower()
-                for product in products:
-                    pname = (product.get("name") or "").lower()
-                    if pname and len(pname) > 3 and pname in text_lower:
-                        async with AsyncSessionLocal() as log_db:
-                            mention = ProductMentionLog(
-                                product_name=product.get("name"),
-                                sender_phone=sender_phone,
-                                sender_name=sender.get("senderName", ""),
-                                group_name=sender.get("chatName", ""),
-                                group_chat_id=sender.get("chatId", ""),
-                                instance_id=instance_id,
-                                message_text=text[:500]
-                            )
-                            log_db.add(mention)
-                            await log_db.commit()
-                        break  # one mention per message
+                hits = match_products(text, products)
+                if hits:
+                    async with AsyncSessionLocal() as log_db:
+                        log_db.add(ProductMentionLog(
+                            product_name=hits[0],  # one mention per message
+                            sender_phone=sender_phone,
+                            sender_name=sender.get("senderName", ""),
+                            group_name=sender.get("chatName", ""),
+                            group_chat_id=sender.get("chatId", ""),
+                            instance_id=instance_id,
+                            message_text=text[:500],
+                        ))
+                        await log_db.commit()
             except Exception as e:
-                print(f"[ProductMention] detection error: {e}")
+                logger.warning("[ProductMention] detection error: %s", e)
 
         await db.commit()
 
