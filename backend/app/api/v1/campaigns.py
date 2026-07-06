@@ -372,6 +372,113 @@ async def test_campaign(campaign_id: str, body: TestBody, db: AsyncSession = Dep
     return {"sent": bool(msg_id), "message_id": msg_id, "via": account.name}
 
 
+@router.post("/{campaign_id}/retry-failed")
+async def retry_failed(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    """D1 — re-queue ONLY the failed / yellowCard contacts of a campaign."""
+    from sqlalchemy import update, or_
+    campaign = await db.get(Campaign, uuid.UUID(campaign_id))
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    result = await db.execute(
+        update(CampaignContact)
+        .where(
+            CampaignContact.campaign_id == campaign.id,
+            or_(
+                CampaignContact.status == MessageStatus.failed,
+                CampaignContact.delivery_status == "yellowCard",
+            ),
+        )
+        .values(status=MessageStatus.pending, error_message=None, delivery_status=None)
+    )
+    count = result.rowcount or 0
+    if count:
+        campaign.status = CampaignStatus.running
+        campaign.pause_reason = None
+    await db.commit()
+    if count:
+        task_run_campaign.delay(campaign_id)  # single-run lock prevents duplicates
+    return {"requeued": count}
+
+
+@router.get("/{campaign_id}/analytics")
+async def campaign_analytics(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    """D3 — per-campaign delivery report: counts, rates, per-account breakdown."""
+    from sqlalchemy import func, case
+    campaign = await db.get(Campaign, uuid.UUID(campaign_id))
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+
+    st = CampaignContact.status
+    ds = CampaignContact.delivery_status
+
+    def s(cond):
+        return func.coalesce(func.sum(case((cond, 1), else_=0)), 0)
+
+    row = (await db.execute(
+        select(
+            func.count().label("total"),
+            s(st == MessageStatus.sent).label("sent"),
+            s(st == MessageStatus.pending).label("pending"),
+            s(st == MessageStatus.failed).label("failed"),
+            s(st == MessageStatus.skipped).label("skipped"),
+            s(ds == "delivered").label("delivered"),
+            s(ds == "read").label("read"),
+            s(ds == "yellowCard").label("yellow_card"),
+        ).where(CampaignContact.campaign_id == campaign.id)
+    )).one()
+
+    total = row.total or 0
+    sent = row.sent or 0
+
+    def pct(n, d):
+        return round(n / d * 100, 1) if d else 0.0
+
+    # per-account breakdown (only rows that were actually sent)
+    acc_rows = (await db.execute(
+        select(
+            CampaignContact.account_id,
+            func.count().label("sent"),
+            s(ds == "read").label("read"),
+            s(ds == "yellowCard").label("yellow_card"),
+        )
+        .where(CampaignContact.campaign_id == campaign.id, CampaignContact.account_id.isnot(None))
+        .group_by(CampaignContact.account_id)
+    )).all()
+    accs = (await db.execute(select(Account))).scalars().all()
+    names = {a.id: a.name for a in accs}
+
+    return {
+        "campaign": campaign.name,
+        "status": campaign.status,
+        "totals": {
+            "total": total,
+            "sent": sent,
+            "pending": row.pending or 0,
+            "failed": row.failed or 0,
+            "skipped": row.skipped or 0,
+            "delivered": row.delivered or 0,
+            "read": row.read or 0,
+            "yellow_card": row.yellow_card or 0,
+        },
+        "rates": {
+            "sent_pct": pct(sent, total),
+            "read_pct": pct(row.read or 0, sent),
+            "yellow_card_pct": pct(row.yellow_card or 0, sent),
+            "failed_pct": pct(row.failed or 0, total),
+        },
+        "per_account": [
+            {
+                "account_id": str(r.account_id),
+                "name": names.get(r.account_id, "نامشخص"),
+                "sent": r.sent,
+                "read": r.read,
+                "yellow_card": r.yellow_card,
+            }
+            for r in sorted(acc_rows, key=lambda x: x.sent, reverse=True)
+        ],
+    }
+
+
 @router.get("/{campaign_id}/progress")
 async def campaign_progress(campaign_id: str, db: AsyncSession = Depends(get_db)):
     campaign = await db.get(Campaign, uuid.UUID(campaign_id))

@@ -111,6 +111,17 @@ export default function Contacts() {
     }
   };
 
+  const dedupe = async () => {
+    try {
+      const r = await Api.dedupe();
+      if (r.merged > 0) toast.success(`${fa(r.merged)} مخاطب تکراری ادغام شد`);
+      else toast.info("مخاطب تکراری یافت نشد (شماره‌ها یکتا هستند)");
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -121,6 +132,8 @@ export default function Contacts() {
             {importing ? "در حال ورود..." : "ورود از اکسل"}
           </button>
           <button className="btn-secondary" onClick={() => setAddManual(true)}>افزودن دستی</button>
+          <button className="btn-secondary" onClick={() => window.open(Api.exportUrl({ search: search || undefined }), "_blank")}>📥 خروجی اکسل</button>
+          <button className="btn-secondary" onClick={dedupe}>🧹 پاک‌سازی تکراری‌ها</button>
           <button className="btn-secondary" onClick={checkSelected}>بررسی واتس‌اپ ({selected.size})</button>
           <button className="btn-secondary" title="راهنما" onClick={() => setShowCheckInfo((v) => !v)}>؟</button>
           <button className="btn-primary" onClick={() => selected.size ? setAddToCampaign(true) : toast.error("مخاطبی انتخاب نشده")}>

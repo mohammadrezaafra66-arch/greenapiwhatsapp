@@ -48,6 +48,11 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
             message = (effective_template or "سلام {{first_name}} جان!")
             message = message.replace("{{first_name}}", contact.first_name or "")
             message = message.replace("{{last_name}}", contact.last_name or "")
+            # D6 — Persian variable aliases in templates
+            message = message.replace("{نام}", contact.first_name or "")
+            message = message.replace("{خانوادگی}", contact.last_name or "")
+            message = message.replace("{شهر}", contact.city or "")
+            message = message.replace("{استان}", contact.province or "")
 
         # Append seller signature if configured
         if campaign.append_seller_name and campaign.seller_name:

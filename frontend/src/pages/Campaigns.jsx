@@ -3,6 +3,8 @@ import { Campaigns as Api, FilesApi, Accounts, ContactGroupsApi, WaCollectionsAp
 import { Badge, Spinner, Empty, Modal, Progress, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
 
+const fa = (n) => Number(n || 0).toLocaleString("fa-IR");
+
 const TYPE_FA = {
   text: "متنی",
   image: "تصویری",
@@ -17,6 +19,16 @@ export default function Campaigns() {
   const [test, setTest] = React.useState(null);
   const [edit, setEdit] = React.useState(null); // { editId, initial }
   const [editLoading, setEditLoading] = React.useState(false);
+  const [analytics, setAnalytics] = React.useState(null);
+
+  const openAnalytics = async (c) => {
+    try {
+      const data = await Api.analytics(c.id);
+      setAnalytics(data);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    }
+  };
 
   const act = async (fn) => {
     try {
@@ -66,6 +78,12 @@ export default function Campaigns() {
                   <button className="btn-primary" onClick={() => act(() => (c.status === "paused" ? Api.resume(c.id) : Api.start(c.id)))}>شروع</button>
                 )}
                 <button className="btn-secondary" onClick={() => setTest(c)}>تست</button>
+                <button className="btn-secondary text-xs" onClick={() => act(async () => {
+                  const r = await Api.retryFailed(c.id);
+                  if (r.requeued > 0) toast.success(`${fa(r.requeued)} پیام ناموفق دوباره در صف قرار گرفت`);
+                  else toast.info("پیام ناموفقی برای تلاش مجدد نیست");
+                })}>🔁 تلاش مجدد ناموفق‌ها</button>
+                <button className="btn-secondary text-xs" onClick={() => openAnalytics(c)}>📊 آمار</button>
                 <button className="btn-secondary" disabled={editLoading} onClick={() => openEdit(c)}>✏️ ویرایش</button>
                 <button className="btn-secondary" onClick={() => act(() => Api.toggleActive(c.id))}>
                   {c.is_active ? "⏸️ غیرفعال" : "▶️ فعال"}
@@ -96,7 +114,73 @@ export default function Campaigns() {
         />
       )}
       {test && <TestModal campaign={test} onClose={() => setTest(null)} />}
+      {analytics && <AnalyticsModal data={analytics} onClose={() => setAnalytics(null)} />}
     </div>
+  );
+}
+
+function AnalyticsModal({ data, onClose }) {
+  const t = data?.totals || {};
+  const r = data?.rates || {};
+  const perAccount = data?.per_account || [];
+  const title = data?.campaign?.name || data?.campaign || "آمار گروه پیام";
+
+  const cells = [
+    { label: "کل", value: t.total, cls: "text-slate-200" },
+    { label: "ارسال‌شده", value: t.sent, cls: "text-emerald-300" },
+    { label: "تحویل", value: t.delivered, cls: "text-sky-300" },
+    { label: "خوانده", value: t.read, cls: "text-sky-300" },
+    { label: "یلوکارت", value: t.yellow_card, cls: (t.yellow_card || 0) > 0 ? "text-red-300" : "text-amber-300" },
+    { label: "ناموفق", value: t.failed, cls: "text-red-300" },
+    { label: "در انتظار", value: t.pending, cls: "text-slate-300" },
+  ];
+
+  return (
+    <Modal title={`آمار گروه پیام: ${title}`} onClose={onClose} wide>
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {cells.map((cell) => (
+            <div key={cell.label} className="rounded-lg bg-slate-900 border border-slate-700 p-3 text-center">
+              <div className={`text-2xl font-bold ${cell.cls}`}>{fa(cell.value)}</div>
+              <div className="text-xs text-slate-400 mt-1">{cell.label}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="text-sm text-slate-300">
+          نرخ ارسال {fa(r.sent_pct)}٪ · خوانده {fa(r.read_pct)}٪ ·{" "}
+          <span className={(r.yellow_card_pct || 0) > 50 ? "text-red-400 font-bold" : ""}>
+            یلوکارت {fa(r.yellow_card_pct)}٪
+          </span>{" "}
+          · ناموفق {fa(r.failed_pct)}٪
+        </div>
+
+        {perAccount.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-right">
+              <thead>
+                <tr className="text-slate-400 border-b border-slate-700">
+                  <th className="py-2 px-2 font-medium">حساب</th>
+                  <th className="py-2 px-2 font-medium">ارسال</th>
+                  <th className="py-2 px-2 font-medium">خوانده</th>
+                  <th className="py-2 px-2 font-medium">یلوکارت</th>
+                </tr>
+              </thead>
+              <tbody>
+                {perAccount.map((a) => (
+                  <tr key={a.account_id} className="border-b border-slate-800">
+                    <td className="py-2 px-2">{a.name}</td>
+                    <td className="py-2 px-2 text-emerald-300">{fa(a.sent)}</td>
+                    <td className="py-2 px-2 text-sky-300">{fa(a.read)}</td>
+                    <td className={`py-2 px-2 ${(a.yellow_card || 0) > 0 ? "text-red-300" : "text-amber-300"}`}>{fa(a.yellow_card)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 

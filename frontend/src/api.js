@@ -62,6 +62,8 @@ export const Campaigns = {
   get: (id) => http.get(`/campaigns/${id}`).then((r) => r.data),
   update: (id, body) => http.put(`/campaigns/${id}`, body).then((r) => r.data),
   toggleActive: (id) => http.post(`/campaigns/${id}/toggle-active`).then((r) => r.data),
+  retryFailed: (id) => http.post(`/campaigns/${id}/retry-failed`).then((r) => r.data),
+  analytics: (id) => http.get(`/campaigns/${id}/analytics`).then((r) => r.data),
   remove: (id) => http.delete(`/campaigns/${id}`).then((r) => r.data),
 };
 
@@ -69,6 +71,13 @@ export const Campaigns = {
 export const Contacts = {
   list: (params = {}) => http.get("/contacts/", { params }).then((r) => r.data),
   count: () => http.get("/contacts/count").then((r) => r.data),
+  dedupe: () => http.post("/contacts/dedupe").then((r) => r.data),
+  exportUrl: (params = {}) => {
+    const q = new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ""))
+    ).toString();
+    return `${http.defaults.baseURL}/contacts/export${q ? `?${q}` : ""}`;
+  },
   create: (body) => http.post("/contacts/", body).then((r) => r.data),
   import: (file, source = "excel_import") => {
     const fd = new FormData();

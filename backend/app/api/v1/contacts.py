@@ -28,6 +28,80 @@ async def count_contacts(db: AsyncSession = Depends(get_db)):
     return {"total": result.scalar() or 0}
 
 
+@router.get("/export")
+async def export_contacts(
+    search: str = None,
+    has_whatsapp: bool = None,
+    province: str = None,
+    blacklisted: bool = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """D2 — CSV export of contacts honoring the same filters as the list.
+    UTF-8 BOM so Excel renders Persian correctly."""
+    import csv, io
+    from fastapi.responses import Response
+
+    base = select(Contact)
+    if not blacklisted:
+        base = base.where(Contact.blacklisted == False)
+    if search:
+        base = base.where(or_(
+            Contact.phone.contains(search),
+            Contact.first_name.ilike(f"%{search}%"),
+            Contact.last_name.ilike(f"%{search}%"),
+        ))
+    if has_whatsapp is not None:
+        base = base.where(Contact.has_whatsapp == has_whatsapp)
+    if province:
+        base = base.where(Contact.province == province)
+
+    contacts = (await db.execute(base.order_by(Contact.created_at.desc()))).scalars().all()
+
+    buf = io.StringIO()
+    buf.write("﻿")  # BOM
+    w = csv.writer(buf)
+    w.writerow(["phone", "first_name", "last_name", "province", "city", "has_whatsapp", "source", "group_source", "created_at"])
+    for c in contacts:
+        w.writerow([
+            c.phone, c.first_name or "", c.last_name or "", c.province or "", c.city or "",
+            "" if c.has_whatsapp is None else ("yes" if c.has_whatsapp else "no"),
+            c.source or "", c.group_source or "", str(c.created_at),
+        ])
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=contacts.csv"},
+    )
+
+
+@router.post("/dedupe")
+async def dedupe_contacts(db: AsyncSession = Depends(get_db)):
+    """D4 — merge duplicate phone numbers, keeping the oldest row (names/source
+    merged in). NOTE: contacts.phone has a UNIQUE index, so duplicates normally
+    cannot accrue — this cleans up any legacy rows and is safe to run anytime."""
+    dup_phones = (await db.execute(
+        select(Contact.phone).group_by(Contact.phone).having(func.count() > 1)
+    )).scalars().all()
+    merged = 0
+    for phone in dup_phones:
+        rows = (await db.execute(
+            select(Contact).where(Contact.phone == phone).order_by(Contact.created_at.asc())
+        )).scalars().all()
+        keep = rows[0]
+        for extra in rows[1:]:
+            if not keep.first_name and extra.first_name:
+                keep.first_name = extra.first_name
+            if not keep.last_name and extra.last_name:
+                keep.last_name = extra.last_name
+            if not keep.source and extra.source:
+                keep.source = extra.source
+            await db.delete(extra)
+            merged += 1
+    if merged:
+        await db.commit()
+    return {"merged": merged, "duplicate_phones": len(dup_phones)}
+
+
 @router.get("/")
 async def list_contacts(
     search: str = None,

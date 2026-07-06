@@ -236,6 +236,7 @@ export default function Dashboard() {
 
   // banned accounts + total sent today (Feature 32 — multi-account dashboard)
   const bannedAccounts = detail.filter((a) => a.status === "banned");
+  const disconnectedAccounts = detail.filter((a) => a.status === "disconnected");
   const totalSentToday = detail.reduce((s, a) => s + (a.sent_today || 0), 0);
 
   return (
@@ -268,6 +269,12 @@ export default function Dashboard() {
       {bannedAccounts.map((a) => (
         <div key={`ban-${a.id}`} className="card bg-red-500/10 border-red-500/40 text-red-300">
           ⚠️ حساب {a.name} مسدود شده — فوراً بررسی کنید
+        </div>
+      ))}
+
+      {disconnectedAccounts.map((a) => (
+        <div key={`disc-${a.id}`} className="card bg-red-500/10 border-red-500/40 text-red-300">
+          ⚠️ حساب {a.name} قطع شده — اتصال را بررسی کنید یا ری‌بوت بزنید
         </div>
       ))}
 
