@@ -1,6 +1,7 @@
 import React from "react";
 import { KeywordRulesApi as Api } from "../api.js";
 import { Spinner, Empty, Modal, useAsync } from "../ui.jsx";
+import { toast, confirmDialog } from "../ui/toast.jsx";
 
 const MATCH_FA = { exact: "دقیق", contains: "شامل" };
 const SCOPE_FA = { pv: "خصوصی", group: "گروه", both: "هر دو" };
@@ -10,12 +11,12 @@ export default function KeywordRules() {
   const [edit, setEdit] = React.useState(null); // null | {} (new) | rule (edit)
 
   const remove = async (id) => {
-    if (!confirm("حذف قانون؟")) return;
+    if (!(await confirmDialog("حذف قانون؟"))) return;
     try {
       await Api.delete(id);
       await reload();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 
@@ -95,7 +96,7 @@ function RuleModal({ rule, onClose, onDone }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
 
   const submit = async () => {
-    if (!f.keyword || !f.reply_message) return alert("کلیدواژه و متن پاسخ لازم است");
+    if (!f.keyword || !f.reply_message) return toast.error("کلیدواژه و متن پاسخ لازم است");
     setSaving(true);
     try {
       const body = {
@@ -110,7 +111,7 @@ function RuleModal({ rule, onClose, onDone }) {
       await onDone();
       onClose();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSaving(false);
     }

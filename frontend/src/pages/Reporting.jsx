@@ -1,6 +1,7 @@
 import React from "react";
 import { ReportingApi as Api } from "../api.js";
 import { Spinner, Empty, useAsync } from "../ui.jsx";
+import { toast, confirmDialog } from "../ui/toast.jsx";
 
 const TABS = [
   { key: "emergency", label: "شماره‌های اضطراری" },
@@ -67,26 +68,26 @@ function EmergencySection() {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   const add = async () => {
-    if (!f.name || !f.phone) return alert("نام و شماره لازم است");
+    if (!f.name || !f.phone) return toast.error("نام و شماره لازم است");
     setSaving(true);
     try {
       await Api.addEmergency({ name: f.name, phone: f.phone, purpose: f.purpose });
       setF({ name: "", phone: "", purpose: "" });
       await reload();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSaving(false);
     }
   };
 
   const remove = async (id) => {
-    if (!confirm("حذف این شماره؟")) return;
+    if (!(await confirmDialog("حذف این شماره؟"))) return;
     try {
       await Api.deleteEmergency(id);
       await reload();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 
@@ -157,26 +158,26 @@ function SubscribersSection() {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   const add = async () => {
-    if (!f.phone) return alert("شماره لازم است");
+    if (!f.phone) return toast.error("شماره لازم است");
     setSaving(true);
     try {
       await Api.addSubscriber({ name: f.name, phone: f.phone });
       setF({ name: "", phone: "" });
       await reload();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSaving(false);
     }
   };
 
   const remove = async (id) => {
-    if (!confirm("حذف این گیرنده؟")) return;
+    if (!(await confirmDialog("حذف این گیرنده؟"))) return;
     try {
       await Api.deleteSubscriber(id);
       await reload();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 
@@ -327,12 +328,12 @@ function MentionsTab() {
   }, [load]);
 
   const clear = async () => {
-    if (!confirm("لاگ رصد محصولات پاک شود؟")) return;
+    if (!(await confirmDialog("لاگ رصد محصولات پاک شود؟"))) return;
     try {
       await Api.clearMentions();
       await load();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 

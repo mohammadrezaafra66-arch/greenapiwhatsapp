@@ -1,6 +1,7 @@
 import React from "react";
 import { Inbox as Api } from "../api.js";
 import { Spinner, Empty, Modal } from "../ui.jsx";
+import { toast } from "../ui/toast.jsx";
 
 const CAT_FA = {
   price_inquiry: "استعلام قیمت",
@@ -144,11 +145,11 @@ function ReplyModal({ msg, onClose, onDone }) {
     setSending(true);
     try {
       const r = await Api.reply(msg.id, text);
-      alert(r.sent ? "ارسال شد" : "ارسال ناموفق");
+      toast.info(r.sent ? "ارسال شد" : "ارسال ناموفق");
       onDone();
       onClose();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSending(false);
     }

@@ -1,6 +1,7 @@
 import React from "react";
 import { AccountSchedulesApi as Api, Accounts, PresetsApi } from "../api.js";
 import { Spinner, Empty, Modal, useAsync } from "../ui.jsx";
+import { toast, confirmDialog } from "../ui/toast.jsx";
 
 export default function AccountSchedules() {
   const { data: accounts, loading: accLoading } = useAsync(() => Accounts.list(), []);
@@ -39,21 +40,21 @@ export default function AccountSchedules() {
         min_delay_seconds: Number(delay.min_delay_seconds),
         max_delay_seconds: Number(delay.max_delay_seconds),
       });
-      alert("تأخیر ذخیره شد");
+      toast.success("تأخیر ذخیره شد");
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSavingDelay(false);
     }
   };
 
   const removeSlot = async (id) => {
-    if (!confirm("حذف بازه؟")) return;
+    if (!(await confirmDialog("حذف بازه؟"))) return;
     try {
       await Api.deleteSlot(id);
       await load(accountId);
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 
@@ -205,7 +206,7 @@ function SlotModal({ slot, accountId, onClose, onDone }) {
       await onDone();
       onClose();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSaving(false);
     }

@@ -171,6 +171,35 @@ async def validate_campaign(
     }
 
 
+@router.get("/health")
+async def system_health(db: AsyncSession = Depends(get_db)):
+    """C3 — system health for the dashboard widget (reachable via the /api/v1
+    proxy): DB, Redis, and Celery worker heartbeat."""
+    from sqlalchemy import text as _text
+    out = {"status": "ok", "database": "ok", "redis": "ok", "workers": []}
+    try:
+        await db.execute(_text("SELECT 1"))
+    except Exception:
+        out["database"] = "error"
+        out["status"] = "degraded"
+    try:
+        from app.services import redis_rate_limiter
+        r = await redis_rate_limiter.get_redis()
+        await r.ping()
+    except Exception:
+        out["redis"] = "error"
+        out["status"] = "degraded"
+    try:
+        from app.workers.celery_app import celery_app
+        pong = celery_app.control.ping(timeout=1.0)
+        out["workers"] = [list(w.keys())[0] for w in pong] if pong else []
+        if not out["workers"]:
+            out["status"] = "degraded"
+    except Exception:
+        out["status"] = "degraded"
+    return out
+
+
 @router.get("/deliverability")
 async def deliverability(days: int = 7, db: AsyncSession = Depends(get_db)):
     """Delivery-status breakdown for sent campaign messages over the last N days.

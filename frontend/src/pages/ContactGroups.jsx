@@ -1,6 +1,7 @@
 import React from "react";
 import { ContactGroupsApi as Api, Contacts as ContactsApi } from "../api.js";
 import { Spinner, Empty, Modal, useAsync } from "../ui.jsx";
+import { toast, confirmDialog } from "../ui/toast.jsx";
 
 export default function ContactGroups() {
   const { data, loading, error, reload } = useAsync(() => Api.list(), []);
@@ -8,12 +9,12 @@ export default function ContactGroups() {
   const [members, setMembers] = React.useState(null); // null | group
 
   const remove = async (id) => {
-    if (!confirm("حذف گروه؟")) return;
+    if (!(await confirmDialog("حذف گروه؟"))) return;
     try {
       await Api.delete(id);
       await reload();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 
@@ -76,7 +77,7 @@ function GroupModal({ group, onClose, onDone }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   const submit = async () => {
-    if (!f.name.trim()) return alert("نام گروه لازم است");
+    if (!f.name.trim()) return toast.error("نام گروه لازم است");
     setSaving(true);
     try {
       const body = { name: f.name, description: f.description, color: f.color };
@@ -85,7 +86,7 @@ function GroupModal({ group, onClose, onDone }) {
       await onDone();
       onClose();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSaving(false);
     }
@@ -121,7 +122,7 @@ function MembersModal({ group, onClose, onDone }) {
       const list = await ContactsApi.list({ search });
       setResults(list);
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSearching(false);
     }
@@ -133,7 +134,7 @@ function MembersModal({ group, onClose, onDone }) {
       await reload();
       await onDone();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 
@@ -143,7 +144,7 @@ function MembersModal({ group, onClose, onDone }) {
       await reload();
       await onDone();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 

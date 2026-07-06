@@ -1,6 +1,7 @@
 import React from "react";
 import { WaCollectionsApi as Api, Groups as GroupsApi, Accounts } from "../api.js";
 import { Spinner, Empty, Modal, useAsync } from "../ui.jsx";
+import { toast, confirmDialog } from "../ui/toast.jsx";
 
 export default function WaCollections() {
   const { data, loading, error, reload } = useAsync(() => Api.list(), []);
@@ -9,28 +10,28 @@ export default function WaCollections() {
   const [importing, setImporting] = React.useState(null); // collection id being imported
 
   const remove = async (id) => {
-    if (!confirm("حذف مجموعه؟")) return;
+    if (!(await confirmDialog("حذف مجموعه؟"))) return;
     try {
       await Api.delete(id);
       await reload();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 
   const importAll = async (c) => {
-    if (!confirm(`استخراج اعضای همه گروه‌های «${c.name}» و افزودن به مخاطبین؟ ممکن است چند دقیقه طول بکشد.`)) return;
+    if (!(await confirmDialog(`استخراج اعضای همه گروه‌های «${c.name}» و افزودن به مخاطبین؟ ممکن است چند دقیقه طول بکشد.`))) return;
     setImporting(c.id);
     try {
       const r = await Api.importAllMembers(c.id);
-      alert(
+      toast.success(
         `مجموعه «${r.collection}»\n` +
           `گروه‌ها: ${r.groups_ok} موفق از ${r.groups_total}\n` +
           `شماره یکتا: ${r.unique_phones}\n` +
           `✅ ${r.added} مخاطب جدید · ${r.skipped} تکراری · ${r.invalid} نامعتبر`
       );
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setImporting(null);
     }
@@ -97,7 +98,7 @@ function CollectionModal({ collection, onClose, onDone }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   const submit = async () => {
-    if (!f.name.trim()) return alert("نام مجموعه لازم است");
+    if (!f.name.trim()) return toast.error("نام مجموعه لازم است");
     setSaving(true);
     try {
       const body = { name: f.name, description: f.description };
@@ -106,7 +107,7 @@ function CollectionModal({ collection, onClose, onDone }) {
       await onDone();
       onClose();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSaving(false);
     }
@@ -144,7 +145,7 @@ function GroupsModal({ collection, onClose, onDone }) {
 
   // Step 1: sync WhatsApp groups then load available groups
   const sync = async () => {
-    if (!accountId) return alert("ابتدا یک حساب انتخاب کنید");
+    if (!accountId) return toast.error("ابتدا یک حساب انتخاب کنید");
     setSyncing(true);
     try {
       await GroupsApi.sync(accountId);
@@ -152,7 +153,7 @@ function GroupsModal({ collection, onClose, onDone }) {
       setSyncedGroups(gs);
       setSelected([]);
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSyncing(false);
     }
@@ -166,7 +167,7 @@ function GroupsModal({ collection, onClose, onDone }) {
 
   // Step 2: add all selected groups to the collection
   const addSelected = async () => {
-    if (selected.length === 0) return alert("ابتدا گروهی را انتخاب کنید");
+    if (selected.length === 0) return toast.error("ابتدا گروهی را انتخاب کنید");
     setAdding(true);
     try {
       const chosen = (syncedGroups || []).filter((g) => selected.includes(g.group_chat_id));
@@ -176,9 +177,9 @@ function GroupsModal({ collection, onClose, onDone }) {
       await reload();
       await onDone();
       setSelected([]);
-      alert(`${chosen.length} گروه افزوده شد`);
+      toast.success(`${chosen.length} گروه افزوده شد`);
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setAdding(false);
     }
@@ -190,20 +191,20 @@ function GroupsModal({ collection, onClose, onDone }) {
       await reload();
       await onDone();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 
   const addManual = async () => {
     const group_chat_id = manual.group_chat_id.trim();
-    if (!group_chat_id) return alert("شناسه گروه لازم است");
+    if (!group_chat_id) return toast.error("شناسه گروه لازم است");
     try {
       await Api.addGroup(collection.id, { group_chat_id, group_name: manual.group_name.trim() });
       await reload();
       await onDone();
       setManual({ group_chat_id: "", group_name: "" });
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 

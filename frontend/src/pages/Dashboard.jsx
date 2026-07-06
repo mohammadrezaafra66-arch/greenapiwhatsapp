@@ -56,9 +56,18 @@ function AnimatedNumber({ value = 0, className = "" }) {
 }
 
 // ── KPI card ───────────────────────────────────────────────
-function Kpi({ label, icon, children, accent = "text-slate-100", pulse = false }) {
+function HealthDot({ ok, label }) {
   return (
-    <div className="card relative overflow-hidden">
+    <span className="flex items-center gap-1" title={label + (ok ? " — سالم" : " — مشکل")}>
+      <span className={`inline-block w-2 h-2 rounded-full ${ok ? "bg-emerald-400" : "bg-red-500 animate-pulse"}`} />
+      <span className="hidden sm:inline">{label}</span>
+    </span>
+  );
+}
+
+function Kpi({ label, icon, children, accent = "text-slate-100", pulse = false, to = null }) {
+  const body = (
+    <>
       <div className="flex items-start justify-between">
         <p className="text-slate-400 text-sm">{label}</p>
         <span className="text-xl opacity-80">
@@ -67,8 +76,10 @@ function Kpi({ label, icon, children, accent = "text-slate-100", pulse = false }
         </span>
       </div>
       <div className={`text-4xl font-bold mt-3 ${accent}`}>{children}</div>
-    </div>
+    </>
   );
+  const cls = "card relative overflow-hidden block" + (to ? " hover:border-brand/50 transition-colors cursor-pointer" : "");
+  return to ? <Link to={to} className={cls}>{body}</Link> : <div className={cls}>{body}</div>;
 }
 
 const CHART_TOOLTIP = {
@@ -153,6 +164,29 @@ export default function Dashboard() {
     return () => clearInterval(t);
   }, [loadDeliver]);
 
+  // C3 — system health widget (DB / Redis / workers), polled every 30s
+  const [health, setHealth] = React.useState(null);
+  const loadHealth = React.useCallback(async () => {
+    try {
+      setHealth(await DashApi.systemHealth());
+    } catch {
+      setHealth({ status: "degraded", database: "?", redis: "?", workers: [] });
+    }
+  }, []);
+  React.useEffect(() => {
+    loadHealth();
+    const t = setInterval(loadHealth, 30000);
+    return () => clearInterval(t);
+  }, [loadHealth]);
+
+  // C3 — "updated Xs ago" ticker
+  const [nowTs, setNowTs] = React.useState(Date.now());
+  React.useEffect(() => {
+    const t = setInterval(() => setNowTs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const secsAgo = updated ? Math.max(0, Math.round((nowTs - updated.getTime()) / 1000)) : null;
+
   if (!stats && !err) return <Spinner />;
   if (err && !stats)
     return (
@@ -206,12 +240,23 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-2xl font-bold">داشبورد زنده</h2>
-        <span className="flex items-center gap-2 text-xs text-slate-500">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          به‌روزرسانی خودکار هر ۵ ثانیه · {updated?.toLocaleTimeString("fa-IR")}
-        </span>
+        <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
+          {/* System health dots (C3) */}
+          {health && (
+            <span className="flex items-center gap-2">
+              <HealthDot ok={health.database === "ok"} label="پایگاه‌داده" />
+              <HealthDot ok={health.redis === "ok"} label="ردیس" />
+              <HealthDot ok={(health.workers?.length || 0) > 0} label={`کارگر (${fa(health.workers?.length || 0)})`} />
+            </span>
+          )}
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            {secsAgo != null ? `به‌روزرسانی ${fa(secsAgo)} ثانیه پیش` : "در حال بارگذاری…"}
+          </span>
+          <button className="btn-secondary text-xs py-1 px-2" onClick={() => load()} title="تازه‌سازی">🔄</button>
+        </div>
       </div>
 
       {quotaHit.map((a) => (
@@ -234,20 +279,20 @@ export default function Dashboard() {
 
       {/* ── TOP ROW: KPI cards ─────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Kpi label="پیام‌های ارسالی امروز" icon="📤" accent="text-emerald-400">
+        <Kpi label="پیام‌های ارسالی امروز" icon="📤" accent="text-emerald-400" to="/campaigns">
           <AnimatedNumber value={stats.messages.sent_today} />
         </Kpi>
-        <Kpi label="پیام‌های دریافتی امروز" icon="📥" accent="text-sky-400">
+        <Kpi label="پیام‌های دریافتی امروز" icon="📥" accent="text-sky-400" to="/inbox">
           <AnimatedNumber value={stats.messages.received_today} />
         </Kpi>
-        <Kpi label="حساب‌های فعال / کل" icon="📱">
+        <Kpi label="حساب‌های فعال / کل" icon="📱" to="/accounts">
           <span className="text-emerald-400"><AnimatedNumber value={activeCount} /></span>
           <span className="text-slate-500 text-2xl"> / </span>
           <span className={totalCount - activeCount > 0 ? "text-red-400" : "text-slate-300"}>
             <AnimatedNumber value={totalCount} />
           </span>
         </Kpi>
-        <Kpi label="گروه‌های پیام فعال" icon="🚀" accent="text-amber-400" pulse={stats.campaigns.active > 0}>
+        <Kpi label="گروه‌های پیام فعال" icon="🚀" accent="text-amber-400" pulse={stats.campaigns.active > 0} to="/campaigns">
           <AnimatedNumber value={stats.campaigns.active} />
         </Kpi>
       </div>

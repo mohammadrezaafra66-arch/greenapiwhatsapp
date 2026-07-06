@@ -10,6 +10,7 @@ export const Dashboard = {
   stats: () => http.get("/dashboard/stats").then((r) => r.data),
   rateLimits: () => http.get("/dashboard/rate-limits").then((r) => r.data),
   deliverability: () => http.get("/dashboard/deliverability").then((r) => r.data),
+  systemHealth: () => http.get("/dashboard/health").then((r) => r.data),
   updateRateLimits: (schedule) =>
     http.put("/dashboard/rate-limits", schedule).then((r) => r.data),
   // V8 F36 — pre-send feasibility check. account_ids repeats in the query string.

@@ -85,13 +85,33 @@ function NavGroup({ item }) {
 }
 
 export default function Layout() {
+  const [mobileOpen, setMobileOpen] = React.useState(false);
   return (
-    <div className="flex h-full">
-      {/* Sidebar (RTL → right side) */}
-      <aside className="w-60 shrink-0 bg-slate-950 border-l border-slate-800 flex flex-col">
-        <div className="p-5 border-b border-slate-800">
-          <h1 className="text-lg font-bold text-brand">افراکالا</h1>
-          <p className="text-xs text-slate-500 mt-0.5">پیام‌رسان افراکالا</p>
+    <div className="flex h-full relative">
+      {/* Mobile top bar (C5) */}
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-slate-950 border-b border-slate-800 flex items-center justify-between px-4">
+        <h1 className="text-base font-bold text-brand">افراکالا</h1>
+        <button aria-label="منو" onClick={() => setMobileOpen(true)} className="text-2xl text-slate-300 leading-none">☰</button>
+      </div>
+
+      {/* Backdrop */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-40 bg-black/60" onClick={() => setMobileOpen(false)} />
+      )}
+
+      {/* Sidebar (RTL → right side). Static on md+, slide-in drawer on mobile. */}
+      <aside
+        className={`w-60 shrink-0 bg-slate-950 border-l border-slate-800 flex flex-col
+          fixed inset-y-0 right-0 z-50 transform transition-transform md:static md:z-auto md:translate-x-0
+          ${mobileOpen ? "translate-x-0" : "translate-x-full md:translate-x-0"}`}
+        onClick={(e) => { if (e.target.closest("a")) setMobileOpen(false); }}
+      >
+        <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-brand">افراکالا</h1>
+            <p className="text-xs text-slate-500 mt-0.5">پیام‌رسان افراکالا</p>
+          </div>
+          <button className="md:hidden text-slate-400 text-xl leading-none" aria-label="بستن" onClick={() => setMobileOpen(false)}>×</button>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {NAV.map((n) =>
@@ -112,7 +132,7 @@ export default function Layout() {
 
       {/* Main content */}
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto p-6">
+        <div className="max-w-6xl mx-auto p-6 pt-20 md:pt-6">
           <Outlet />
         </div>
       </main>

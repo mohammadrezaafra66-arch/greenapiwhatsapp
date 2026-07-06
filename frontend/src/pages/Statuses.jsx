@@ -1,5 +1,6 @@
 import React from "react";
 import { Statuses as Api } from "../api.js";
+import { toast } from "../ui/toast.jsx";
 
 export default function Statuses() {
   const [tab, setTab] = React.useState("text");
@@ -11,24 +12,24 @@ export default function Statuses() {
   const [busy, setBusy] = React.useState(false);
 
   const sendText = async () => {
-    if (!text) return alert("متن لازم است");
+    if (!text) return toast.error("متن لازم است");
     setBusy(true);
     try {
       setResult(await Api.sendText(text, bg, null));
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setBusy(false);
     }
   };
 
   const sendImage = async () => {
-    if (!imageUrl) return alert("آدرس تصویر لازم است");
+    if (!imageUrl) return toast.error("آدرس تصویر لازم است");
     setBusy(true);
     try {
       setResult(await Api.sendImage(imageUrl, caption, null));
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setBusy(false);
     }

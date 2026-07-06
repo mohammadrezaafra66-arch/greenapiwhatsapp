@@ -1,6 +1,7 @@
 import React from "react";
 import { BlacklistApi as Api } from "../api.js";
 import { Spinner, Empty, useAsync } from "../ui.jsx";
+import { toast } from "../ui/toast.jsx";
 
 export default function Blacklist() {
   const { data, loading, error, reload } = useAsync(Api.list, []);
@@ -8,14 +9,14 @@ export default function Blacklist() {
   const [reason, setReason] = React.useState("");
 
   const add = async () => {
-    if (!phone) return alert("شماره لازم است");
+    if (!phone) return toast.error("شماره لازم است");
     try {
       await Api.add(phone, reason || undefined);
       setPhone("");
       setReason("");
       reload();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 

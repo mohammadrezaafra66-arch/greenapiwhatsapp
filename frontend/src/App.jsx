@@ -1,5 +1,7 @@
 import React from "react";
 import { Routes, Route } from "react-router-dom";
+import { Toaster, ConfirmHost } from "./ui/toast.jsx";
+import { ErrorBoundary } from "./ui/ErrorBoundary.jsx";
 import Layout from "./components/Layout.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Accounts from "./pages/Accounts.jsx";
@@ -22,7 +24,10 @@ import Products from "./pages/Products.jsx";
 
 export default function App() {
   return (
-    <Routes>
+    <ErrorBoundary>
+      <Toaster />
+      <ConfirmHost />
+      <Routes>
       <Route element={<Layout />}>
         <Route index element={<Dashboard />} />
         <Route path="accounts" element={<Accounts />} />
@@ -44,6 +49,7 @@ export default function App() {
         <Route path="products" element={<Products />} />
         <Route path="*" element={<div className="text-slate-400">صفحه یافت نشد</div>} />
       </Route>
-    </Routes>
+      </Routes>
+    </ErrorBoundary>
   );
 }

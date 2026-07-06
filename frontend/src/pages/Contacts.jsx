@@ -1,6 +1,7 @@
 import React from "react";
 import { Contacts as Api, Campaigns as CampApi, ContactExtrasApi } from "../api.js";
 import { Spinner, Empty, Modal } from "../ui.jsx";
+import { toast, confirmDialog } from "../ui/toast.jsx";
 
 const DISAPPEARING_OPTS = [
   { label: "خاموش", value: 0 },
@@ -32,12 +33,12 @@ export default function Contacts() {
     setPhonebookBusy(id);
     try {
       const r = await ContactExtrasApi.addToPhonebook(id);
-      alert(r.added ? "به مخاطبین واتساپ اضافه شد" : "افزودن ناموفق بود");
+      toast.info(r.added ? "به مخاطبین واتساپ اضافه شد" : "افزودن ناموفق بود");
     } catch (e) {
       const msg = e?.code === "ECONNABORTED"
         ? "افزودن مخاطب بیش از حد طول کشید؛ لطفاً دوباره تلاش کنید."
         : e?.response?.data?.detail || e.message;
-      alert(msg);
+      toast.error(msg);
     } finally {
       setPhonebookBusy(null);
     }
@@ -46,10 +47,10 @@ export default function Contacts() {
   const applyDisappearing = async (id, ephemeral) => {
     try {
       const r = await ContactExtrasApi.setDisappearing(id, ephemeral);
-      alert(r.set ? `تنظیم شد: ${r.label}` : "تنظیم ناموفق بود");
+      toast.info(r.set ? `تنظیم شد: ${r.label}` : "تنظیم ناموفق بود");
       setDisappearing(null);
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
   const fileRef = React.useRef();
@@ -89,10 +90,10 @@ export default function Contacts() {
     setImporting(true);
     try {
       const r = await Api.import(file);
-      alert(`اضافه شد: ${r.added} · تکراری: ${r.skipped} · کل: ${r.total_in_file}`);
+      toast.success(`اضافه شد: ${r.added} · تکراری: ${r.skipped} · کل: ${r.total_in_file}`);
       load();
     } catch (err) {
-      alert(err?.response?.data?.detail || err.message);
+      toast.error(err?.response?.data?.detail || err.message);
     } finally {
       setImporting(false);
       e.target.value = "";
@@ -100,13 +101,13 @@ export default function Contacts() {
   };
 
   const checkSelected = async () => {
-    if (selected.size === 0) return alert("هیچ مخاطبی انتخاب نشده");
+    if (selected.size === 0) return toast.error("هیچ مخاطبی انتخاب نشده");
     try {
       const r = await Api.checkBulk([...selected]);
-      alert(`بررسی شد: ${r.checked} مخاطب`);
+      toast.success(`بررسی شد: ${r.checked} مخاطب`);
       load();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 
@@ -122,7 +123,7 @@ export default function Contacts() {
           <button className="btn-secondary" onClick={() => setAddManual(true)}>افزودن دستی</button>
           <button className="btn-secondary" onClick={checkSelected}>بررسی واتس‌اپ ({selected.size})</button>
           <button className="btn-secondary" title="راهنما" onClick={() => setShowCheckInfo((v) => !v)}>؟</button>
-          <button className="btn-primary" onClick={() => selected.size ? setAddToCampaign(true) : alert("مخاطبی انتخاب نشده")}>
+          <button className="btn-primary" onClick={() => selected.size ? setAddToCampaign(true) : toast.error("مخاطبی انتخاب نشده")}>
             افزودن به گروه پیام ({selected.size})
           </button>
         </div>
@@ -241,7 +242,7 @@ export default function Contacts() {
                       >
                         {phonebookBusy === c.id ? "⏳" : "📱"}
                       </button>
-                      <button className="text-red-400 hover:underline text-xs" onClick={async () => { if (confirm("این مخاطب مسدود شود؟")) { await Api.blacklist(c.id); load(); } }}>لیست سیاه</button>
+                      <button className="text-red-400 hover:underline text-xs" onClick={async () => { if (await confirmDialog("این مخاطب مسدود شود؟")) { await Api.blacklist(c.id); load(); } }}>لیست سیاه</button>
                     </div>
                   </td>
                 </tr>
@@ -287,7 +288,7 @@ function AddContactModal({ onClose, onDone }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   const submit = async () => {
-    if (!f.phone.trim()) return alert("شماره موبایل الزامی است");
+    if (!f.phone.trim()) return toast.error("شماره موبایل الزامی است");
     setSaving(true);
     try {
       await Api.create({
@@ -300,7 +301,7 @@ function AddContactModal({ onClose, onDone }) {
       await onDone();
       onClose();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSaving(false);
     }
@@ -337,11 +338,11 @@ function AddToCampaignModal({ contactIds, onClose, onDone }) {
     setBusy(true);
     try {
       const r = await CampApi.addContacts(id, contactIds);
-      alert(`${r.added} مخاطب اضافه شد`);
+      toast.success(`${r.added} مخاطب اضافه شد`);
       onDone();
       onClose();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setBusy(false);
     }

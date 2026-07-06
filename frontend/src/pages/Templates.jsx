@@ -1,6 +1,7 @@
 import React from "react";
 import { Templates as Api } from "../api.js";
 import { Spinner, Empty, Modal, useAsync } from "../ui.jsx";
+import { toast, confirmDialog } from "../ui/toast.jsx";
 
 export default function Templates() {
   const { data, loading, error, reload } = useAsync(() => Api.list(), []);
@@ -28,8 +29,8 @@ export default function Templates() {
             <div className="flex items-center justify-between text-xs text-slate-500">
               <span>استفاده: {t.use_count} بار</span>
               <div className="flex gap-2">
-                <button className="text-sky-400 hover:underline" onClick={async () => { const r = await Api.use(t.id); navigator.clipboard?.writeText(r.content); alert("کپی شد"); reload(); }}>کپی</button>
-                <button className="text-red-400 hover:underline" onClick={async () => { if (confirm("حذف؟")) { await Api.remove(t.id); reload(); } }}>حذف</button>
+                <button className="text-sky-400 hover:underline" onClick={async () => { const r = await Api.use(t.id); navigator.clipboard?.writeText(r.content); toast.success("کپی شد"); reload(); }}>کپی</button>
+                <button className="text-red-400 hover:underline" onClick={async () => { if (await confirmDialog("حذف؟")) { await Api.remove(t.id); reload(); } }}>حذف</button>
               </div>
             </div>
           </div>
@@ -47,14 +48,14 @@ function AddTemplateModal({ onClose, onDone }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   const submit = async () => {
-    if (!f.name || !f.content) return alert("نام و متن لازم است");
+    if (!f.name || !f.content) return toast.error("نام و متن لازم است");
     setSaving(true);
     try {
       await Api.create(f);
       await onDone();
       onClose();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSaving(false);
     }

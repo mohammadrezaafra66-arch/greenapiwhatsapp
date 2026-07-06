@@ -1,6 +1,7 @@
 import React from "react";
 import { Campaigns as Api, FilesApi, Accounts, ContactGroupsApi, WaCollectionsApi, LabelsApi, Dashboard } from "../api.js";
 import { Badge, Spinner, Empty, Modal, Progress, useAsync } from "../ui.jsx";
+import { toast, confirmDialog } from "../ui/toast.jsx";
 
 const TYPE_FA = {
   text: "متنی",
@@ -22,7 +23,7 @@ export default function Campaigns() {
       await fn();
       await reload();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 
@@ -32,7 +33,7 @@ export default function Campaigns() {
       const detail = await Api.get(c.id);
       setEdit({ editId: c.id, initial: detail });
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setEditLoading(false);
     }
@@ -69,7 +70,7 @@ export default function Campaigns() {
                 <button className="btn-secondary" onClick={() => act(() => Api.toggleActive(c.id))}>
                   {c.is_active ? "⏸️ غیرفعال" : "▶️ فعال"}
                 </button>
-                <button className="btn-danger" onClick={() => { if (confirm("این گروه پیام حذف شود؟")) act(() => Api.remove(c.id)); }}>حذف</button>
+                <button className="btn-danger" onClick={async () => { if (await confirmDialog("این گروه پیام حذف شود؟")) act(() => Api.remove(c.id)); }}>حذف</button>
               </div>
             </div>
             <div className="flex justify-between text-sm mb-1 text-slate-400">
@@ -259,7 +260,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
       });
       setFeasResult(r);
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setFeasLoading(false);
     }
@@ -289,20 +290,20 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
     try {
       const accs = await Accounts.list();
       const active = accs.find((a) => a.status === "active") || accs[0];
-      if (!active) return alert("حسابی برای آپلود موجود نیست");
+      if (!active) return toast.error("حسابی برای آپلود موجود نیست");
       const fd = new FormData();
       fd.append("file", file);
       const r = await FilesApi.upload(active.id, fd);
       setF((prev) => ({ ...prev, image_url: r.url }));
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setUploading(false);
     }
   };
 
   const submit = async () => {
-    if (!f.name) return alert("لطفاً نام گروه پیام را وارد کنید");
+    if (!f.name) return toast.error("لطفاً نام گروه پیام را وارد کنید");
     setSaving(true);
     try {
       const body = {
@@ -347,7 +348,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
       await onDone();
       onClose();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSaving(false);
     }
@@ -646,14 +647,14 @@ function TestModal({ campaign, onClose }) {
   const [sending, setSending] = React.useState(false);
 
   const send = async () => {
-    if (!phone) return alert("لطفاً شماره را وارد کنید");
+    if (!phone) return toast.error("لطفاً شماره را وارد کنید");
     setSending(true);
     try {
       const r = await Api.test(campaign.id, phone, message || null);
-      alert(r.sent ? `ارسال شد (از ${r.via})` : "ارسال ناموفق");
+      toast.info(r.sent ? `ارسال شد (از ${r.via})` : "ارسال ناموفق");
       onClose();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSending(false);
     }

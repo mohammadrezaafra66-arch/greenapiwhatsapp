@@ -1,6 +1,7 @@
 import React from "react";
 import { Groups as Api, Accounts as AccApi } from "../api.js";
 import { Spinner, Empty, Modal } from "../ui.jsx";
+import { toast, confirmDialog } from "../ui/toast.jsx";
 
 const CHAT_TYPE_LABELS = {
   group: { label: "گروه معمولی", icon: "👥", cls: "text-emerald-400" },
@@ -54,7 +55,7 @@ export default function Groups() {
       const r = await Api.extractMembers(g.id);
       setExtracted({ group: g, phones: r.phones, count: r.count });
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setExtracting(null);
     }
@@ -68,8 +69,8 @@ export default function Groups() {
   React.useEffect(() => () => clearInterval(pollRef.current), []);
 
   const extractAllGroups = async () => {
-    if (!selectedAccount) return alert("حساب فعالی انتخاب نشده است");
-    if (!confirm("استخراج اعضای همه گروه‌های این حساب و افزودن به مخاطبین؟ این کار در پس‌زمینه اجرا می‌شود.")) return;
+    if (!selectedAccount) return toast.error("حساب فعالی انتخاب نشده است");
+    if (!(await confirmDialog("استخراج اعضای همه گروه‌های این حساب و افزودن به مخاطبین؟ این کار در پس‌زمینه اجرا می‌شود."))) return;
     setExtractingAll(true);
     setExtractProgress(null);
     try {
@@ -83,7 +84,7 @@ export default function Groups() {
             clearInterval(pollRef.current);
             setExtractingAll(false);
             if (prog.status === "completed") {
-              alert(`استخراج تکمیل شد!\nافزوده‌شده: ${prog.added}\nتکراری/نامعتبر: ${prog.skipped}`);
+              toast.success(`استخراج تکمیل شد!\nافزوده‌شده: ${prog.added}\nتکراری/نامعتبر: ${prog.skipped}`);
             }
           }
         } catch {
@@ -92,7 +93,7 @@ export default function Groups() {
       }, 3000);
     } catch (e) {
       setExtractingAll(false);
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 
@@ -128,14 +129,14 @@ export default function Groups() {
   const filtered = groups.filter((g) => g.name?.includes(search) || g.group_chat_id?.includes(search));
 
   const syncGroups = async () => {
-    if (!selectedAccount) return alert("حساب فعالی انتخاب نشده است");
+    if (!selectedAccount) return toast.error("حساب فعالی انتخاب نشده است");
     setSyncing(true);
     try {
       const r = await Api.sync(selectedAccount);
-      alert(`${r.synced_new} گروه جدید + ${r.updated} به‌روزرسانی شد`);
+      toast.success(`${r.synced_new} گروه جدید + ${r.updated} به‌روزرسانی شد`);
       await loadGroups();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSyncing(false);
     }
@@ -147,7 +148,7 @@ export default function Groups() {
       await Api.refreshMembers(gid);
       await loadGroups();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setBusy(null);
     }
@@ -155,7 +156,7 @@ export default function Groups() {
 
   const copyId = (id) => {
     navigator.clipboard?.writeText(id);
-    alert("شناسه کپی شد");
+    toast.success("شناسه کپی شد");
   };
 
   return (
@@ -311,7 +312,7 @@ function ExtractedMembersModal({ data, onClose }) {
       const r = await Api.importMembersToContacts(group.id, phones);
       setResult(r);
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setImporting(false);
     }
@@ -348,14 +349,14 @@ function AddMembersModal({ group, onClose }) {
   const [result, setResult] = React.useState(null);
 
   const start = async () => {
-    if (!membersFile) return alert("ابتدا فایل اکسل را انتخاب کنید");
-    if (!group.account_id) return alert("حساب گروه مشخص نیست");
+    if (!membersFile) return toast.error("ابتدا فایل اکسل را انتخاب کنید");
+    if (!group.account_id) return toast.error("حساب گروه مشخص نیست");
     setRunning(true);
     try {
       const r = await Api.importExcelToGroup(group.group_chat_id, group.account_id, membersFile);
       setResult(r);
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setRunning(false);
     }
@@ -404,7 +405,7 @@ function AddGroupModal({ onClose, onDone }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   const submit = async () => {
-    if (!f.account_id || !f.name) return alert("حساب و نام لازم است");
+    if (!f.account_id || !f.name) return toast.error("حساب و نام لازم است");
     setSaving(true);
     try {
       await Api.create({
@@ -416,7 +417,7 @@ function AddGroupModal({ onClose, onDone }) {
       await onDone();
       onClose();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSaving(false);
     }
@@ -448,10 +449,10 @@ function SendModal({ group, onClose }) {
     setSending(true);
     try {
       const r = await Api.send(group.id, text);
-      alert(r.sent ? "ارسال شد" : "ارسال ناموفق");
+      toast.info(r.sent ? "ارسال شد" : "ارسال ناموفق");
       onClose();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSending(false);
     }

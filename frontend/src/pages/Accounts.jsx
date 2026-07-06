@@ -1,6 +1,7 @@
 import React from "react";
 import { Accounts as Api, ProxyApi } from "../api.js";
 import { Badge, Spinner, Empty, Modal, useAsync } from "../ui.jsx";
+import { toast, confirmDialog } from "../ui/toast.jsx";
 
 export default function Accounts() {
   const { data, loading, error, reload } = useAsync(Api.list, []);
@@ -14,7 +15,7 @@ export default function Accounts() {
       await fn();
       await reload();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setBusy(null);
     }
@@ -25,7 +26,7 @@ export default function Accounts() {
       const r = await Api.qr(id);
       setQr(r || {});
     } catch (e) {
-      alert("دریافت QR ناموفق بود");
+      toast.error("دریافت QR ناموفق بود");
     }
   };
 
@@ -70,8 +71,8 @@ export default function Accounts() {
               {!a.is_default && (
                 <button className="btn-secondary" disabled={busy === a.id} onClick={() => act(() => Api.setDefault(a.id), a.id)}>تنظیم به‌عنوان پیش‌فرض</button>
               )}
-              <button className="btn-danger" disabled={busy === a.id} onClick={() => {
-                if (confirm("حذف این حساب؟")) act(() => Api.remove(a.id), a.id);
+              <button className="btn-danger" disabled={busy === a.id} onClick={async () => {
+                if (await confirmDialog("حذف این حساب؟")) act(() => Api.remove(a.id), a.id);
               }}>حذف</button>
             </div>
             <ProxySection accountId={a.id} />
@@ -136,9 +137,9 @@ function ProxySection({ accountId }) {
         proxy_password: f.proxy_password,
         proxy_enabled: enabled,
       });
-      alert(enabled ? (r.applied ? "پروکسی فعال شد" : "ذخیره شد (اعمال روی واتساپ ناموفق)") : "پروکسی غیرفعال شد");
+      toast.info(enabled ? (r.applied ? "پروکسی فعال شد" : "ذخیره شد (اعمال روی واتساپ ناموفق)") : "پروکسی غیرفعال شد");
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setBusy(false);
     }
@@ -148,9 +149,9 @@ function ProxySection({ accountId }) {
     setBusy(true);
     try {
       const r = await ProxyApi.getBlocked(accountId);
-      alert(`${r.count} مخاطب بلاک‌شده همگام‌سازی شد`);
+      toast.success(`${r.count} مخاطب بلاک‌شده همگام‌سازی شد`);
     } catch (e) {
-      alert(e?.response?.data?.detail || "دریافت لیست بلاک ناموفق بود");
+      toast.error(e?.response?.data?.detail || "دریافت لیست بلاک ناموفق بود");
     } finally {
       setBusy(false);
     }
@@ -198,7 +199,7 @@ function LimitsSection({ accountId }) {
         max_daily_absolute: r?.breakdown?.absolute_cap ?? prev.max_daily_absolute,
       }));
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
     setLoaded(true);
   };
@@ -218,9 +219,9 @@ function LimitsSection({ accountId }) {
         max_sends_per_minute: 2.0,
       });
       await load();
-      alert(`ذخیره شد — سقف مؤثر: ${r.effective_limit}`);
+      toast.success(`ذخیره شد — سقف مؤثر: ${r.effective_limit}`);
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setBusy(false);
     }
@@ -280,14 +281,14 @@ function AddAccountModal({ onClose, onDone }) {
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
   const submit = async () => {
-    if (!form.name || !form.instance_id || !form.api_token) return alert("همه فیلدها لازم است");
+    if (!form.name || !form.instance_id || !form.api_token) return toast.error("همه فیلدها لازم است");
     setSaving(true);
     try {
       await Api.create(form.name, form.instance_id, form.api_token);
       await onDone();
       onClose();
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setSaving(false);
     }

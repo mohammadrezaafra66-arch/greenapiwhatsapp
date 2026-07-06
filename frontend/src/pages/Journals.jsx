@@ -1,6 +1,7 @@
 import React from "react";
 import { JournalsApi as Api, Accounts } from "../api.js";
 import { Spinner, Empty, useAsync } from "../ui.jsx";
+import { toast, confirmDialog } from "../ui/toast.jsx";
 
 const TABS = [
   { key: "incoming", label: "پیام‌های ورودی" },
@@ -77,13 +78,13 @@ export default function Journals() {
   }, [load, loadQueue]);
 
   const clearWebhooks = async () => {
-    if (!confirm("صف دریافت خودکار پاک شود؟")) return;
+    if (!(await confirmDialog("صف دریافت خودکار پاک شود؟"))) return;
     try {
       await Api.clearWebhooks(accountId);
       await loadQueue();
-      alert("پاک شد");
+      toast.success("پاک شد");
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 

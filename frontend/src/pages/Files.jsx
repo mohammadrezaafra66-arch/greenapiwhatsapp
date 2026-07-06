@@ -2,6 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { FilesApi as Api, Accounts } from "../api.js";
 import { Spinner, Empty, useAsync } from "../ui.jsx";
+import { toast } from "../ui/toast.jsx";
 
 export default function Files() {
   const navigate = useNavigate();
@@ -31,7 +32,7 @@ export default function Files() {
   }, [accountId, loadFiles]);
 
   const doUpload = async (file) => {
-    if (!accountId) return alert("ابتدا یک حساب انتخاب کنید");
+    if (!accountId) return toast.error("ابتدا یک حساب انتخاب کنید");
     if (!file) return;
     setUploading(true);
     try {
@@ -41,7 +42,7 @@ export default function Files() {
       setLastUrl(r.url);
       await loadFiles(accountId);
     } catch (e) {
-      alert(e?.response?.data?.detail || e.message);
+      toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setUploading(false);
     }
@@ -56,7 +57,7 @@ export default function Files() {
 
   const copy = (url) => {
     navigator.clipboard?.writeText(url);
-    alert("کپی شد");
+    toast.success("کپی شد");
   };
 
   const useInCampaign = (url) => {
