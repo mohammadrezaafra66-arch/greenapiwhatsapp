@@ -3,7 +3,7 @@ from datetime import date as date_type, datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from app.database import get_db
 from app.models.reporting import (
     EmergencyContact, ReportSubscriber, DailySendLog, ProductMentionLog,
@@ -131,6 +131,43 @@ async def clear_product_mentions(db: AsyncSession = Depends(get_db)):
     await db.execute(delete(ProductMentionLog))
     await db.commit()
     return {"cleared": True}
+
+
+@router.get("/top-products")
+async def top_repeated_products(limit: int = 150, days: int = 30, db: AsyncSession = Depends(get_db)):
+    """Most-frequently-mentioned products across groups (from product_mention_logs)."""
+    from datetime import timedelta
+    from app.utils.shamsi import to_shamsi
+    limit = max(1, min(limit, 500))
+    cutoff = datetime.utcnow() - timedelta(days=max(1, days))
+    rows = (await db.execute(
+        select(
+            ProductMentionLog.product_name,
+            func.count().label("mention_count"),
+            func.count(func.distinct(ProductMentionLog.group_chat_id)).label("group_count"),
+            func.count(func.distinct(ProductMentionLog.sender_phone)).label("sender_count"),
+            func.max(ProductMentionLog.mentioned_at).label("last_mention"),
+        )
+        .where(ProductMentionLog.mentioned_at >= cutoff)
+        .group_by(ProductMentionLog.product_name)
+        .order_by(func.count().desc())
+        .limit(limit)
+    )).all()
+    return {
+        "total_products": len(rows),
+        "period_days": days,
+        "products": [
+            {
+                "rank": i + 1,
+                "product_name": r.product_name,
+                "mention_count": r.mention_count,
+                "group_count": r.group_count,
+                "sender_count": r.sender_count,
+                "last_mention_shamsi": to_shamsi(r.last_mention),
+            }
+            for i, r in enumerate(rows)
+        ],
+    }
 
 
 # ── Products (for the Products page) ───────────────────────

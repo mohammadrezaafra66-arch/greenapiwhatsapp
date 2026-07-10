@@ -3,10 +3,13 @@ import { ReportingApi as Api } from "../api.js";
 import { Spinner, Empty, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
 
+const fa = (n) => Number(n || 0).toLocaleString("fa-IR");
+
 const TABS = [
   { key: "emergency", label: "شماره‌های اضطراری" },
   { key: "daily", label: "گزارش روزانه" },
   { key: "mentions", label: "رصد محصولات در گروه‌ها" },
+  { key: "topProducts", label: "جدول محصولات پر تکرار" },
 ];
 
 function today() {
@@ -47,6 +50,7 @@ export default function Reporting() {
       {tab === "emergency" && <EmergencyTab />}
       {tab === "daily" && <DailyTab />}
       {tab === "mentions" && <MentionsTab />}
+      {tab === "topProducts" && <TopProductsTab />}
     </div>
   );
 }
@@ -374,6 +378,121 @@ function MentionsTab() {
                     {String(m.text || "").length > 50 ? "…" : ""}
                   </td>
                   <td className="p-2 text-xs text-slate-500">{tsFmt(m.time)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tab 4: Top repeated products (auto-refresh 30s) ───────────
+function TopProductsTab() {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [days, setDays] = React.useState(30);
+  const [limit, setLimit] = React.useState(150);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      setData(await Api.topProducts(limit, days));
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [days, limit]);
+
+  React.useEffect(() => {
+    load();
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  const rankClass = (rank) => {
+    if (rank <= 10) return "bg-amber-500/20 text-amber-300 border-amber-500/40";
+    if (rank <= 50) return "bg-slate-400/20 text-slate-200 border-slate-400/40";
+    return "bg-slate-500/20 text-slate-300 border-slate-500/40";
+  };
+
+  const exportExcel = () => {
+    const products = data?.products || [];
+    if (!products.length) return toast.info("داده‌ای برای خروجی نیست");
+    const header = ["رتبه", "نام محصول", "تعداد تکرار", "تعداد گروه", "تعداد فرستنده", "آخرین ذکر"];
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const lines = [header.map(esc).join(",")];
+    for (const p of products) {
+      lines.push([p.rank, p.product_name, p.mention_count, p.group_count, p.sender_count, p.last_mention_shamsi].map(esc).join(","));
+    }
+    const csv = lines.join("\r\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "top-products.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const products = data?.products || [];
+
+  return (
+    <div className="space-y-4">
+      <div className="card flex items-end gap-3 flex-wrap">
+        <div>
+          <label className="label">بازه</label>
+          <select className="input" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+            <option value={7}>۷ روز</option>
+            <option value={30}>۳۰ روز</option>
+            <option value={90}>۹۰ روز</option>
+          </select>
+        </div>
+        <div>
+          <label className="label">تعداد</label>
+          <select className="input" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
+            <option value={50}>۵۰</option>
+            <option value={100}>۱۰۰</option>
+            <option value={150}>۱۵۰</option>
+          </select>
+        </div>
+        <button className="btn-secondary" onClick={exportExcel}>📥 خروجی اکسل</button>
+        <span className="badge bg-slate-500/20 text-slate-300 border-slate-500/40">{fa(data?.total_products)} محصول</span>
+      </div>
+
+      {loading && !data && <div className="text-sm text-slate-400">در حال بارگذاری...</div>}
+      {data && products.length === 0 && !loading && (
+        <div className="card text-sm text-slate-400">هنوز محصول پرتکراری ثبت نشده (از پیام‌های گروه‌ها استخراج می‌شود).</div>
+      )}
+
+      {products.length > 0 && (
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-slate-400 border-b border-slate-700">
+                <th className="text-right p-2">رتبه</th>
+                <th className="text-right p-2">نام محصول</th>
+                <th className="text-right p-2">تعداد تکرار</th>
+                <th className="text-right p-2">تعداد گروه</th>
+                <th className="text-right p-2">تعداد فرستنده</th>
+                <th className="text-right p-2">آخرین ذکر</th>
+              </tr>
+            </thead>
+            <tbody>
+              {products.map((p) => (
+                <tr key={p.rank} className="border-b border-slate-800">
+                  <td className="p-2">
+                    <span className={`badge ${rankClass(p.rank)}`}>{fa(p.rank)}</span>
+                  </td>
+                  <td className="p-2 font-bold">{p.product_name}</td>
+                  <td className="p-2">{fa(p.mention_count)}</td>
+                  <td className="p-2 text-slate-300">{fa(p.group_count)}</td>
+                  <td className="p-2 text-slate-300">{fa(p.sender_count)}</td>
+                  <td className="p-2 text-xs text-slate-500">{p.last_mention_shamsi || "—"}</td>
                 </tr>
               ))}
             </tbody>
