@@ -21,6 +21,7 @@ import ContactGroups from "./pages/ContactGroups.jsx";
 import WaCollections from "./pages/WaCollections.jsx";
 import Reporting from "./pages/Reporting.jsx";
 import Products from "./pages/Products.jsx";
+import JoinLinks from "./pages/JoinLinks.jsx";
 
 export default function App() {
   return (
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="wa-collections" element={<WaCollections />} />
         <Route path="reporting" element={<Reporting />} />
         <Route path="products" element={<Products />} />
+        <Route path="join-links" element={<JoinLinks />} />
         <Route path="*" element={<div className="text-slate-400">صفحه یافت نشد</div>} />
       </Route>
       </Routes>

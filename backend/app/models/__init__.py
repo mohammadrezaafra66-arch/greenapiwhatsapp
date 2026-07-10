@@ -24,6 +24,7 @@ from app.models.reporting import (
 )
 from app.models.wa_extras import DisappearingChatSetting, WaBlockedContact
 from app.models.status_schedule import StatusSchedule
+from app.models.join_links import GroupJoinLink, AccountJoinStatus
 
 __all__ = [
     "Account",
@@ -57,4 +58,6 @@ __all__ = [
     "DisappearingChatSetting",
     "WaBlockedContact",
     "StatusSchedule",
+    "GroupJoinLink",
+    "AccountJoinStatus",
 ]

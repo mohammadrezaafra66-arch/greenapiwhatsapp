@@ -19,6 +19,7 @@ from app.api.v1 import (
     keyword_rules, account_schedules,
     journals, files as files_router,
     contact_groups, wa_collections, reporting as reporting_router,
+    join_links,
 )
 
 @asynccontextmanager
@@ -310,6 +311,23 @@ async def lifespan(app: FastAPI):
                 last_run_at timestamp,
                 created_at timestamp DEFAULT now()
             )""",
+            """CREATE TABLE IF NOT EXISTS group_join_links (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                name varchar(300),
+                invite_link text NOT NULL,
+                link_type varchar(20) DEFAULT 'group',
+                is_active boolean DEFAULT true,
+                created_at timestamp DEFAULT now()
+            )""",
+            """CREATE TABLE IF NOT EXISTS account_join_status (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                account_id uuid REFERENCES accounts(id) ON DELETE CASCADE,
+                link_id uuid REFERENCES group_join_links(id) ON DELETE CASCADE,
+                status varchar(30) DEFAULT 'pending',
+                joined_at timestamp,
+                error text,
+                UNIQUE(account_id, link_id)
+            )""",
         ]
         for stmt in ddl_v11:
             try:
@@ -357,6 +375,7 @@ for router in [
     keyword_rules.router, account_schedules.router,
     journals.router, files_router.router,
     contact_groups.router, wa_collections.router, reporting_router.router,
+    join_links.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

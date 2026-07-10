@@ -31,6 +31,7 @@ const NAV = [
       { to: "/statuses", label: "استوری‌ها" },
       { to: "/files", label: "فایل‌ها" },
       { to: "/journals", label: "تاریخچه پیام‌ها" },
+      { to: "/join-links", label: "لینک‌های گروه و کانال" },
       { to: "/ai-settings", label: "هوش مصنوعی" },
     ],
   },

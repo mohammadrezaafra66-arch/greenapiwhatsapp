@@ -233,6 +233,50 @@ def task_recover_orphaned_campaigns():
     run_async(_o())
 
 
+@celery_app.task(name="tasks.join_all_links")
+def task_join_all_links(account_id: str, instance_id: str, api_token: str, links: list):
+    """V11.3 — best-effort join all registered links with one account. Records
+    per-link status (joined/unsupported/error). links: [[link_id, invite_link, name], ...].
+    Green API join-by-link is often unsupported (404/403) — recorded gracefully."""
+    async def _j():
+        import uuid as _uuid
+        from datetime import datetime as _dt
+        from app.database import AsyncSessionLocal
+        from app.models.join_links import AccountJoinStatus
+        from app.services.green_api import GreenAPIClient
+        from sqlalchemy import select as sa_select
+        client = GreenAPIClient(instance_id, api_token)
+        acc_uuid = _uuid.UUID(account_id)
+        for item in links:
+            link_id, invite_link = item[0], item[1]
+            res = await client.join_group_via_link(invite_link)
+            if res.get("success"):
+                status, err = "joined", None
+            elif res.get("unsupported"):
+                status, err = "unsupported", res.get("error")
+            else:
+                status, err = "error", res.get("error")
+            async with AsyncSessionLocal() as db:
+                existing = (await db.execute(sa_select(AccountJoinStatus).where(
+                    AccountJoinStatus.account_id == acc_uuid,
+                    AccountJoinStatus.link_id == _uuid.UUID(link_id),
+                ))).scalar_one_or_none()
+                if existing:
+                    existing.status = status
+                    existing.error = err
+                    if status == "joined":
+                        existing.joined_at = _dt.utcnow()
+                else:
+                    db.add(AccountJoinStatus(
+                        account_id=acc_uuid, link_id=_uuid.UUID(link_id),
+                        status=status, error=err,
+                        joined_at=_dt.utcnow() if status == "joined" else None,
+                    ))
+                await db.commit()
+            await asyncio.sleep(5)  # avoid rate limit between joins
+    run_async(_j())
+
+
 @celery_app.task(name="tasks.reset_daily_counters")
 def task_reset_daily_counters():
     async def _r():
@@ -297,13 +341,17 @@ def task_sync_account_states():
         from app.services.green_api import GreenAPIClient
         from sqlalchemy import select
         async with AsyncSessionLocal() as db:
+            newly_active = []  # V11.3 — accounts that just became authorized
             result = await db.execute(select(Account))
             for account in result.scalars().all():
                 try:
                     client = GreenAPIClient(account.instance_id, account.api_token)
                     state = await client.get_state()
+                    was_active = account.status == AccountStatus.active
                     if state == "authorized":
                         account.status = AccountStatus.active
+                        if not was_active:
+                            newly_active.append(account)
                     elif state == "blocked":
                         account.status = AccountStatus.banned
                     elif state == "notAuthorized":
@@ -311,4 +359,15 @@ def task_sync_account_states():
                 except Exception:
                     pass
             await db.commit()
+        # V11.3 — auto-join all registered links for accounts that just connected.
+        if newly_active:
+            from app.models.join_links import GroupJoinLink
+            async with AsyncSessionLocal() as db:
+                links = [(str(l.id), l.invite_link, l.name or "") for l in (await db.execute(
+                    select(GroupJoinLink).where(GroupJoinLink.is_active == True)
+                )).scalars().all()]
+            if links:
+                for account in newly_active:
+                    task_join_all_links.delay(str(account.id), account.instance_id, account.api_token, links)
+                    print(f"[AutoJoin] queued {len(links)} link joins for newly-active account {account.name}")
     run_async(_s())

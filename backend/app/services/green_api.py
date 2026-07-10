@@ -522,6 +522,16 @@ class GreenAPIClient:
         r = await self._get("getStatusStatistic", params={"idMessage": status_id})
         return r if isinstance(r, dict) else {}
 
+    async def join_group_via_link(self, invite_link: str) -> dict:
+        """Best-effort join a group via invite link. Green API support for this is
+        version/plan dependent (often unsupported → 404/403). Never raises."""
+        try:
+            r = await self._post("joinGroupViaLink", {"inviteLink": invite_link})
+            return {"success": True, "response": r}
+        except Exception as e:
+            unsupported = any(c in str(e) for c in ("404", "403", "not found", "Not Found"))
+            return {"success": False, "unsupported": unsupported, "error": str(e)[:200]}
+
     # ── ACCOUNT ──────────────────────────────────────────
     async def update_api_token(self) -> Optional[str]:
         """Generate a new API token (old token stays valid for ~1h)."""

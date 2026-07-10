@@ -272,6 +272,17 @@ export const ReportingApi = {
     http.get(`/reporting/top-products?limit=${limit}&days=${days}`).then((r) => r.data),
 };
 
+// ── Group/community/broadcast join links (V11.3) ───────────
+export const JoinLinksApi = {
+  list: () => http.get("/join-links/").then((r) => r.data),
+  add: (name, link, type) =>
+    http.post(`/join-links/?name=${encodeURIComponent(name)}&invite_link=${encodeURIComponent(link)}&link_type=${type}`).then((r) => r.data),
+  bulk: (links) => http.post("/join-links/bulk", links).then((r) => r.data),
+  delete: (id) => http.delete(`/join-links/${id}`).then((r) => r.data),
+  joinAll: (accountId) => http.post(`/join-links/join-all/${accountId}`).then((r) => r.data),
+  status: () => http.get("/join-links/status").then((r) => r.data),
+};
+
 // ── Products & Labels ──────────────────────────────────────
 export const ProductsApi = {
   list: () => http.get("/reporting/products").then((r) => r.data),
