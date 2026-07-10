@@ -155,6 +155,8 @@ export const Statuses = {
     http.post("/statuses/text", { text, bg_color, account_ids }).then((r) => r.data),
   sendImage: (image_url, caption, account_ids) =>
     http.post("/statuses/image", { image_url, caption, account_ids }).then((r) => r.data),
+  incoming: (accountId) =>
+    http.get("/statuses/incoming", { params: accountId ? { account_id: accountId } : {} }).then((r) => r.data),
   stats: (messageId) =>
     http.get(`/statuses/${messageId}/stats`).then((r) => r.data),
 };

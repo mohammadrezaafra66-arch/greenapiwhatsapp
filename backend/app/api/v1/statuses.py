@@ -101,6 +101,42 @@ async def delete_status(message_id: str, account_id: str, db: AsyncSession = Dep
     return {"deleted": ok}
 
 
+@router.get("/incoming")
+async def incoming_statuses(account_id: str | None = None, db: AsyncSession = Depends(get_db)):
+    """Fetch incoming WhatsApp statuses (Green API getIncomingStatuses). Account is
+    resolved from the query param, else the default account, else the first active."""
+    account = None
+    if account_id:
+        account = await db.get(Account, uuid.UUID(account_id))
+    if account is None:
+        account = (await db.execute(
+            select(Account).where(Account.is_default == True)
+        )).scalars().first()
+    if account is None:
+        account = (await db.execute(
+            select(Account).where(Account.status == AccountStatus.active)
+        )).scalars().first()
+    if account is None:
+        raise HTTPException(400, "هیچ حساب فعالی برای دریافت استوری‌ها موجود نیست")
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    try:
+        statuses = await client.get_incoming_statuses()
+    except Exception as e:
+        # Green API returns 403 for this method on some plans/tiers — degrade
+        # gracefully instead of a 500 so the UI can show a friendly message.
+        msg = "دریافت استوری‌های ورودی برای این حساب ممکن نیست"
+        if "403" in str(e):
+            msg = "این قابلیت در پلن Green API این حساب فعال نیست (خطای ۴۰۳)"
+        return {"account": account.name, "account_id": str(account.id),
+                "count": 0, "statuses": [], "error": msg}
+    return {
+        "account": account.name,
+        "account_id": str(account.id),
+        "count": len(statuses),
+        "statuses": statuses,
+    }
+
+
 @router.get("/incoming/{account_id}")
 async def get_incoming_statuses(account_id: str, db: AsyncSession = Depends(get_db)):
     account = await db.get(Account, uuid.UUID(account_id))
