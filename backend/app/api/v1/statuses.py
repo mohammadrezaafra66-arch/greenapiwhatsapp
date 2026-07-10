@@ -101,6 +101,51 @@ async def delete_status(message_id: str, account_id: str, db: AsyncSession = Dep
     return {"deleted": ok}
 
 
+@router.get("/history/{account_id}")
+async def status_history(account_id: str, db: AsyncSession = Depends(get_db)):
+    """Posted status history from Green API for this account (last 7 days)."""
+    account = await db.get(Account, uuid.UUID(account_id))
+    if not account:
+        raise HTTPException(404, "Account not found")
+    client = GreenAPIClient(account.instance_id, account.api_token)
+    try:
+        statuses = await client.get_outgoing_statuses(10080)
+    except Exception as e:
+        msg = "دریافت تاریخچه استوری برای این حساب ممکن نیست"
+        if "403" in str(e):
+            msg = "این قابلیت در پلن Green API این حساب فعال نیست (خطای ۴۰۳)"
+        return {"account": account.name, "statuses": [], "error": msg}
+    return {"account": account.name, "statuses": statuses}
+
+
+@router.get("/scheduled/{account_id}")
+async def scheduled_statuses(account_id: str, db: AsyncSession = Depends(get_db)):
+    """Future scheduled statuses for this account (from status_schedules)."""
+    from app.models.status_schedule import StatusSchedule
+    from app.utils.shamsi import to_shamsi
+    result = await db.execute(
+        select(StatusSchedule)
+        .where(StatusSchedule.account_id == uuid.UUID(account_id))
+        .where(StatusSchedule.is_active == True)
+        .order_by(StatusSchedule.next_run_at.nullslast())
+    )
+    return [
+        {
+            "id": str(s.id),
+            "name": s.name,
+            "status_type": s.status_type,
+            "content_type": s.content_type,
+            "intro_subtype": s.intro_subtype,
+            "next_run_shamsi": to_shamsi(s.next_run_at),
+            "days_of_week": s.days_of_week,
+            "specific_dates": s.specific_dates,
+            "times": s.times,
+            "is_active": s.is_active,
+        }
+        for s in result.scalars().all()
+    ]
+
+
 @router.get("/incoming")
 async def incoming_statuses(account_id: str | None = None, db: AsyncSession = Depends(get_db)):
     """Fetch incoming WhatsApp statuses (Green API getIncomingStatuses). Account is

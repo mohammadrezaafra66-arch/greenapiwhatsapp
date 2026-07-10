@@ -512,9 +512,15 @@ class GreenAPIClient:
         r = await self._get("getIncomingStatuses")
         return r if isinstance(r, list) else []
 
-    async def get_outgoing_statuses(self) -> list[dict]:
-        r = await self._get("getOutgoingStatuses")
+    async def get_outgoing_statuses(self, minutes: int = 10080) -> list[dict]:
+        """Statuses we posted (default: last 7 days). minutes goes AFTER the token."""
+        r = await self._get("getOutgoingStatuses", params={"minutes": minutes})
         return r if isinstance(r, list) else []
+
+    async def get_status_statistic(self, status_id: str) -> dict:
+        """Who viewed a posted status."""
+        r = await self._get("getStatusStatistic", params={"idMessage": status_id})
+        return r if isinstance(r, dict) else {}
 
     # ── ACCOUNT ──────────────────────────────────────────
     async def update_api_token(self) -> Optional[str]:

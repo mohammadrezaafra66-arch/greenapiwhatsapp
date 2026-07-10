@@ -286,6 +286,36 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[IDX] {e}")
+        ddl_v11 = [
+            """CREATE TABLE IF NOT EXISTS status_schedules (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                account_id uuid REFERENCES accounts(id) ON DELETE CASCADE,
+                name varchar(200),
+                status_type varchar(50) NOT NULL,
+                content_type varchar(30) DEFAULT 'text',
+                intro_subtype varchar(50),
+                custom_text text,
+                show_price boolean DEFAULT false,
+                include_image boolean DEFAULT false,
+                include_caption boolean DEFAULT true,
+                image_url text,
+                product_selection varchar(20) DEFAULT 'random',
+                product_pool jsonb,
+                product_pick_count integer DEFAULT 3,
+                days_of_week jsonb,
+                specific_dates jsonb,
+                times jsonb,
+                is_active boolean DEFAULT true,
+                next_run_at timestamp,
+                last_run_at timestamp,
+                created_at timestamp DEFAULT now()
+            )""",
+        ]
+        for stmt in ddl_v11:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V11] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:

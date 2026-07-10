@@ -1,6 +1,15 @@
 import React from "react";
-import { Statuses as Api } from "../api.js";
+import { Statuses as Api, Accounts as AccApi } from "../api.js";
 import { toast } from "../ui/toast.jsx";
+
+const fa = (n) => Number(n || 0).toLocaleString("fa-IR");
+
+const PERSIAN_DAYS = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه"];
+const STATUS_TYPE_LABELS = {
+  intro: "معرفی مجموعه",
+  special_offer: "پیشنهاد ویژه",
+  custom: "متن دلخواه",
+};
 
 // Green API incoming-status fields vary by type/plan — read defensively.
 function fmtTime(ts) {
@@ -78,9 +87,139 @@ function IncomingView({ data, loading, onRefresh }) {
   );
 }
 
+function HistoryView({ data, loading, onRefresh }) {
+  const truncate = (s) => {
+    const str = String(s || "");
+    return str.length > 60 ? str.slice(0, 60) + "…" : str;
+  };
+  const statuses = data?.statuses || [];
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-sm text-slate-400">
+          {data?.account ? `حساب: ${data.account}` : "تاریخچه استوری"}
+        </p>
+        <button className="btn-secondary text-xs" disabled={loading} onClick={onRefresh}>
+          {loading ? "در حال بارگذاری..." : "🔄 تازه‌سازی"}
+        </button>
+      </div>
+
+      {loading && !data && <p className="text-slate-500 text-sm">در حال بارگذاری...</p>}
+
+      {data?.error && (
+        <div className="card bg-amber-500/10 border-amber-500/30 text-amber-200 text-sm">⚠️ {data.error}</div>
+      )}
+
+      {data && !data.error && statuses.length === 0 && (
+        <p className="text-slate-500 text-sm">استوری منتشرشده‌ای یافت نشد.</p>
+      )}
+
+      {data && !data.error && statuses.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-right">
+            <thead>
+              <tr className="text-slate-400 border-b border-slate-700">
+                <th className="py-2 px-2 font-medium whitespace-nowrap">زمان</th>
+                <th className="py-2 px-2 font-medium whitespace-nowrap">نوع</th>
+                <th className="py-2 px-2 font-medium">محتوا</th>
+                <th className="py-2 px-2 font-medium whitespace-nowrap">تعداد گیرنده</th>
+              </tr>
+            </thead>
+            <tbody>
+              {statuses.map((s, i) => {
+                const content = s.textMessage || s.extendedTextMessage?.text || s.caption || "—";
+                const recipients = s.extendedTextMessage?.participants?.length ?? "—";
+                return (
+                  <tr key={s.idMessage || i} className="border-b border-slate-800">
+                    <td className="py-2 px-2 text-slate-400 whitespace-nowrap">{fmtTime(s.timestamp)}</td>
+                    <td className="py-2 px-2 whitespace-nowrap">{s.typeMessage || "—"}</td>
+                    <td className="py-2 px-2 text-slate-200 break-words">{truncate(content)}</td>
+                    <td className="py-2 px-2 whitespace-nowrap">{recipients === "—" ? "—" : fa(recipients)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RoadmapView({ data, loading, onRefresh }) {
+  const rows = data || [];
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-sm text-slate-400">برنامه آینده استوری</p>
+        <button className="btn-secondary text-xs" disabled={loading} onClick={onRefresh}>
+          {loading ? "در حال بارگذاری..." : "🔄 تازه‌سازی"}
+        </button>
+      </div>
+
+      {loading && data === null && <p className="text-slate-500 text-sm">در حال بارگذاری...</p>}
+
+      {data !== null && rows.length === 0 && (
+        <div className="card bg-sky-500/10 border-sky-500/30 text-sky-200 text-sm">
+          هیچ برنامه استوری‌ای برای این حساب تنظیم نشده. از صفحه «برنامه استوری» می‌توانید اضافه کنید.
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-right">
+            <thead>
+              <tr className="text-slate-400 border-b border-slate-700">
+                <th className="py-2 px-2 font-medium whitespace-nowrap">نام</th>
+                <th className="py-2 px-2 font-medium whitespace-nowrap">نوع</th>
+                <th className="py-2 px-2 font-medium whitespace-nowrap">اجرای بعدی (شمسی)</th>
+                <th className="py-2 px-2 font-medium">روزها/تاریخ‌ها</th>
+                <th className="py-2 px-2 font-medium">ساعت‌ها</th>
+                <th className="py-2 px-2 font-medium whitespace-nowrap">وضعیت</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => {
+                const typeLabel = STATUS_TYPE_LABELS[r.status_type] || r.status_type || "—";
+                let when = "—";
+                if (r.specific_dates && r.specific_dates.length) {
+                  when = r.specific_dates.join("،");
+                } else if (r.days_of_week && r.days_of_week.length) {
+                  when = r.days_of_week.map((d) => PERSIAN_DAYS[d] ?? d).join("،");
+                }
+                const times = (r.times && r.times.length) ? r.times.join("،") : "—";
+                return (
+                  <tr key={r.id || i} className="border-b border-slate-800">
+                    <td className="py-2 px-2 whitespace-nowrap">{r.name || "—"}</td>
+                    <td className="py-2 px-2 whitespace-nowrap">{typeLabel}</td>
+                    <td className="py-2 px-2 text-slate-400 whitespace-nowrap">{r.next_run_shamsi || "—"}</td>
+                    <td className="py-2 px-2 text-slate-200 break-words">{when}</td>
+                    <td className="py-2 px-2 text-slate-200 whitespace-nowrap">{times}</td>
+                    <td className="py-2 px-2 whitespace-nowrap">
+                      {r.is_active ? (
+                        <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">فعال</span>
+                      ) : (
+                        <span className="badge bg-slate-500/20 text-slate-300 border-slate-500/40">غیرفعال</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Statuses() {
-  const [mainTab, setMainTab] = React.useState("mine"); // mine | incoming
+  const [mainTab, setMainTab] = React.useState("mine"); // mine | incoming | history | roadmap
   const [tab, setTab] = React.useState("text"); // text | image (within "mine")
+
+  // Accounts + selected account (used by incoming/history/roadmap tabs)
+  const [accounts, setAccounts] = React.useState([]);
+  const [selectedAccount, setSelectedAccount] = React.useState("");
   const [text, setText] = React.useState("");
   const [bg, setBg] = React.useState("#25D366");
   const [imageUrl, setImageUrl] = React.useState("");
@@ -92,6 +231,12 @@ export default function Statuses() {
   // can't repeatedly trip the per-instance circuit breaker).
   const [incoming, setIncoming] = React.useState(null);
   const [incLoading, setIncLoading] = React.useState(false);
+
+  // Posted-status history + upcoming roadmap (per selected account).
+  const [histData, setHistData] = React.useState(null);
+  const [histLoading, setHistLoading] = React.useState(false);
+  const [schedData, setSchedData] = React.useState(null);
+  const [schedLoading, setSchedLoading] = React.useState(false);
 
   const loadIncoming = async () => {
     setIncLoading(true);
@@ -106,10 +251,54 @@ export default function Statuses() {
     }
   };
 
+  const loadHistory = async (accId) => {
+    if (!accId) return;
+    setHistLoading(true);
+    try {
+      setHistData(await Api.history(accId));
+    } catch (e) {
+      const msg = e?.response?.data?.detail || e.message;
+      toast.error(msg);
+      setHistData({ statuses: [], error: msg });
+    } finally {
+      setHistLoading(false);
+    }
+  };
+
+  const loadScheduled = async (accId) => {
+    if (!accId) return;
+    setSchedLoading(true);
+    try {
+      setSchedData(await Api.scheduled(accId));
+    } catch (e) {
+      const msg = e?.response?.data?.detail || e.message;
+      toast.error(msg);
+      setSchedData([]);
+    } finally {
+      setSchedLoading(false);
+    }
+  };
+
+  // Load accounts once on mount.
+  React.useEffect(() => {
+    AccApi.list().then((a) => {
+      setAccounts(a || []);
+      const d = (a || []).find((x) => x.is_default) || (a || [])[0];
+      if (d) setSelectedAccount(d.id);
+    });
+  }, []);
+
   React.useEffect(() => {
     if (mainTab === "incoming" && incoming === null) loadIncoming();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainTab]);
+
+  // (Re)load history/roadmap when their tab becomes active or the account changes.
+  React.useEffect(() => {
+    if (mainTab === "history") loadHistory(selectedAccount);
+    if (mainTab === "roadmap") loadScheduled(selectedAccount);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainTab, selectedAccount]);
 
   const sendText = async () => {
     if (!text) return toast.error("متن لازم است");
@@ -140,9 +329,23 @@ export default function Statuses() {
       <h2 className="text-2xl font-bold">استوری واتس‌اپ</h2>
 
       {/* Main tabs */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap items-center">
         <button className={mainTab === "mine" ? "btn-primary" : "btn-secondary"} onClick={() => setMainTab("mine")}>استوری‌های من</button>
         <button className={mainTab === "incoming" ? "btn-primary" : "btn-secondary"} onClick={() => setMainTab("incoming")}>استوری‌های دریافتی</button>
+        <button className={mainTab === "history" ? "btn-primary" : "btn-secondary"} onClick={() => setMainTab("history")}>تاریخچه استوری</button>
+        <button className={mainTab === "roadmap" ? "btn-primary" : "btn-secondary"} onClick={() => setMainTab("roadmap")}>برنامه آینده</button>
+
+        {(mainTab === "incoming" || mainTab === "history" || mainTab === "roadmap") && (
+          <select
+            className="input w-auto"
+            value={selectedAccount}
+            onChange={(e) => setSelectedAccount(e.target.value)}
+          >
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {mainTab === "mine" ? (
@@ -186,8 +389,12 @@ export default function Statuses() {
             </div>
           )}
         </>
-      ) : (
+      ) : mainTab === "incoming" ? (
         <IncomingView data={incoming} loading={incLoading} onRefresh={loadIncoming} />
+      ) : mainTab === "history" ? (
+        <HistoryView data={histData} loading={histLoading} onRefresh={() => loadHistory(selectedAccount)} />
+      ) : (
+        <RoadmapView data={schedData} loading={schedLoading} onRefresh={() => loadScheduled(selectedAccount)} />
       )}
     </div>
   );

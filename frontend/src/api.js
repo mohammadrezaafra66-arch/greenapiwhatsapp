@@ -157,6 +157,8 @@ export const Statuses = {
     http.post("/statuses/image", { image_url, caption, account_ids }).then((r) => r.data),
   incoming: (accountId) =>
     http.get("/statuses/incoming", { params: accountId ? { account_id: accountId } : {} }).then((r) => r.data),
+  history: (accountId) => http.get(`/statuses/history/${accountId}`).then((r) => r.data),
+  scheduled: (accountId) => http.get(`/statuses/scheduled/${accountId}`).then((r) => r.data),
   stats: (messageId) =>
     http.get(`/statuses/${messageId}/stats`).then((r) => r.data),
 };
