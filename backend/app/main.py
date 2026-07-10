@@ -19,7 +19,7 @@ from app.api.v1 import (
     keyword_rules, account_schedules,
     journals, files as files_router,
     contact_groups, wa_collections, reporting as reporting_router,
-    join_links,
+    join_links, status_schedules,
 )
 
 @asynccontextmanager
@@ -375,7 +375,7 @@ for router in [
     keyword_rules.router, account_schedules.router,
     journals.router, files_router.router,
     contact_groups.router, wa_collections.router, reporting_router.router,
-    join_links.router,
+    join_links.router, status_schedules.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

@@ -272,6 +272,16 @@ export const ReportingApi = {
     http.get(`/reporting/top-products?limit=${limit}&days=${days}`).then((r) => r.data),
 };
 
+// ── Per-account status scheduler (V11.4) ──────────────────
+export const StatusScheduleApi = {
+  list: (accountId) =>
+    http.get("/status-schedules/", { params: accountId ? { account_id: accountId } : {} }).then((r) => r.data),
+  create: (body) => http.post("/status-schedules/", body).then((r) => r.data),
+  update: (id, body) => http.put(`/status-schedules/${id}`, body).then((r) => r.data),
+  delete: (id) => http.delete(`/status-schedules/${id}`).then((r) => r.data),
+  toggle: (id) => http.post(`/status-schedules/${id}/toggle`).then((r) => r.data),
+};
+
 // ── Group/community/broadcast join links (V11.3) ───────────
 export const JoinLinksApi = {
   list: () => http.get("/join-links/").then((r) => r.data),

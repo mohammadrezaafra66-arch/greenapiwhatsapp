@@ -29,6 +29,7 @@ const NAV = [
       { to: "/keyword-rules", label: "پاسخ خودکار" },
       { to: "/templates", label: "قالب‌های پیام" },
       { to: "/statuses", label: "استوری‌ها" },
+      { to: "/status-scheduler", label: "برنامه استوری" },
       { to: "/files", label: "فایل‌ها" },
       { to: "/journals", label: "تاریخچه پیام‌ها" },
       { to: "/join-links", label: "لینک‌های گروه و کانال" },

@@ -233,6 +233,13 @@ def task_recover_orphaned_campaigns():
     run_async(_o())
 
 
+@celery_app.task(name="tasks.check_status_schedules")
+def task_check_status_schedules():
+    """V11.4 — post any due scheduled statuses (day+time match, dedup per slot)."""
+    from app.services.status_scheduler import check_and_post_due_statuses
+    run_async(check_and_post_due_statuses())
+
+
 @celery_app.task(name="tasks.join_all_links")
 def task_join_all_links(account_id: str, instance_id: str, api_token: str, links: list):
     """V11.3 — best-effort join all registered links with one account. Records
