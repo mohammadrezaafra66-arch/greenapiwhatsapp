@@ -48,7 +48,10 @@ services:
       REDIS_URL: redis://redis:6379/0
       WEBHOOK_BASE_URL: https://multidisciplinary-jeri-physiognomically.ngrok-free.dev
     ports:
-      - "8002:8000"   # host 8002 (8000 is taken locally) -> container 8000
+      # Bind on all interfaces so other devices on the LAN can reach the API
+      # directly (e.g. http://<LAN-IP>:8002/docs). The frontend does NOT need
+      # this — it proxies /api via nginx — but it's handy for direct access.
+      - "0.0.0.0:8002:8000"   # host 8002 (8000 is taken locally) -> container 8000
     depends_on:
       - db
       - redis
@@ -89,7 +92,8 @@ services:
         VITE_API_BASE: /api/v1
     restart: always
     ports:
-      - "3002:80"
+      # Bind on all interfaces so LAN devices can open http://<LAN-IP>:3002
+      - "0.0.0.0:3002:80"
     depends_on:
       - backend
 
