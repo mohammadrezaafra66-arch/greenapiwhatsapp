@@ -86,6 +86,10 @@ class Campaign(Base):
     product_weights: Mapped[dict | None] = mapped_column(JSONB)  # {name: weight}
     include_opt_out: Mapped[bool] = mapped_column(Boolean, default=True)
     opt_out_text: Mapped[str | None] = mapped_column(String(300))
+    # A/B testing (V13.1) — two message variants, 50/50 split
+    ab_test_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    variant_b_prompt: Mapped[str | None] = mapped_column(Text)
+    variant_b_template: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
@@ -102,6 +106,7 @@ class CampaignContact(Base):
     delivery_status: Mapped[str | None] = mapped_column(String(50))  # sent/delivered/read/failed
     error_message: Mapped[str | None] = mapped_column(Text)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    ab_variant: Mapped[str | None] = mapped_column(String(1))  # V13.1 — 'A' or 'B'
 
 class HourRateLimit(Base):
     __tablename__ = "hour_rate_limits"

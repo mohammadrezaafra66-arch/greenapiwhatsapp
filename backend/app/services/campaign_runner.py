@@ -30,6 +30,10 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
         effective_gpt_prompt = hour_gpt_prompt or campaign.gpt_prompt
         effective_template = hour_template or campaign.message_template
         effective_include_products = campaign.include_products or hour_include_products
+        # V13.1 — A/B test: variant B uses its own prompt/template when provided.
+        if getattr(campaign, "ab_test_enabled", False) and getattr(cc, "ab_variant", None) == "B":
+            effective_gpt_prompt = campaign.variant_b_prompt or effective_gpt_prompt
+            effective_template = campaign.variant_b_template or effective_template
         # Lazily fetch products if this hour's slot wants them but the campaign didn't.
         if effective_include_products and not products:
             products = await get_products(campaign.product_count)

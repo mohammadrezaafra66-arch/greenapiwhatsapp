@@ -60,6 +60,10 @@ class CampaignCreateBody(BaseModel):
     product_weights: dict | None = None            # {product_name: weight}
     include_opt_out: bool = True
     opt_out_text: str | None = None
+    # A/B testing (V13.1)
+    ab_test_enabled: bool = False
+    variant_b_prompt: str | None = None
+    variant_b_template: str | None = None
 
 
 class TestBody(BaseModel):
@@ -126,6 +130,9 @@ def _campaign_detail(c: Campaign) -> dict:
         "show_product_prices": c.show_product_prices,
         "schedule_start_shamsi": to_shamsi(c.schedule_start),
         "schedule_end_shamsi": to_shamsi(c.schedule_end),
+        "ab_test_enabled": c.ab_test_enabled,
+        "variant_b_prompt": c.variant_b_prompt,
+        "variant_b_template": c.variant_b_template,
     }
 
 
@@ -182,6 +189,9 @@ async def update_campaign(campaign_id: str, body: CampaignCreateBody, db: AsyncS
         c.schedule_start = from_shamsi(body.schedule_start_shamsi)
     if body.schedule_end_shamsi is not None:
         c.schedule_end = from_shamsi(body.schedule_end_shamsi)
+    c.ab_test_enabled = body.ab_test_enabled
+    c.variant_b_prompt = body.variant_b_prompt
+    c.variant_b_template = body.variant_b_template
     await db.commit()
     return {"id": campaign_id, "updated": True}
 
@@ -247,6 +257,9 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         product_weights=body.product_weights or None,
         include_opt_out=body.include_opt_out,
         opt_out_text=body.opt_out_text,
+        ab_test_enabled=body.ab_test_enabled,
+        variant_b_prompt=body.variant_b_prompt,
+        variant_b_template=body.variant_b_template,
     )
     db.add(campaign)
     await db.commit()
@@ -319,6 +332,19 @@ async def start_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
         if chat_ids:
             campaign.campaign_scope = "group"
             campaign.group_ids = json.dumps(chat_ids)
+
+    # V13.1 — A/B test: assign each still-pending contact a variant, alternating
+    # A/B (deterministic ~50/50). Only contacts without a variant yet are touched.
+    if campaign.ab_test_enabled and campaign.campaign_scope != "group":
+        cc_rows = (await db.execute(
+            select(CampaignContact).where(
+                CampaignContact.campaign_id == campaign.id,
+                CampaignContact.status == MessageStatus.pending,
+                CampaignContact.ab_variant.is_(None),
+            ).order_by(CampaignContact.id)
+        )).scalars().all()
+        for i, cc in enumerate(cc_rows):
+            cc.ab_variant = "A" if i % 2 == 0 else "B"
 
     campaign.status = CampaignStatus.running
     campaign.pause_reason = None
@@ -415,6 +441,38 @@ async def retry_failed(campaign_id: str, db: AsyncSession = Depends(get_db)):
     if count:
         task_run_campaign.delay(campaign_id)  # single-run lock prevents duplicates
     return {"requeued": count}
+
+
+@router.get("/{campaign_id}/ab-results")
+async def ab_results(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    """V13.1 — per-variant delivery/read stats for an A/B campaign + the winner
+    (higher read%, tiebreak delivered%)."""
+    from sqlalchemy import func as f, case
+    rows = await db.execute(
+        select(
+            CampaignContact.ab_variant,
+            f.count().label("total"),
+            f.sum(case((CampaignContact.delivery_status == "delivered", 1), else_=0)).label("delivered"),
+            f.sum(case((CampaignContact.delivery_status == "read", 1), else_=0)).label("read"),
+            f.sum(case((CampaignContact.status == MessageStatus.failed, 1), else_=0)).label("failed"),
+        ).where(CampaignContact.campaign_id == uuid.UUID(campaign_id))
+         .group_by(CampaignContact.ab_variant)
+    )
+    variants = {}
+    for r in rows.all():
+        if not r.ab_variant:
+            continue
+        total = r.total or 1
+        variants[r.ab_variant] = {
+            "total": r.total, "delivered": r.delivered or 0, "read": r.read or 0, "failed": r.failed or 0,
+            "delivered_pct": round(100 * (r.delivered or 0) / total, 1),
+            "read_pct": round(100 * (r.read or 0) / total, 1),
+        }
+    winner = None
+    if "A" in variants and "B" in variants:
+        a, b = variants["A"], variants["B"]
+        winner = "A" if (a["read_pct"], a["delivered_pct"]) >= (b["read_pct"], b["delivered_pct"]) else "B"
+    return {"variants": variants, "winner": winner}
 
 
 @router.get("/{campaign_id}/analytics")

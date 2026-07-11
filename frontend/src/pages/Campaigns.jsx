@@ -23,8 +23,11 @@ export default function Campaigns() {
 
   const openAnalytics = async (c) => {
     try {
-      const data = await Api.analytics(c.id);
-      setAnalytics(data);
+      const [data, ab] = await Promise.all([
+        Api.analytics(c.id),
+        Api.abResults(c.id).catch(() => null),
+      ]);
+      setAnalytics({ ...data, _ab: ab });
     } catch (e) {
       toast.error(e?.response?.data?.detail || e.message);
     }
@@ -179,6 +182,35 @@ function AnalyticsModal({ data, onClose }) {
             </table>
           </div>
         )}
+
+        {data?._ab?.variants && Object.keys(data._ab.variants).length > 0 && (
+          <div className="rounded-lg border border-slate-700 p-3 space-y-2">
+            <h4 className="font-bold text-sm">نتایج تست A/B</h4>
+            <div className="grid grid-cols-2 gap-3">
+              {["A", "B"].map((v) => {
+                const stat = data._ab.variants[v];
+                if (!stat) return <div key={v} className="text-xs text-slate-500">نسخه {v}: بدون داده</div>;
+                const win = data._ab.winner === v;
+                return (
+                  <div key={v} className={`rounded-lg p-3 border ${win ? "border-emerald-500/50 bg-emerald-500/10" : "border-slate-700 bg-slate-900"}`}>
+                    <div className="flex items-center gap-2 font-bold">
+                      نسخه {v} {win && <span title="برنده">🏆</span>}
+                    </div>
+                    <div className="text-xs text-slate-300 mt-1 space-y-0.5">
+                      <div>تعداد: {fa(stat.total)}</div>
+                      <div className="text-emerald-300">تحویل: {fa(stat.delivered_pct)}٪ ({fa(stat.delivered)})</div>
+                      <div className="text-sky-300">خوانده: {fa(stat.read_pct)}٪ ({fa(stat.read)})</div>
+                      <div className="text-red-300">ناموفق: {fa(stat.failed)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {data._ab.winner && (
+              <p className="text-xs text-emerald-300">برنده بر اساس نرخ خوانده‌شدن: نسخه {data._ab.winner} 🏆</p>
+            )}
+          </div>
+        )}
       </div>
     </Modal>
   );
@@ -285,6 +317,7 @@ const CAMPAIGN_DEFAULTS = {
   opening_mode: "ai", opening_line: "", opening_variants: "",
   product_variation_mode: "same", products_per_group: 3, product_weights: "",
   include_opt_out: true, opt_out_text: "",
+  ab_test_enabled: false, variant_b_prompt: "", variant_b_template: "",
 };
 
 // Parse a "name=weight" per-line textarea into {name: number}. Blank → null.
@@ -343,6 +376,9 @@ function seedCampaignForm(d) {
       : "",
     include_opt_out: d.include_opt_out !== false,
     opt_out_text: d.opt_out_text || "",
+    ab_test_enabled: d.ab_test_enabled || false,
+    variant_b_prompt: d.variant_b_prompt || "",
+    variant_b_template: d.variant_b_template || "",
   };
 }
 
@@ -463,6 +499,9 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         product_weights: parseWeights(f.product_weights),
         include_opt_out: f.include_opt_out !== false,
         opt_out_text: f.include_opt_out && f.opt_out_text ? f.opt_out_text : null,
+        ab_test_enabled: f.ab_test_enabled,
+        variant_b_prompt: f.ab_test_enabled ? (f.variant_b_prompt || null) : null,
+        variant_b_template: f.ab_test_enabled ? (f.variant_b_template || null) : null,
       };
       if (editId) {
         await Api.update(editId, body);
@@ -554,6 +593,40 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
             <textarea className="input h-20" value={f.message_template} onChange={set("message_template")} />
           </div>
         )}
+
+        {/* V13.1 — A/B testing */}
+        <div className="border-t border-slate-700 pt-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={f.ab_test_enabled} onChange={set("ab_test_enabled")} />
+            تست A/B (دو نسخه پیام، تقسیم ۵۰/۵۰)
+          </label>
+          <p className="text-xs text-slate-500 -mt-0.5">نیمی از مخاطبین نسخه A و نیمی نسخه B را دریافت می‌کنند؛ نتایج در «آمار» مقایسه می‌شود.</p>
+          {f.ab_test_enabled && (
+            <div className="mt-2">
+              {f.use_gpt ? (
+                <>
+                  <label className="label">پرامپت نسخه B</label>
+                  <textarea
+                    className="input h-20"
+                    value={f.variant_b_prompt}
+                    onChange={set("variant_b_prompt")}
+                    placeholder="توضیح متفاوت برای هوش مصنوعی (نسخه B). خالی = مثل نسخه A"
+                  />
+                </>
+              ) : (
+                <>
+                  <label className="label">قالب نسخه B</label>
+                  <textarea
+                    className="input h-20"
+                    value={f.variant_b_template}
+                    onChange={set("variant_b_template")}
+                    placeholder="متن قالب نسخه B (می‌توانید از {{first_name}} استفاده کنید)"
+                  />
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Phase 2 — opening line control */}
         <div className="border-t border-slate-700 pt-3">

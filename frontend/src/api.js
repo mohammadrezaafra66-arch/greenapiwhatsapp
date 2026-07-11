@@ -65,6 +65,7 @@ export const Campaigns = {
   toggleActive: (id) => http.post(`/campaigns/${id}/toggle-active`).then((r) => r.data),
   retryFailed: (id) => http.post(`/campaigns/${id}/retry-failed`).then((r) => r.data),
   analytics: (id) => http.get(`/campaigns/${id}/analytics`).then((r) => r.data),
+  abResults: (id) => http.get(`/campaigns/${id}/ab-results`).then((r) => r.data),
   remove: (id) => http.delete(`/campaigns/${id}`).then((r) => r.data),
 };
 
