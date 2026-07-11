@@ -318,6 +318,7 @@ const CAMPAIGN_DEFAULTS = {
   product_variation_mode: "same", products_per_group: 3, product_weights: "",
   include_opt_out: true, opt_out_text: "",
   ab_test_enabled: false, variant_b_prompt: "", variant_b_template: "",
+  use_rich_formatting: false,
 };
 
 // Parse a "name=weight" per-line textarea into {name: number}. Blank → null.
@@ -379,6 +380,7 @@ function seedCampaignForm(d) {
     ab_test_enabled: d.ab_test_enabled || false,
     variant_b_prompt: d.variant_b_prompt || "",
     variant_b_template: d.variant_b_template || "",
+    use_rich_formatting: d.use_rich_formatting || false,
   };
 }
 
@@ -393,6 +395,32 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
   const [feasResult, setFeasResult] = React.useState(null);
   const [feasLoading, setFeasLoading] = React.useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+
+  // V13.5 — WhatsApp formatting toolbar: wrap the selected text in the template editor.
+  const templateRef = React.useRef(null);
+  const wrapTemplate = (marker, endMarker) => {
+    const ta = templateRef.current;
+    const em = endMarker ?? marker;
+    const val = f.message_template || "";
+    const start = ta ? ta.selectionStart : val.length;
+    const end = ta ? ta.selectionEnd : val.length;
+    const sel = val.slice(start, end) || "متن";
+    const next = val.slice(0, start) + marker + sel + em + val.slice(end);
+    setF((prev) => ({ ...prev, message_template: next }));
+    requestAnimationFrame(() => {
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(start + marker.length, start + marker.length + sel.length);
+    });
+  };
+  const bulletTemplate = () => {
+    const val = f.message_template || "";
+    const out = val
+      .split("\n")
+      .map((l) => (l.trim() ? (l.startsWith("• ") ? l : "• " + l) : l))
+      .join("\n");
+    setF((prev) => ({ ...prev, message_template: out }));
+  };
 
   const runFeasibility = async () => {
     setFeasLoading(true);
@@ -502,6 +530,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         ab_test_enabled: f.ab_test_enabled,
         variant_b_prompt: f.ab_test_enabled ? (f.variant_b_prompt || null) : null,
         variant_b_template: f.ab_test_enabled ? (f.variant_b_template || null) : null,
+        use_rich_formatting: f.use_rich_formatting,
       };
       if (editId) {
         await Api.update(editId, body);
@@ -586,11 +615,27 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
           <div>
             <label className="label">توضیح برای هوش مصنوعی</label>
             <textarea className="input h-20" value={f.gpt_prompt} onChange={set("gpt_prompt")} placeholder="مثال: یک پیام صمیمی و کوتاه برای مشتری عمده‌فروش لوازم خانگی بنویس که از خرید از افراکالا تشکر کند" />
+            <label className="flex items-center gap-2 text-sm mt-2">
+              <input type="checkbox" checked={f.use_rich_formatting} onChange={set("use_rich_formatting")} />
+              قالب‌بندی هوشمند با هوش مصنوعی (پررنگ کردن نام محصولات و نکات مهم)
+            </label>
           </div>
         ) : (
           <div>
             <label className="label">قالب پیام (می‌توانید از {"{{first_name}}"} استفاده کنید)</label>
-            <textarea className="input h-20" value={f.message_template} onChange={set("message_template")} />
+            {/* V13.5 — WhatsApp formatting toolbar */}
+            <div className="flex flex-wrap gap-1 mb-1">
+              <button type="button" className="btn-secondary text-xs font-bold" title="پررنگ" onClick={() => wrapTemplate("*")}>B</button>
+              <button type="button" className="btn-secondary text-xs italic" title="کج" onClick={() => wrapTemplate("_")}>I</button>
+              <button type="button" className="btn-secondary text-xs line-through" title="خط‌خورده" onClick={() => wrapTemplate("~")}>S</button>
+              <button type="button" className="btn-secondary text-xs font-mono" title="تک‌فاصله" onClick={() => wrapTemplate("```")}>{"</>"}</button>
+              <button type="button" className="btn-secondary text-xs" title="فهرست" onClick={bulletTemplate}>• لیست</button>
+            </div>
+            <textarea ref={templateRef} className="input h-20" value={f.message_template} onChange={set("message_template")} />
+            <p className="text-xs text-slate-500 mt-1">
+              راهنما: <span className="font-bold">*پررنگ*</span> · <span className="italic">_کج_</span> ·{" "}
+              <span className="line-through">~خط‌خورده~</span> · <span className="font-mono">```تک‌فاصله```</span>
+            </p>
           </div>
         )}
 

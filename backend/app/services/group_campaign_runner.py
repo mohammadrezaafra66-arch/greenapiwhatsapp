@@ -89,6 +89,7 @@ async def run_group_campaign(campaign_id: str):
                         opening_line=opening_line,
                         include_opt_out=campaign.include_opt_out,
                         opt_out_text=campaign.opt_out_text,
+                        use_rich_formatting=getattr(campaign, "use_rich_formatting", False),
                     )
                 else:
                     # Template path — still honor opening + opt-out toggles.

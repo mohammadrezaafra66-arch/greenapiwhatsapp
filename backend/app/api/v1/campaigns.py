@@ -64,6 +64,8 @@ class CampaignCreateBody(BaseModel):
     ab_test_enabled: bool = False
     variant_b_prompt: str | None = None
     variant_b_template: str | None = None
+    # Rich formatting (V13.5)
+    use_rich_formatting: bool = False
 
 
 class TestBody(BaseModel):
@@ -133,6 +135,7 @@ def _campaign_detail(c: Campaign) -> dict:
         "ab_test_enabled": c.ab_test_enabled,
         "variant_b_prompt": c.variant_b_prompt,
         "variant_b_template": c.variant_b_template,
+        "use_rich_formatting": c.use_rich_formatting,
     }
 
 
@@ -192,6 +195,7 @@ async def update_campaign(campaign_id: str, body: CampaignCreateBody, db: AsyncS
     c.ab_test_enabled = body.ab_test_enabled
     c.variant_b_prompt = body.variant_b_prompt
     c.variant_b_template = body.variant_b_template
+    c.use_rich_formatting = body.use_rich_formatting
     await db.commit()
     return {"id": campaign_id, "updated": True}
 
@@ -260,6 +264,7 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         ab_test_enabled=body.ab_test_enabled,
         variant_b_prompt=body.variant_b_prompt,
         variant_b_template=body.variant_b_template,
+        use_rich_formatting=body.use_rich_formatting,
     )
     db.add(campaign)
     await db.commit()

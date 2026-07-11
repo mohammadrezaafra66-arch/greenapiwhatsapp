@@ -57,6 +57,7 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
                 opening_line=opening_line,
                 include_opt_out=campaign.include_opt_out,
                 opt_out_text=campaign.opt_out_text,
+                use_rich_formatting=getattr(campaign, "use_rich_formatting", False),
             )
         else:
             message = (effective_template or "سلام {{first_name}} جان!")

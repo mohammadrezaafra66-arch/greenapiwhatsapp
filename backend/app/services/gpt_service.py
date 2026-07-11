@@ -294,7 +294,7 @@ async def generate_message(first_name: str, last_name: str, gpt_prompt: str,
                            products: list[dict] = None, emoji_level: str = "medium",
                            show_prices: bool = True, opening_mode: str = "ai",
                            opening_line: str | None = None, include_opt_out: bool = True,
-                           opt_out_text: str | None = None) -> str:
+                           opt_out_text: str | None = None, use_rich_formatting: bool = False) -> str:
     products_text = ""
     if products:
         products_text = "\n\nمحصولات امروز افراکالا:\n"
@@ -320,6 +320,12 @@ async def generate_message(first_name: str, last_name: str, gpt_prompt: str,
         extra_rules.append(f"- در پایان پیام دقیقاً این عبارت را قرار بده: «{opt_text}»")
     else:
         extra_rules.append("- هیچ عبارت لغو، انصراف یا لغو اشتراک در انتهای پیام نگذار")
+    # V13.5 — WhatsApp rich formatting: bold with *, italic with _, etc.
+    if use_rich_formatting:
+        extra_rules.append(
+            "- از قالب‌بندی واتساپ استفاده کن: نام محصولات و قیمت‌ها را با *ستاره* پررنگ کن، "
+            "نکات مهم را برجسته کن (مثلاً _کج_). فقط از نشانه‌های *، _، ~ استفاده کن."
+        )
 
     emoji_rule = EMOJI_INSTRUCTION.get(emoji_level, EMOJI_INSTRUCTION["medium"])
     system_prompt = SYSTEM_PROMPT + "".join(f"\n{r}" for r in extra_rules) + f"\n- درباره ایموجی: {emoji_rule}"
