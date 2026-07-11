@@ -390,6 +390,11 @@ async def lifespan(app: FastAPI):
             await conn.execute(text("ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS use_rich_formatting boolean DEFAULT false"))
         except Exception as e:
             print(f"[DDL V13.5] {e}")
+        # V13.2 — smart health-weighted account rotation
+        try:
+            await conn.execute(text("ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS smart_rotation boolean DEFAULT false"))
+        except Exception as e:
+            print(f"[DDL V13.2] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:

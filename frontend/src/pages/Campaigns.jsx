@@ -341,7 +341,7 @@ const CAMPAIGN_DEFAULTS = {
   product_variation_mode: "same", products_per_group: 3, product_weights: "",
   include_opt_out: true, opt_out_text: "",
   ab_test_enabled: false, variant_b_prompt: "", variant_b_template: "",
-  use_rich_formatting: false,
+  use_rich_formatting: false, smart_rotation: false,
 };
 
 // Parse a "name=weight" per-line textarea into {name: number}. Blank → null.
@@ -404,6 +404,7 @@ function seedCampaignForm(d) {
     variant_b_prompt: d.variant_b_prompt || "",
     variant_b_template: d.variant_b_template || "",
     use_rich_formatting: d.use_rich_formatting || false,
+    smart_rotation: d.smart_rotation || false,
   };
 }
 
@@ -594,6 +595,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         variant_b_prompt: f.ab_test_enabled ? (f.variant_b_prompt || null) : null,
         variant_b_template: f.ab_test_enabled ? (f.variant_b_template || null) : null,
         use_rich_formatting: f.use_rich_formatting,
+        smart_rotation: f.smart_rotation,
       };
       if (editId) {
         await Api.update(editId, body);
@@ -885,6 +887,15 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
             />
           )}
           <p className="text-xs text-slate-500 mt-1">اگر خاموش باشد، هیچ عبارت لغوی به انتهای پیام اضافه نمی‌شود.</p>
+        </div>
+
+        {/* V13.2 — smart account rotation */}
+        <div className="border-t border-slate-700 pt-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={f.smart_rotation} onChange={set("smart_rotation")} />
+            چرخش هوشمند حساب‌ها (اولویت با حساب سالم‌تر)
+          </label>
+          <p className="text-xs text-slate-500 -mt-0.5">به‌جای چرخش ساده، حساب‌های سالم‌تر (یلوکارت کمتر، ظرفیت روزانه بیشتر) پیام بیشتری می‌فرستند.</p>
         </div>
 
         {f.campaign_type === "image" && (

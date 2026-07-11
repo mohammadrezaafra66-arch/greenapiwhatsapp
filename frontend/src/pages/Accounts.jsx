@@ -3,6 +3,33 @@ import { Accounts as Api, ProxyApi } from "../api.js";
 import { Badge, Spinner, Empty, Modal, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
 
+const fa = (n) => Number(n || 0).toLocaleString("fa-IR");
+
+// V13.2 — per-account health bar (green/amber/red by score).
+function HealthSection({ accountId }) {
+  const [h, setH] = React.useState(null);
+  React.useEffect(() => {
+    let alive = true;
+    Api.health(accountId).then((d) => alive && setH(d)).catch(() => {});
+    return () => { alive = false; };
+  }, [accountId]);
+  if (!h) return null;
+  const pct = Math.round((h.score || 0) * 100);
+  const color = pct >= 66 ? "bg-emerald-500" : pct >= 33 ? "bg-amber-500" : "bg-red-500";
+  const label = pct >= 66 ? "سالم" : pct >= 33 ? "متوسط" : "ضعیف";
+  return (
+    <div className="border-t border-slate-700 pt-3">
+      <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+        <span>سلامت حساب: {fa(pct)}٪ ({label})</span>
+        <span>یلوکارت ۷روز: {fa(h.yellow_card_7d)}/{fa(h.sends_7d)}</span>
+      </div>
+      <div className="h-2 rounded bg-slate-800 overflow-hidden">
+        <div className={`h-full ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 export default function Accounts() {
   const { data, loading, error, reload } = useAsync(Api.list, []);
   const [showAdd, setShowAdd] = React.useState(false);
@@ -109,6 +136,7 @@ export default function Accounts() {
                 <button className="btn-secondary text-xs" onClick={() => setRenaming(null)}>لغو</button>
               </div>
             )}
+            <HealthSection accountId={a.id} />
             <ProxySection accountId={a.id} />
             <LimitsSection accountId={a.id} />
           </div>

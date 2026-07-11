@@ -66,6 +66,8 @@ class CampaignCreateBody(BaseModel):
     variant_b_template: str | None = None
     # Rich formatting (V13.5)
     use_rich_formatting: bool = False
+    # Smart rotation (V13.2)
+    smart_rotation: bool = False
 
 
 class TestBody(BaseModel):
@@ -162,6 +164,7 @@ def _campaign_detail(c: Campaign) -> dict:
         "variant_b_prompt": c.variant_b_prompt,
         "variant_b_template": c.variant_b_template,
         "use_rich_formatting": c.use_rich_formatting,
+        "smart_rotation": c.smart_rotation,
     }
 
 
@@ -222,6 +225,7 @@ async def update_campaign(campaign_id: str, body: CampaignCreateBody, db: AsyncS
     c.variant_b_prompt = body.variant_b_prompt
     c.variant_b_template = body.variant_b_template
     c.use_rich_formatting = body.use_rich_formatting
+    c.smart_rotation = body.smart_rotation
     await db.commit()
     return {"id": campaign_id, "updated": True}
 
@@ -291,6 +295,7 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         variant_b_prompt=body.variant_b_prompt,
         variant_b_template=body.variant_b_template,
         use_rich_formatting=body.use_rich_formatting,
+        smart_rotation=body.smart_rotation,
     )
     db.add(campaign)
     await db.commit()

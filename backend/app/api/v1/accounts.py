@@ -294,6 +294,14 @@ async def rename_account(account_id: str, body: AccountRename, db: AsyncSession 
     return {"id": str(account.id), "name": account.name}
 
 
+@router.get("/{account_id}/health")
+async def account_health(account_id: str, db: AsyncSession = Depends(get_db)):
+    """V13.2 — health score (0..1) + breakdown for smart send rotation."""
+    from app.services.account_health import health_breakdown
+    account = await _get_account(account_id, db)
+    return {"account_id": str(account.id), "name": account.name, **await health_breakdown(account, db)}
+
+
 @router.post("/{account_id}/check-whatsapp-bulk")
 async def check_whatsapp_bulk(
     account_id: str,

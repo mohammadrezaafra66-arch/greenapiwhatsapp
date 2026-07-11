@@ -92,6 +92,8 @@ class Campaign(Base):
     variant_b_template: Mapped[str | None] = mapped_column(Text)
     # Rich WhatsApp formatting (V13.5) — instruct AI to use *bold*/_italic_ etc.
     use_rich_formatting: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Smart health-weighted account rotation (V13.2)
+    smart_rotation: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 

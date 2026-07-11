@@ -289,6 +289,17 @@ async def _run_campaign_inner(campaign_id: str):
 
         buttons = [b for b in [campaign.button1_text, campaign.button2_text, campaign.button3_text] if b]
 
+        # V13.2 — smart rotation: precompute per-account health scores once and pick
+        # accounts weighted by health; falls back to round-robin when off/single account.
+        health_scores = {}
+        if getattr(campaign, "smart_rotation", False) and len(accounts) > 1:
+            from app.services.account_health import account_health_score
+            for a in accounts:
+                try:
+                    health_scores[str(a.id)] = await account_health_score(a, db)
+                except Exception:
+                    health_scores[str(a.id)] = 0.5
+
         acc_idx = 0
         for cc, contact in pending:
             await db.refresh(campaign)
@@ -299,8 +310,12 @@ async def _run_campaign_inner(campaign_id: str):
                 await db.commit()
                 continue
 
-            account = accounts[acc_idx % len(accounts)]
-            acc_idx += 1
+            if health_scores:
+                from app.services.account_health import pick_account_weighted
+                account = pick_account_weighted(accounts, health_scores)
+            else:
+                account = accounts[acc_idx % len(accounts)]
+                acc_idx += 1
 
             if account.sent_today >= account.computed_daily_limit:
                 continue
