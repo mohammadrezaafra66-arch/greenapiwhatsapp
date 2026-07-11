@@ -28,6 +28,40 @@ function tsFmt(t) {
   }
 }
 
+// Contact info cell: sender phone + any numbers found in the message, each with a
+// copy button. The sender's own number is tagged "فرستنده".
+function ContactCell({ contacts, senderPhone }) {
+  const list = Array.isArray(contacts) ? contacts : [];
+  const copy = async (phone) => {
+    try {
+      await navigator.clipboard.writeText(phone);
+      toast.success("کپی شد");
+    } catch {
+      toast.error("کپی ناموفق بود");
+    }
+  };
+  if (list.length === 0) return <span className="text-slate-600 text-xs">—</span>;
+  return (
+    <div className="flex flex-col gap-1">
+      {list.map((phone, i) => (
+        <div key={i} className="flex items-center gap-1">
+          <span className="font-mono text-xs text-emerald-400" dir="ltr">{phone}</span>
+          <button
+            onClick={() => copy(phone)}
+            className="text-slate-500 hover:text-slate-300 text-xs"
+            title="کپی"
+          >
+            📋
+          </button>
+          {senderPhone && phone === senderPhone && (
+            <span className="text-[10px] text-sky-400">فرستنده</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Reporting() {
   const [tab, setTab] = React.useState("emergency");
 
@@ -362,6 +396,7 @@ function MentionsTab() {
               <tr className="text-slate-400 border-b border-slate-700">
                 <th className="text-right p-2">محصول</th>
                 <th className="text-right p-2">فرستنده</th>
+                <th className="text-right p-2">اطلاعات تماس</th>
                 <th className="text-right p-2">گروه</th>
                 <th className="text-right p-2">پیام</th>
                 <th className="text-right p-2">زمان</th>
@@ -372,6 +407,7 @@ function MentionsTab() {
                 <tr key={i} className="border-b border-slate-800">
                   <td className="p-2 font-bold">{m.product}</td>
                   <td className="p-2">{m.sender_name || m.sender || "—"}</td>
+                  <td className="p-2"><ContactCell contacts={m.all_contacts} senderPhone={m.sender_phone} /></td>
                   <td className="p-2 text-slate-300">{m.group || "—"}</td>
                   <td className="p-2 text-slate-300">
                     {String(m.text || "").slice(0, 50)}
@@ -394,6 +430,18 @@ function TopProductsTab() {
   const [loading, setLoading] = React.useState(false);
   const [days, setDays] = React.useState(30);
   const [limit, setLimit] = React.useState(150);
+  const [sellersModal, setSellersModal] = React.useState(null); // {product_name, sellers, loading}
+
+  const openSellersModal = async (productName) => {
+    setSellersModal({ product_name: productName, sellers: [], loading: true });
+    try {
+      const res = await Api.productSellers(productName, days, 100);
+      setSellersModal({ product_name: productName, sellers: res?.sellers || [], loading: false });
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+      setSellersModal({ product_name: productName, sellers: [], loading: false });
+    }
+  };
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -480,6 +528,7 @@ function TopProductsTab() {
                 <th className="text-right p-2">تعداد گروه</th>
                 <th className="text-right p-2">تعداد فرستنده</th>
                 <th className="text-right p-2">آخرین ذکر</th>
+                <th className="text-center p-2">مشاهده فروشندگان اخیر</th>
               </tr>
             </thead>
             <tbody>
@@ -493,12 +542,111 @@ function TopProductsTab() {
                   <td className="p-2 text-slate-300">{fa(p.group_count)}</td>
                   <td className="p-2 text-slate-300">{fa(p.sender_count)}</td>
                   <td className="p-2 text-xs text-slate-500">{p.last_mention_shamsi || "—"}</td>
+                  <td className="p-2 text-center">
+                    <button
+                      onClick={() => openSellersModal(p.product_name)}
+                      className="text-xs bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1 rounded whitespace-nowrap"
+                    >
+                      👁 مشاهده ({fa(p.sender_count)})
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      {sellersModal && (
+        <SellersModal modal={sellersModal} days={days} onClose={() => setSellersModal(null)} />
+      )}
+    </div>
+  );
+}
+
+// Feature B — per-product recent-sellers modal.
+function SellersModal({ modal, days, onClose }) {
+  const exportCsv = () => {
+    const sellers = modal.sellers || [];
+    if (!sellers.length) return toast.info("داده‌ای برای خروجی نیست");
+    const header = ["فرستنده", "اطلاعات تماس", "گروه", "زمان", "پیام"];
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const lines = [header.map(esc).join(",")];
+    for (const s of sellers) {
+      lines.push(
+        [s.sender_name, (s.all_contacts || []).join(" | "), s.group_name, s.time_shamsi, s.message_preview]
+          .map(esc)
+          .join(",")
+      );
+    }
+    const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `sellers-${modal.product_name}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-slate-900 border border-slate-700 rounded-xl max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-4 border-b border-slate-700 flex justify-between items-center">
+          <div>
+            <h3 className="font-bold text-white">فروشندگان اخیر</h3>
+            <p className="text-sm text-slate-400">{modal.product_name}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl leading-none">✕</button>
+        </div>
+
+        <div className="overflow-y-auto p-4">
+          {modal.loading ? (
+            <div className="text-center py-8 text-slate-400">در حال بارگذاری...</div>
+          ) : modal.sellers.length === 0 ? (
+            <div className="text-center py-8 text-slate-500">فروشنده‌ای یافت نشد</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-slate-400 border-b border-slate-700">
+                  <th className="py-2 text-right">فرستنده</th>
+                  <th className="py-2 text-right">اطلاعات تماس</th>
+                  <th className="py-2 text-right">گروه</th>
+                  <th className="py-2 text-right">زمان</th>
+                </tr>
+              </thead>
+              <tbody>
+                {modal.sellers.map((s, i) => (
+                  <tr key={i} className="border-b border-slate-800">
+                    <td className="py-2">{s.sender_name || "—"}</td>
+                    <td className="py-2">
+                      <ContactCell contacts={s.all_contacts} senderPhone={s.sender_phone} />
+                    </td>
+                    <td className="py-2 text-slate-300 text-xs">{s.group_name || "—"}</td>
+                    <td className="py-2 text-slate-400 text-xs" dir="ltr">{s.time_shamsi}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="p-3 border-t border-slate-700 flex items-center justify-between text-xs text-slate-500">
+          <span>
+            {fa(modal.sellers.length)} فروشنده در {fa(days)} روز اخیر
+          </span>
+          {modal.sellers.length > 0 && (
+            <button className="btn-secondary text-xs" onClick={exportCsv}>📥 خروجی اکسل</button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

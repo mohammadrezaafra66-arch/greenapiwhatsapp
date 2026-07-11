@@ -274,15 +274,22 @@ async def deliverability(days: int = 7, db: AsyncSession = Depends(get_db)):
 @router.get("/product-mentions/recent")
 async def get_product_mentions(limit: int = 50, db: AsyncSession = Depends(get_db)):
     from app.models.reporting import ProductMentionLog
+    from app.services.phone_extract import contacts_for
     result = await db.execute(
         select(ProductMentionLog).order_by(ProductMentionLog.mentioned_at.desc()).limit(limit)
     )
     items = result.scalars().all()
-    return [
-        {"product": i.product_name, "sender": i.sender_phone, "sender_name": i.sender_name,
-         "group": i.group_name, "time": str(i.mentioned_at), "text": i.message_text}
-        for i in items
-    ]
+    out = []
+    for i in items:
+        sender_display, phones_in_msg, all_contacts = contacts_for(i.sender_phone or "", i.message_text or "")
+        out.append({
+            "product": i.product_name, "sender": sender_display, "sender_name": i.sender_name,
+            "group": i.group_name, "time": str(i.mentioned_at), "text": i.message_text,
+            # Feature A — contact info (sender phone + numbers found inside the message)
+            "sender_phone": sender_display, "phones_in_message": phones_in_msg,
+            "all_contacts": all_contacts,
+        })
+    return out
 
 
 @router.get("/ai-stats")

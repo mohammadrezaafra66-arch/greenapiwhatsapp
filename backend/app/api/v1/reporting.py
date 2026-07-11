@@ -115,15 +115,21 @@ async def daily_logs(date: str | None = None, db: AsyncSession = Depends(get_db)
 # ── Product mentions ───────────────────────────────────────
 @router.get("/product-mentions")
 async def product_mentions(limit: int = 50, db: AsyncSession = Depends(get_db)):
+    from app.services.phone_extract import contacts_for
     rows = (await db.execute(
         select(ProductMentionLog).order_by(ProductMentionLog.mentioned_at.desc()).limit(limit)
     )).scalars().all()
-    return [
-        {"id": str(i.id), "product": i.product_name, "sender": i.sender_phone,
-         "sender_name": i.sender_name, "group": i.group_name,
-         "time": str(i.mentioned_at), "text": i.message_text}
-        for i in rows
-    ]
+    out = []
+    for i in rows:
+        sender_display, phones_in_msg, all_contacts = contacts_for(i.sender_phone or "", i.message_text or "")
+        out.append({
+            "id": str(i.id), "product": i.product_name, "sender": sender_display,
+            "sender_name": i.sender_name, "group": i.group_name,
+            "time": str(i.mentioned_at), "text": i.message_text,
+            "sender_phone": sender_display, "phones_in_message": phones_in_msg,
+            "all_contacts": all_contacts,
+        })
+    return out
 
 
 @router.delete("/product-mentions")
@@ -168,6 +174,40 @@ async def top_repeated_products(limit: int = 150, days: int = 30, db: AsyncSessi
             for i, r in enumerate(rows)
         ],
     }
+
+
+@router.get("/product-sellers")
+async def product_sellers(product_name: str, days: int = 30, limit: int = 100,
+                          db: AsyncSession = Depends(get_db)):
+    """All sellers who advertised a given product: contact, time (Shamsi), group.
+    Powers the 'مشاهده فروشندگان اخیر' modal in the top-products table."""
+    from datetime import timedelta
+    from app.services.phone_extract import contacts_for
+    from app.utils.shamsi import to_shamsi
+
+    limit = max(1, min(limit, 500))
+    cutoff = datetime.utcnow() - timedelta(days=max(1, days))
+    rows = (await db.execute(
+        select(ProductMentionLog)
+        .where(ProductMentionLog.product_name == product_name)
+        .where(ProductMentionLog.mentioned_at >= cutoff)
+        .order_by(ProductMentionLog.mentioned_at.desc())
+        .limit(limit)
+    )).scalars().all()
+
+    sellers = []
+    for m in rows:
+        sender_display, _phones, all_contacts = contacts_for(m.sender_phone or "", m.message_text or "")
+        sellers.append({
+            "sender_name": m.sender_name or "",
+            "sender_phone": sender_display,
+            "all_contacts": all_contacts,
+            "group_name": m.group_name or "",
+            "message_preview": (m.message_text or "")[:120],
+            "time_shamsi": to_shamsi(m.mentioned_at),
+        })
+
+    return {"product_name": product_name, "total_sellers": len(sellers), "sellers": sellers}
 
 
 # ── Products (for the Products page) ───────────────────────
