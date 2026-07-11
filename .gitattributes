@@ -1,0 +1,4 @@
+# Launcher .bat files are Windows-1256 (CP1256) encoded with CRLF endings for
+# correct Persian display under `chcp 1256`. Treat as binary so git never applies
+# line-ending or text normalization that would corrupt the single-byte encoding.
+*.bat -text

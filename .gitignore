@@ -19,3 +19,6 @@ celerybeat-schedule
 
 # Local Claude Code settings
 .claude/
+
+# Database backups produced by پشتیبان-گیری.bat
+backups/
