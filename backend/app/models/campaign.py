@@ -2,7 +2,7 @@ import uuid, enum
 from datetime import datetime
 from sqlalchemy import String, Boolean, Integer, DateTime, Text, ForeignKey, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
 
 class CampaignStatus(str, enum.Enum):
@@ -77,6 +77,15 @@ class Campaign(Base):
     wa_collection_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     product_label_filter: Mapped[str | None] = mapped_column(String(200))
     is_always_on: Mapped[bool] = mapped_column(Boolean, default=False)
+    # ── Message customization (opening line / per-group products / opt-out) ──
+    opening_mode: Mapped[str] = mapped_column(String(20), default="ai")  # ai|fixed|none|random
+    opening_line: Mapped[str | None] = mapped_column(String(500))
+    opening_variants: Mapped[list | None] = mapped_column(JSONB)  # for random mode
+    product_variation_mode: Mapped[str] = mapped_column(String(20), default="same")  # same|per_group_random|rotate
+    products_per_group: Mapped[int] = mapped_column(Integer, default=3)
+    product_weights: Mapped[dict | None] = mapped_column(JSONB)  # {name: weight}
+    include_opt_out: Mapped[bool] = mapped_column(Boolean, default=True)
+    opt_out_text: Mapped[str | None] = mapped_column(String(300))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 

@@ -281,7 +281,25 @@ const CAMPAIGN_DEFAULTS = {
   append_date: false,
   schedule_start_shamsi: "", schedule_end_shamsi: "",
   parallel_accounts: false, show_product_prices: true,
+  // Message customization
+  opening_mode: "ai", opening_line: "", opening_variants: "",
+  product_variation_mode: "same", products_per_group: 3, product_weights: "",
+  include_opt_out: true, opt_out_text: "",
 };
+
+// Parse a "name=weight" per-line textarea into {name: number}. Blank → null.
+function parseWeights(text) {
+  if (!text || !text.trim()) return null;
+  const out = {};
+  for (const line of text.split("\n")) {
+    const idx = line.lastIndexOf("=");
+    if (idx < 0) continue;
+    const name = line.slice(0, idx).trim();
+    const w = Number(line.slice(idx + 1).trim());
+    if (name && Number.isFinite(w) && w > 0) out[name] = w;
+  }
+  return Object.keys(out).length ? out : null;
+}
 
 function seedCampaignForm(d) {
   const join = (v) => (Array.isArray(v) ? v.join("\n") : (v || ""));
@@ -315,6 +333,16 @@ function seedCampaignForm(d) {
     schedule_end_shamsi: d.schedule_end_shamsi || "",
     parallel_accounts: d.parallel_accounts || false,
     show_product_prices: d.show_product_prices !== false,
+    opening_mode: d.opening_mode || "ai",
+    opening_line: d.opening_line || "",
+    opening_variants: join(d.opening_variants),
+    product_variation_mode: d.product_variation_mode || "same",
+    products_per_group: d.products_per_group || 3,
+    product_weights: d.product_weights
+      ? Object.entries(d.product_weights).map(([k, v]) => `${k}=${v}`).join("\n")
+      : "",
+    include_opt_out: d.include_opt_out !== false,
+    opt_out_text: d.opt_out_text || "",
   };
 }
 
@@ -423,6 +451,18 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         schedule_end_shamsi: f.schedule_end_shamsi || null,
         parallel_accounts: f.parallel_accounts,
         show_product_prices: f.show_product_prices !== false,
+        // Message customization
+        opening_mode: f.opening_mode || "ai",
+        opening_line: f.opening_mode === "fixed" ? (f.opening_line || null) : null,
+        opening_variants:
+          f.opening_mode === "random" && f.opening_variants
+            ? f.opening_variants.split("\n").map((s) => s.trim()).filter(Boolean)
+            : null,
+        product_variation_mode: f.product_variation_mode || "same",
+        products_per_group: Number(f.products_per_group) || 3,
+        product_weights: parseWeights(f.product_weights),
+        include_opt_out: f.include_opt_out !== false,
+        opt_out_text: f.include_opt_out && f.opt_out_text ? f.opt_out_text : null,
       };
       if (editId) {
         await Api.update(editId, body);
@@ -515,6 +555,36 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
           </div>
         )}
 
+        {/* Phase 2 — opening line control */}
+        <div className="border-t border-slate-700 pt-3">
+          <label className="label">عبارت آغازین</label>
+          <select className="input" value={f.opening_mode} onChange={set("opening_mode")}>
+            <option value="ai">هوش مصنوعی بنویسد</option>
+            <option value="fixed">متن ثابت</option>
+            <option value="none">بدون سلام</option>
+            <option value="random">چند حالت تصادفی</option>
+          </select>
+          {f.opening_mode === "fixed" && (
+            <input
+              className="input mt-2"
+              value={f.opening_line}
+              onChange={set("opening_line")}
+              placeholder="مثال: سلام دوستان عزیز 🌟"
+            />
+          )}
+          {f.opening_mode === "random" && (
+            <>
+              <textarea
+                className="input h-20 mt-2"
+                value={f.opening_variants}
+                onChange={set("opening_variants")}
+                placeholder={"هر خط یک عبارت آغازین:\nسلام دوستان 🌟\nوقت بخیر همراهان عزیز\nدرود بر شما"}
+              />
+              <p className="text-xs text-slate-500 mt-1">در هر ارسال یکی به‌صورت تصادفی انتخاب می‌شود (تنوع بین گروه‌ها).</p>
+            </>
+          )}
+        </div>
+
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={f.include_products} onChange={set("include_products")} />
           افزودن محصولات روز افراکالا
@@ -524,16 +594,55 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         {f.include_products && (
           <>
             <div>
-              <label className="label">تعداد محصول</label>
+              <label className="label">تعداد محصول (اندازه مخزن)</label>
               <input
                 type="number"
                 className="input"
                 min={1}
-                max={10}
+                max={30}
                 value={f.product_count}
                 onChange={set("product_count")}
               />
+              <p className="text-xs text-slate-500 mt-1">در حالت تنوع، مخزن باید بزرگ‌تر از «تعداد در هر گروه» باشد.</p>
             </div>
+
+            {/* Phase 3 — per-group product variation */}
+            <div>
+              <label className="label">تنوع محصولات بین گروه‌ها</label>
+              <select className="input" value={f.product_variation_mode} onChange={set("product_variation_mode")}>
+                <option value="same">یکسان برای همه</option>
+                <option value="per_group_random">تصادفی برای هر گروه</option>
+                <option value="rotate">چرخشی</option>
+              </select>
+              <p className="text-xs text-slate-500 mt-1">تنوع بین گروه‌ها باعث می‌شود پیام‌ها شبیه هم نباشند (کاهش ریسک شناسایی توسط متا).</p>
+            </div>
+            {f.product_variation_mode !== "same" && (
+              <div>
+                <label className="label">تعداد محصول در هر گروه</label>
+                <input
+                  type="number"
+                  className="input"
+                  min={1}
+                  max={10}
+                  value={f.products_per_group}
+                  onChange={set("products_per_group")}
+                />
+              </div>
+            )}
+            {/* Phase 4 — weighted selection (only meaningful with random variation) */}
+            {f.product_variation_mode === "per_group_random" && (
+              <div>
+                <label className="label">وزن محصولات (اختیاری)</label>
+                <textarea
+                  className="input h-20"
+                  value={f.product_weights}
+                  onChange={set("product_weights")}
+                  placeholder={"نام محصول=وزن (هر خط یکی):\nساید ال جی X24=8\nیخچال دوو=3"}
+                />
+                <p className="text-xs text-slate-500 mt-1">وزن (اهمیت): هرچه بیشتر، در گروه‌های بیشتری و با تکرار بیشتری تبلیغ می‌شود. پیش‌فرض ۱.</p>
+              </div>
+            )}
+
             <div>
               <label className="label">فیلتر بر اساس برچسب (اختیاری)</label>
               <select className="input" value={f.product_label_filter} onChange={set("product_label_filter")}>
@@ -558,6 +667,23 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
             </label>
           </>
         )}
+
+        {/* Phase 5 — optional opt-out line */}
+        <div className="border-t border-slate-700 pt-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={f.include_opt_out !== false} onChange={set("include_opt_out")} />
+            افزودن عبارت لغو اشتراک
+          </label>
+          {f.include_opt_out !== false && (
+            <input
+              className="input mt-2"
+              value={f.opt_out_text}
+              onChange={set("opt_out_text")}
+              placeholder="برای لغو عدد ۱۱ ارسال کنید"
+            />
+          )}
+          <p className="text-xs text-slate-500 mt-1">اگر خاموش باشد، هیچ عبارت لغوی به انتهای پیام اضافه نمی‌شود.</p>
+        </div>
 
         {f.campaign_type === "image" && (
           <div>

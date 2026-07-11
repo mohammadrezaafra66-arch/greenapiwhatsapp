@@ -8,6 +8,25 @@ export default function Accounts() {
   const [showAdd, setShowAdd] = React.useState(false);
   const [qr, setQr] = React.useState(null);
   const [busy, setBusy] = React.useState(null);
+  const [renaming, setRenaming] = React.useState(null); // account id being renamed
+  const [newName, setNewName] = React.useState("");
+
+  const startRename = (acc) => { setRenaming(acc.id); setNewName(acc.name); };
+  const saveRename = async (id) => {
+    const name = newName.trim();
+    if (!name) return toast.error("نام حساب نمی‌تواند خالی باشد");
+    setBusy(id);
+    try {
+      await Api.rename(id, name);
+      setRenaming(null);
+      await reload();
+      toast.success("نام حساب تغییر کرد");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const act = async (fn, id) => {
     setBusy(id);
@@ -68,6 +87,7 @@ export default function Accounts() {
               <button className="btn-secondary" disabled={busy === a.id} onClick={() => act(() => Api.status(a.id), a.id)}>بررسی وضعیت</button>
               <button className="btn-secondary" onClick={() => showQr(a.id)}>QR</button>
               <button className="btn-secondary" disabled={busy === a.id} onClick={() => act(() => Api.reboot(a.id), a.id)}>ری‌بوت</button>
+              <button className="btn-secondary" onClick={() => startRename(a)}>✏️ ویرایش نام</button>
               {!a.is_default && (
                 <button className="btn-secondary" disabled={busy === a.id} onClick={() => act(() => Api.setDefault(a.id), a.id)}>تنظیم به‌عنوان پیش‌فرض</button>
               )}
@@ -75,6 +95,20 @@ export default function Accounts() {
                 if (await confirmDialog("حذف این حساب؟")) act(() => Api.remove(a.id), a.id);
               }}>حذف</button>
             </div>
+            {renaming === a.id && (
+              <div className="flex gap-2">
+                <input
+                  className="input flex-1 text-sm"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && saveRename(a.id)}
+                  placeholder="نام جدید حساب"
+                  autoFocus
+                />
+                <button className="btn-primary text-xs" disabled={busy === a.id} onClick={() => saveRename(a.id)}>ذخیره</button>
+                <button className="btn-secondary text-xs" onClick={() => setRenaming(null)}>لغو</button>
+              </div>
+            )}
             <ProxySection accountId={a.id} />
             <LimitsSection accountId={a.id} />
           </div>

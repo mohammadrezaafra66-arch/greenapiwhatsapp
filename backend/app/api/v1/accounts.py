@@ -278,6 +278,22 @@ async def set_default_account(account_id: str, db: AsyncSession = Depends(get_db
     return {"default_account": str(account.id), "name": account.name}
 
 
+class AccountRename(BaseModel):
+    name: str
+
+
+@router.put("/{account_id}/rename")
+async def rename_account(account_id: str, body: AccountRename, db: AsyncSession = Depends(get_db)):
+    """Change an account's display name."""
+    account = await _get_account(account_id, db)
+    new_name = (body.name or "").strip()[:200]
+    if not new_name:
+        raise HTTPException(400, "نام حساب نمی‌تواند خالی باشد")
+    account.name = new_name
+    await db.commit()
+    return {"id": str(account.id), "name": account.name}
+
+
 @router.post("/{account_id}/check-whatsapp-bulk")
 async def check_whatsapp_bulk(
     account_id: str,

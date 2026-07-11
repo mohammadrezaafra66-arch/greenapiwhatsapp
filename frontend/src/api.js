@@ -38,6 +38,7 @@ export const Accounts = {
   updateAutoReply: (id, payload) =>
     http.put(`/accounts/${id}/auto-reply`, payload).then((r) => r.data),
   setDefault: (id) => http.post(`/accounts/${id}/set-default`).then((r) => r.data),
+  rename: (id, name) => http.put(`/accounts/${id}/rename`, { name }).then((r) => r.data),
   dailyLimitDetail: (id) => http.get(`/accounts/${id}/daily-limit-detail`).then((r) => r.data),
   updateLimits: (id, body) => http.put(`/accounts/${id}/limits`, body).then((r) => r.data),
   queue: (id) => http.get(`/accounts/${id}/queue`).then((r) => r.data),

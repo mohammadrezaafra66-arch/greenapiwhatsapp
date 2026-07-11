@@ -5,7 +5,7 @@ from app.models.campaign import Campaign, CampaignContact, CampaignStatus, Messa
 from app.models.account import Account, AccountStatus
 from app.models.contact import Contact
 from app.services.green_api import GreenAPIClient
-from app.services.gpt_service import generate_message
+from app.services.gpt_service import generate_message, _apply_opening, _apply_opt_out
 from app.services.price_service import get_products
 from app.services.rate_limiter import can_send, record_send
 from app.database import AsyncSessionLocal
@@ -34,6 +34,12 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
         if effective_include_products and not products:
             products = await get_products(campaign.product_count)
 
+        # Resolve opening line (random mode picks a fresh variant per contact).
+        opening_mode = campaign.opening_mode or "ai"
+        opening_line = campaign.opening_line
+        if opening_mode == "random" and campaign.opening_variants:
+            opening_line = random.choice(campaign.opening_variants)
+
         # Generate message text
         if campaign.use_gpt and settings.openai_api_key:
             message = await generate_message(
@@ -43,6 +49,10 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
                 products=products if effective_include_products else None,
                 emoji_level=campaign.emoji_level or "medium",
                 show_prices=campaign.show_product_prices,
+                opening_mode=opening_mode,
+                opening_line=opening_line,
+                include_opt_out=campaign.include_opt_out,
+                opt_out_text=campaign.opt_out_text,
             )
         else:
             message = (effective_template or "سلام {{first_name}} جان!")
@@ -53,6 +63,9 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
             message = message.replace("{خانوادگی}", contact.last_name or "")
             message = message.replace("{شهر}", contact.city or "")
             message = message.replace("{استان}", contact.province or "")
+            # Honor opening + opt-out toggles on template messages too.
+            message = _apply_opening(message, opening_mode, opening_line)
+            message = _apply_opt_out(message, campaign.include_opt_out, campaign.opt_out_text)
 
         # Append seller signature if configured
         if campaign.append_seller_name and campaign.seller_name:

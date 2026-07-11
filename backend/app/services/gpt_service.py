@@ -36,8 +36,48 @@ SYSTEM_PROMPT = """
 - لحن صمیمی اما حرفه‌ای
 - حداکثر ۳ پاراگراف کوتاه
 - بدون کلمات اضافه مثل "خلاصه" یا "در نتیجه"
-- در پایان: "برای لغو عدد ۱۱ ارسال کنید"
 """
+
+# Default unsubscribe line (opt-out). Kept configurable per campaign.
+DEFAULT_OPT_OUT = "برای لغو عدد ۱۱ ارسال کنید"
+
+
+def _is_optout_line(line: str) -> bool:
+    """Heuristic: is this line an opt-out/unsubscribe instruction (to strip/dedupe)?"""
+    l = line.strip()
+    if not l:
+        return False
+    if "لغو اشتراک" in l or "لغو عدد" in l:
+        return True
+    if "لغو" in l and ("۱۱" in l or "11" in l or "ارسال کنید" in l):
+        return True
+    return False
+
+
+def _apply_opening(text: str, opening_mode: str, opening_line: str | None) -> str:
+    """Enforce a fixed/random opening line even if the model ignored the instruction."""
+    if opening_mode in ("fixed", "random") and opening_line:
+        ol = opening_line.strip()
+        if ol and not text.strip().startswith(ol):
+            return f"{ol}\n\n{text.strip()}"
+    return text
+
+
+def _apply_opt_out(text: str, include_opt_out: bool, opt_text: str | None) -> str:
+    """Strip any model-written opt-out line, then append the exact configured one
+    (or nothing if disabled). Deterministic — guarantees no dupes and exact text.
+    Strips both heuristic opt-out lines AND any line equal to the target text (so a
+    custom opt-out without the word 'لغو' isn't duplicated)."""
+    target = (opt_text or DEFAULT_OPT_OUT).strip()
+
+    def _strip(line: str) -> bool:
+        ls = line.strip()
+        return _is_optout_line(ls) or (bool(target) and ls == target)
+
+    body = "\n".join(l for l in text.split("\n") if not _strip(l)).rstrip()
+    if include_opt_out:
+        return body + "\n\n" + target
+    return body
 
 CATEGORIZE_SYSTEM = (
     "Categorize the Persian WhatsApp message into exactly one: "
@@ -220,9 +260,17 @@ async def _chat(system: str, user: str, max_tokens: int, temperature: float) -> 
     return await _chat_via_env(system, user, max_tokens, temperature)
 
 
-def _fallback_message(first_name: str, products=None, show_prices: bool = True) -> str:
+def _fallback_message(first_name: str, products=None, show_prices: bool = True,
+                      opening_mode: str = "ai", opening_line: str | None = None) -> str:
+    """Template used when every AI provider fails. Greeting honors opening_mode;
+    the opt-out line is added afterwards by _apply_opt_out (not here)."""
     name = (first_name or "").strip() or "دوست عزیز"
-    lines = [f"سلام {name} جان! 🌟", "از افراکالا با پیشنهادهای ویژه در خدمت شما هستیم."]
+    lines = []
+    if opening_mode in ("fixed", "random") and opening_line:
+        lines.append(opening_line.strip())
+    elif opening_mode != "none":
+        lines.append(f"سلام {name} جان! 🌟")
+    lines.append("از افراکالا با پیشنهادهای ویژه در خدمت شما هستیم.")
     if products:
         lines.append("")
         for prod in products[:3]:
@@ -231,7 +279,6 @@ def _fallback_message(first_name: str, products=None, show_prices: bool = True) 
                 lines.append(f"• {prod['name']}: {price}")
             else:
                 lines.append(f"• {prod['name']}")
-    lines += ["", "برای لغو عدد ۱۱ ارسال کنید"]
     return "\n".join(lines)
 
 
@@ -245,7 +292,9 @@ EMOJI_INSTRUCTION = {
 
 async def generate_message(first_name: str, last_name: str, gpt_prompt: str,
                            products: list[dict] = None, emoji_level: str = "medium",
-                           show_prices: bool = True) -> str:
+                           show_prices: bool = True, opening_mode: str = "ai",
+                           opening_line: str | None = None, include_opt_out: bool = True,
+                           opt_out_text: str | None = None) -> str:
     products_text = ""
     if products:
         products_text = "\n\nمحصولات امروز افراکالا:\n"
@@ -260,11 +309,29 @@ async def generate_message(first_name: str, last_name: str, gpt_prompt: str,
 
     user_msg = f"اسم مشتری: {first_name} {last_name}\n{gpt_prompt}{products_text}\nپیام واتس‌اپ فارسی بنویس:"
 
+    # Build dynamic rules for opening line + opt-out (Phases 2 & 5).
+    extra_rules = []
+    if opening_mode in ("fixed", "random") and opening_line:
+        extra_rules.append(f"- پیام را دقیقاً با این عبارت شروع کن: «{opening_line.strip()}»")
+    elif opening_mode == "none":
+        extra_rules.append("- پیام را بدون هیچ سلام و احوال‌پرسی شروع کن و مستقیم به پیشنهاد برو")
+    opt_text = (opt_out_text or DEFAULT_OPT_OUT).strip()
+    if include_opt_out:
+        extra_rules.append(f"- در پایان پیام دقیقاً این عبارت را قرار بده: «{opt_text}»")
+    else:
+        extra_rules.append("- هیچ عبارت لغو، انصراف یا لغو اشتراک در انتهای پیام نگذار")
+
     emoji_rule = EMOJI_INSTRUCTION.get(emoji_level, EMOJI_INSTRUCTION["medium"])
-    system_prompt = f"{SYSTEM_PROMPT}\n- درباره ایموجی: {emoji_rule}"
+    system_prompt = SYSTEM_PROMPT + "".join(f"\n{r}" for r in extra_rules) + f"\n- درباره ایموجی: {emoji_rule}"
 
     text = await _chat(system_prompt, user_msg, max_tokens=500, temperature=0.85)
-    return text if text else _fallback_message(first_name, products, show_prices)
+    if not text:
+        text = _fallback_message(first_name, products, show_prices, opening_mode, opening_line)
+    # Deterministic post-processing so the settings hold even if the model drifts
+    # or the template fallback was used.
+    text = _apply_opening(text, opening_mode, opening_line)
+    text = _apply_opt_out(text, include_opt_out, opt_text)
+    return text
 
 
 async def categorize_message(text: str) -> str:

@@ -357,6 +357,22 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V12] {e}")
+        # Campaign message customization (opening line, per-group products, opt-out)
+        ddl_campaign_custom = [
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS opening_mode varchar(20) DEFAULT 'ai'",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS opening_line varchar(500)",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS opening_variants jsonb",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS product_variation_mode varchar(20) DEFAULT 'same'",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS products_per_group integer DEFAULT 3",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS product_weights jsonb",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS include_opt_out boolean DEFAULT true",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS opt_out_text varchar(300)",
+        ]
+        for stmt in ddl_campaign_custom:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL campaign-custom] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:

@@ -51,6 +51,15 @@ class CampaignCreateBody(BaseModel):
     parallel_accounts: bool = False
     max_parallel_accounts: int = 1
     show_product_prices: bool = True
+    # Message customization
+    opening_mode: str = "ai"                       # ai | fixed | none | random
+    opening_line: str | None = None                # for fixed mode
+    opening_variants: list[str] | None = None      # for random mode
+    product_variation_mode: str = "same"           # same | per_group_random | rotate
+    products_per_group: int = 3
+    product_weights: dict | None = None            # {product_name: weight}
+    include_opt_out: bool = True
+    opt_out_text: str | None = None
 
 
 class TestBody(BaseModel):
@@ -230,6 +239,14 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         show_product_prices=body.show_product_prices,
         schedule_start=from_shamsi(body.schedule_start_shamsi) if body.schedule_start_shamsi else None,
         schedule_end=from_shamsi(body.schedule_end_shamsi) if body.schedule_end_shamsi else None,
+        opening_mode=body.opening_mode or "ai",
+        opening_line=body.opening_line,
+        opening_variants=body.opening_variants or None,
+        product_variation_mode=body.product_variation_mode or "same",
+        products_per_group=body.products_per_group or 3,
+        product_weights=body.product_weights or None,
+        include_opt_out=body.include_opt_out,
+        opt_out_text=body.opt_out_text,
     )
     db.add(campaign)
     await db.commit()
