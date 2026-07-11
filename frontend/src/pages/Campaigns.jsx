@@ -56,6 +56,16 @@ export default function Campaigns() {
     }
   };
 
+  const [roi, setRoi] = React.useState(null);
+  const openRoi = async (c) => {
+    try {
+      const d = await Api.roi(c.id);
+      setRoi({ campaignId: c.id, name: c.name, ...d });
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    }
+  };
+
   const act = async (fn) => {
     try {
       await fn();
@@ -110,6 +120,7 @@ export default function Campaigns() {
                   else toast.info("پیام ناموفقی برای تلاش مجدد نیست");
                 })}>🔁 تلاش مجدد ناموفق‌ها</button>
                 <button className="btn-secondary text-xs" onClick={() => openAnalytics(c)}>📊 آمار</button>
+                <button className="btn-secondary text-xs" onClick={() => openRoi(c)}>💰 بازده</button>
                 <button className="btn-secondary" disabled={editLoading} onClick={() => openEdit(c)}>✏️ ویرایش</button>
                 <button className="btn-secondary" onClick={() => act(() => Api.toggleActive(c.id))}>
                   {c.is_active ? "⏸️ غیرفعال" : "▶️ فعال"}
@@ -141,6 +152,7 @@ export default function Campaigns() {
       )}
       {test && <TestModal campaign={test} onClose={() => setTest(null)} />}
       {analytics && <AnalyticsModal data={analytics} onClose={() => setAnalytics(null)} />}
+      {roi && <RoiModal roi={roi} onClose={() => setRoi(null)} onChanged={() => openRoi({ id: roi.campaignId, name: roi.name })} />}
     </div>
   );
 }
@@ -234,6 +246,101 @@ function AnalyticsModal({ data, onClose }) {
             )}
           </div>
         )}
+      </div>
+    </Modal>
+  );
+}
+
+// V13.7 — campaign ROI: conversion funnel + per-contact outcome tagging.
+const OUTCOMES = [
+  { value: "interested", label: "علاقه‌مند", cls: "bg-sky-600" },
+  { value: "purchased", label: "خرید کرد", cls: "bg-emerald-600" },
+  { value: "not_interested", label: "علاقه‌مند نیست", cls: "bg-slate-600" },
+];
+
+function RoiModal({ roi, onClose, onChanged }) {
+  const fn = roi.funnel || {};
+  const steps = [
+    { label: "ارسال", value: fn.sent },
+    { label: "تحویل", value: fn.delivered },
+    { label: "خوانده", value: fn.read },
+    { label: "پاسخ", value: fn.replied },
+    { label: "خرید", value: fn.purchased },
+  ];
+  const top = Math.max(1, fn.sent || 0);
+  const tag = async (ccId, outcome) => {
+    try {
+      await Api.setOutcome(roi.campaignId, ccId, { outcome });
+      onChanged();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    }
+  };
+  return (
+    <Modal title={`گزارش بازده (ROI): ${roi.name || ""}`} onClose={onClose} wide>
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="rounded-lg bg-slate-900 border border-slate-700 p-3 text-center">
+            <div className="text-2xl font-bold text-sky-300">{fa(roi.reply_rate)}٪</div>
+            <div className="text-xs text-slate-400 mt-1">نرخ پاسخ</div>
+          </div>
+          <div className="rounded-lg bg-slate-900 border border-slate-700 p-3 text-center">
+            <div className="text-2xl font-bold text-emerald-300">{fa(roi.purchased)}</div>
+            <div className="text-xs text-slate-400 mt-1">خرید</div>
+          </div>
+          <div className="rounded-lg bg-slate-900 border border-slate-700 p-3 text-center">
+            <div className="text-2xl font-bold text-slate-200">{fa(roi.interested)}</div>
+            <div className="text-xs text-slate-400 mt-1">علاقه‌مند</div>
+          </div>
+          <div className="rounded-lg bg-slate-900 border border-slate-700 p-3 text-center">
+            <div className="text-2xl font-bold text-slate-200">{fa(fn.replied)}</div>
+            <div className="text-xs text-slate-400 mt-1">پاسخ‌ها</div>
+          </div>
+        </div>
+
+        {/* Funnel */}
+        <div className="space-y-1">
+          {steps.map((s) => (
+            <div key={s.label} className="flex items-center gap-2">
+              <span className="text-xs text-slate-400 w-14 shrink-0">{s.label}</span>
+              <div className="flex-1 h-6 bg-slate-800 rounded overflow-hidden">
+                <div className="h-full bg-emerald-600/70 flex items-center px-2 text-xs" style={{ width: `${((s.value || 0) / top) * 100}%` }}>
+                  {fa(s.value)}
+                </div>
+              </div>
+            </div>
+          ))}
+          <p className="text-xs text-slate-500">قیف تبدیل: ارسال → تحویل → خوانده → پاسخ → خرید</p>
+        </div>
+
+        {/* Replied contacts tagging */}
+        <div>
+          <h4 className="font-bold text-sm mb-2">مخاطبینی که پاسخ داده‌اند</h4>
+          {(!roi.replied_contacts || roi.replied_contacts.length === 0) && (
+            <p className="text-sm text-slate-500">هنوز پاسخی ثبت نشده.</p>
+          )}
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {(roi.replied_contacts || []).map((rc) => (
+              <div key={rc.cc_id} className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                <div className="min-w-0">
+                  <div className="text-sm truncate">{rc.name || rc.phone}</div>
+                  <div className="font-mono text-xs text-slate-500">{rc.phone}</div>
+                </div>
+                <div className="flex gap-1 flex-wrap justify-end">
+                  {OUTCOMES.map((o) => (
+                    <button
+                      key={o.value}
+                      className={`text-xs px-2 py-1 rounded text-white ${rc.outcome === o.value ? o.cls : "bg-slate-700 hover:bg-slate-600"}`}
+                      onClick={() => tag(rc.cc_id, o.value)}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </Modal>
   );

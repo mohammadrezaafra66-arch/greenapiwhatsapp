@@ -159,6 +159,24 @@ async def handle_incoming(instance_id: str, payload: dict):
                     ct.blacklisted = True
                 db.add(OptOutLog(phone=sender_phone, reason="opt_out_keyword"))
 
+            # V13.7 — mark the most recent campaign_contact for this phone as replied
+            # (best-effort match by phone + recency, group messages excluded).
+            if text and not msg.is_group:
+                from datetime import timedelta
+                from app.models.contact import Contact as _Contact
+                _ct = (await db.execute(select(_Contact).where(_Contact.phone == sender_phone))).scalar_one_or_none()
+                if _ct:
+                    recent = datetime.utcnow() - timedelta(days=14)
+                    _cc = (await db.execute(
+                        select(CampaignContact).where(
+                            CampaignContact.contact_id == _ct.id,
+                            CampaignContact.sent_at.isnot(None),
+                            CampaignContact.sent_at >= recent,
+                        ).order_by(CampaignContact.sent_at.desc()).limit(1)
+                    )).scalar_one_or_none()
+                    if _cc and not _cc.replied:
+                        _cc.replied = True
+
             # Keyword auto-reply (runs even if auto_reply already fired — both can reply)
             if text and not msg.is_group or text:
                 try:

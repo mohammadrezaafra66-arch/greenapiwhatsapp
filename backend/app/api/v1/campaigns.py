@@ -524,6 +524,69 @@ async def retry_failed(campaign_id: str, db: AsyncSession = Depends(get_db)):
     return {"requeued": count}
 
 
+class OutcomeBody(BaseModel):
+    outcome: str | None = None  # interested | purchased | not_interested
+    note: str | None = None
+
+
+@router.put("/{campaign_id}/contacts/{cc_id}/outcome")
+async def set_contact_outcome(campaign_id: str, cc_id: str, body: OutcomeBody, db: AsyncSession = Depends(get_db)):
+    """V13.7 — tag one campaign contact's outcome (cc_id = campaign_contacts.id)."""
+    cc = await db.get(CampaignContact, uuid.UUID(cc_id))
+    if not cc or str(cc.campaign_id) != str(uuid.UUID(campaign_id)):
+        raise HTTPException(404, "Campaign contact not found")
+    if body.outcome not in (None, "interested", "purchased", "not_interested"):
+        raise HTTPException(400, "invalid outcome")
+    cc.outcome = body.outcome
+    cc.outcome_note = body.note
+    await db.commit()
+    return {"status": "ok", "outcome": cc.outcome}
+
+
+@router.get("/{campaign_id}/roi")
+async def campaign_roi(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    """V13.7 — reply/outcome funnel: sent → delivered → read → replied → purchased."""
+    from sqlalchemy import func as f, case
+    from app.models.contact import Contact
+    cid = uuid.UUID(campaign_id)
+    agg = (await db.execute(
+        select(
+            f.count().label("total"),
+            f.sum(case((CampaignContact.status == MessageStatus.sent, 1), else_=0)).label("sent"),
+            f.sum(case((CampaignContact.delivery_status.in_(["delivered", "read"]), 1), else_=0)).label("delivered"),
+            f.sum(case((CampaignContact.delivery_status == "read", 1), else_=0)).label("read"),
+            f.sum(case((CampaignContact.replied == True, 1), else_=0)).label("replied"),
+            f.sum(case((CampaignContact.outcome == "interested", 1), else_=0)).label("interested"),
+            f.sum(case((CampaignContact.outcome == "purchased", 1), else_=0)).label("purchased"),
+        ).where(CampaignContact.campaign_id == cid)
+    )).first()
+    sent = int(agg.sent or 0)
+    replied = int(agg.replied or 0)
+    replied_rows = (await db.execute(
+        select(CampaignContact, Contact)
+        .join(Contact, CampaignContact.contact_id == Contact.id)
+        .where(CampaignContact.campaign_id == cid, CampaignContact.replied == True)
+        .order_by(CampaignContact.sent_at.desc()).limit(200)
+    )).all()
+    return {
+        "funnel": {
+            "sent": sent,
+            "delivered": int(agg.delivered or 0),
+            "read": int(agg.read or 0),
+            "replied": replied,
+            "purchased": int(agg.purchased or 0),
+        },
+        "interested": int(agg.interested or 0),
+        "purchased": int(agg.purchased or 0),
+        "reply_rate": round(100 * replied / sent, 1) if sent else 0.0,
+        "replied_contacts": [
+            {"cc_id": str(cc.id), "phone": c.phone, "name": c.full_name,
+             "outcome": cc.outcome, "note": cc.outcome_note}
+            for cc, c in replied_rows
+        ],
+    }
+
+
 @router.get("/{campaign_id}/ab-results")
 async def ab_results(campaign_id: str, db: AsyncSession = Depends(get_db)):
     """V13.1 — per-variant delivery/read stats for an A/B campaign + the winner

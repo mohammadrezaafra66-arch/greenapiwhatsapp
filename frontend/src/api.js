@@ -68,6 +68,8 @@ export const Campaigns = {
   retryFailed: (id) => http.post(`/campaigns/${id}/retry-failed`).then((r) => r.data),
   analytics: (id) => http.get(`/campaigns/${id}/analytics`).then((r) => r.data),
   abResults: (id) => http.get(`/campaigns/${id}/ab-results`).then((r) => r.data),
+  roi: (id) => http.get(`/campaigns/${id}/roi`).then((r) => r.data),
+  setOutcome: (id, ccId, body) => http.put(`/campaigns/${id}/contacts/${ccId}/outcome`, body).then((r) => r.data),
   remove: (id) => http.delete(`/campaigns/${id}`).then((r) => r.data),
 };
 

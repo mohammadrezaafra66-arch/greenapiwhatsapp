@@ -111,6 +111,10 @@ class CampaignContact(Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     ab_variant: Mapped[str | None] = mapped_column(String(1))  # V13.1 — 'A' or 'B'
+    # ROI tracking (V13.7)
+    replied: Mapped[bool] = mapped_column(Boolean, default=False)
+    outcome: Mapped[str | None] = mapped_column(String(30))  # interested|purchased|not_interested
+    outcome_note: Mapped[str | None] = mapped_column(Text)
 
 class HourRateLimit(Base):
     __tablename__ = "hour_rate_limits"

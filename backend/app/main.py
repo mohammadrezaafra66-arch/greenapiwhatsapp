@@ -406,6 +406,17 @@ async def lifespan(app: FastAPI):
             )"""))
         except Exception as e:
             print(f"[DDL V13.4] {e}")
+        # V13.7 — campaign ROI tracking
+        ddl_v13_roi = [
+            "ALTER TABLE campaign_contacts ADD COLUMN IF NOT EXISTS replied boolean DEFAULT false",
+            "ALTER TABLE campaign_contacts ADD COLUMN IF NOT EXISTS outcome varchar(30)",
+            "ALTER TABLE campaign_contacts ADD COLUMN IF NOT EXISTS outcome_note text",
+        ]
+        for stmt in ddl_v13_roi:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V13.7] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:
