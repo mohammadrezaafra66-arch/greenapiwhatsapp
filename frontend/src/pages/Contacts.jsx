@@ -220,6 +220,7 @@ export default function Contacts() {
           <table className="w-full text-sm">
             <thead className="text-slate-400 border-b border-slate-700">
               <tr>
+                <th className="p-3 w-12 text-center">ردیف</th>
                 <th className="p-3 text-right">
                   <input type="checkbox" onChange={(e) => setSelected(e.target.checked ? new Set(data.map((c) => c.id)) : new Set())} checked={data.length > 0 && selected.size === data.length} />
                 </th>
@@ -232,8 +233,11 @@ export default function Contacts() {
               </tr>
             </thead>
             <tbody>
-              {data.map((c) => (
+              {data.map((c, i) => (
                 <tr key={c.id} className="border-b border-slate-800 hover:bg-slate-800/50">
+                  {/* Continuous row number across pages — data is appended in order,
+                      so index+1 is the absolute position (page 2 starts at 1001). */}
+                  <td className="p-3 text-center text-slate-500 text-xs">{fa(i + 1)}</td>
                   <td className="p-3"><input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} /></td>
                   <td className="p-3">{c.name}</td>
                   <td className="p-3 font-mono text-xs">{c.phone}</td>
