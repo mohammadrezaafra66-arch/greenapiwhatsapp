@@ -57,6 +57,7 @@ export const Campaigns = {
   resume: (id) => http.post(`/campaigns/${id}/resume`).then((r) => r.data),
   test: (id, phone, message) =>
     http.post(`/campaigns/${id}/test`, { phone, message }).then((r) => r.data),
+  preview: (body) => http.post("/campaigns/preview", body).then((r) => r.data),
   progress: (id) => http.get(`/campaigns/${id}/progress`).then((r) => r.data),
   contacts: (id, status) =>
     http.get(`/campaigns/${id}/contacts`, { params: status ? { status } : {} }).then((r) => r.data),

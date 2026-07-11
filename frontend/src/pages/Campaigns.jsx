@@ -5,6 +5,29 @@ import { toast, confirmDialog } from "../ui/toast.jsx";
 
 const fa = (n) => Number(n || 0).toLocaleString("fa-IR");
 
+// V13.6 — render WhatsApp inline formatting markers (*bold* _italic_ ~strike~ ```mono```).
+function renderWaInline(text) {
+  const parts = [];
+  const re = /(\*[^*\n]+\*|_[^_\n]+_|~[^~\n]+~|```[^`]+```)/g;
+  let last = 0, m, i = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    const tok = m[0];
+    if (tok.startsWith("```")) parts.push(<code key={i++} className="font-mono bg-black/20 px-1 rounded text-[0.9em]">{tok.slice(3, -3)}</code>);
+    else if (tok[0] === "*") parts.push(<b key={i++}>{tok.slice(1, -1)}</b>);
+    else if (tok[0] === "_") parts.push(<i key={i++}>{tok.slice(1, -1)}</i>);
+    else if (tok[0] === "~") parts.push(<s key={i++}>{tok.slice(1, -1)}</s>);
+    last = m.index + tok.length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
+function WhatsAppText({ text }) {
+  const lines = (text || "").split("\n");
+  return lines.map((line, i) => <div key={i}>{line ? renderWaInline(line) : <br />}</div>);
+}
+
 const TYPE_FA = {
   text: "متنی",
   image: "تصویری",
@@ -422,6 +445,46 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
     setF((prev) => ({ ...prev, message_template: out }));
   };
 
+  // V13.6 — live preview
+  const [preview, setPreview] = React.useState(null);
+  const [previewing, setPreviewing] = React.useState(false);
+  const buildPreviewBody = () => ({
+    use_gpt: f.use_gpt,
+    gpt_prompt: f.gpt_prompt || null,
+    message_template: f.message_template || null,
+    include_products: f.include_products,
+    product_count: Number(f.product_count) || 3,
+    product_label_filter: f.include_products && f.product_label_filter ? f.product_label_filter : null,
+    show_product_prices: f.show_product_prices !== false,
+    emoji_level: f.emoji_level,
+    opening_mode: f.opening_mode,
+    opening_line: f.opening_mode === "fixed" ? (f.opening_line || null) : null,
+    opening_variants:
+      f.opening_mode === "random" && f.opening_variants
+        ? f.opening_variants.split("\n").map((s) => s.trim()).filter(Boolean)
+        : null,
+    include_opt_out: f.include_opt_out !== false,
+    opt_out_text: f.include_opt_out && f.opt_out_text ? f.opt_out_text : null,
+    use_rich_formatting: f.use_rich_formatting,
+    append_seller_name: f.append_seller_name,
+    seller_name: f.append_seller_name ? (f.seller_name || null) : null,
+    append_seller_phone: f.append_seller_phone,
+    seller_phone: f.append_seller_phone ? (f.seller_phone || null) : null,
+    seller_phone2: f.append_seller_phone ? (f.seller_phone2 || null) : null,
+    append_date: f.append_date,
+  });
+  const doPreview = async () => {
+    setPreviewing(true);
+    try {
+      const r = await Api.preview(buildPreviewBody());
+      setPreview(r?.preview || "");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
   const runFeasibility = async () => {
     setFeasLoading(true);
     setFeasResult(null);
@@ -638,6 +701,27 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
             </p>
           </div>
         )}
+
+        {/* V13.6 — live message preview */}
+        <div className="border-t border-slate-700 pt-3">
+          <div className="flex items-center gap-2">
+            <button type="button" className="btn-secondary text-sm" disabled={previewing} onClick={doPreview}>
+              {previewing ? "در حال ساخت..." : "👁 پیش‌نمایش پیام"}
+            </button>
+            {preview !== null && (
+              <button type="button" className="btn-secondary text-xs" disabled={previewing} onClick={doPreview}>🔄 به‌روزرسانی</button>
+            )}
+          </div>
+          {preview !== null && (
+            <div className="mt-2 flex justify-end" dir="rtl">
+              <div className="max-w-sm rounded-2xl rounded-tr-sm bg-emerald-700/90 text-white p-3 text-sm leading-relaxed shadow break-words">
+                {preview ? <WhatsAppText text={preview} /> : <span className="text-white/70">—</span>}
+                <div className="text-[10px] text-white/60 text-left mt-1">پیش‌نمایش ✓✓</div>
+              </div>
+            </div>
+          )}
+          <p className="text-xs text-slate-500 mt-1">پیش‌نمایش دقیقاً از همان مسیر ساخت پیام واقعی تولید می‌شود (نمونه مخاطب: اولین مخاطب یا «دوست»).</p>
+        </div>
 
         {/* V13.1 — A/B testing */}
         <div className="border-t border-slate-700 pt-3">

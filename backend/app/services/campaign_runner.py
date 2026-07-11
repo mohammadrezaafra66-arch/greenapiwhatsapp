@@ -16,6 +16,63 @@ NO_ACCOUNT_REASON = "هیچ اکانت فعالی متصل نیست — کمپی
 WINDOW_WAIT_REASON = "خارج از بازه مجاز ارسال این اکانت — ادامه خودکار در بازه بعدی"
 
 
+async def build_message_text(campaign, contact, products, effective_gpt_prompt,
+                             effective_template, effective_include_products) -> str:
+    """Assemble the exact message text a contact would receive — the single source of
+    truth shared by the runner and the /campaigns/preview endpoint (V13.6), so previews
+    match real sends. `campaign`/`contact` need only attribute access (a real model or
+    a SimpleNamespace)."""
+    # Resolve opening line (random mode picks a fresh variant per contact).
+    opening_mode = campaign.opening_mode or "ai"
+    opening_line = campaign.opening_line
+    if opening_mode == "random" and campaign.opening_variants:
+        opening_line = random.choice(campaign.opening_variants)
+
+    if campaign.use_gpt and settings.openai_api_key:
+        message = await generate_message(
+            first_name=contact.first_name or "",
+            last_name=contact.last_name or "",
+            gpt_prompt=effective_gpt_prompt or "یک پیام تبلیغاتی مختصر بنویس",
+            products=products if effective_include_products else None,
+            emoji_level=campaign.emoji_level or "medium",
+            show_prices=campaign.show_product_prices,
+            opening_mode=opening_mode,
+            opening_line=opening_line,
+            include_opt_out=campaign.include_opt_out,
+            opt_out_text=campaign.opt_out_text,
+            use_rich_formatting=getattr(campaign, "use_rich_formatting", False),
+        )
+    else:
+        message = (effective_template or "سلام {{first_name}} جان!")
+        message = message.replace("{{first_name}}", contact.first_name or "")
+        message = message.replace("{{last_name}}", contact.last_name or "")
+        # D6 — Persian variable aliases in templates
+        message = message.replace("{نام}", contact.first_name or "")
+        message = message.replace("{خانوادگی}", contact.last_name or "")
+        message = message.replace("{شهر}", getattr(contact, "city", "") or "")
+        message = message.replace("{استان}", getattr(contact, "province", "") or "")
+        # Honor opening + opt-out toggles on template messages too.
+        message = _apply_opening(message, opening_mode, opening_line)
+        message = _apply_opt_out(message, campaign.include_opt_out, campaign.opt_out_text)
+
+    # Append seller signature if configured
+    if campaign.append_seller_name and campaign.seller_name:
+        message += f"\n\n👤 {campaign.seller_name}"
+    if campaign.append_seller_phone and campaign.seller_phone:
+        message += f"\n📱 {campaign.seller_phone}"
+        if campaign.seller_phone2:
+            message += f"\n☎️ {campaign.seller_phone2}"
+
+    # Append Shamsi (Jalali) date if configured
+    if campaign.append_date:
+        try:
+            import jdatetime
+            message += f"\n\n📅 {jdatetime.date.today().strftime('%Y/%m/%d')}"
+        except Exception:
+            pass
+    return message
+
+
 async def _deliver_message(db, campaign, cc, contact, account, products, poll_options, buttons):
     """Generate + send one message for (cc, contact) using `account`; mutates state
     and commits. Returns the (possibly lazily-fetched) products list for reuse."""
@@ -38,56 +95,10 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
         if effective_include_products and not products:
             products = await get_products(campaign.product_count)
 
-        # Resolve opening line (random mode picks a fresh variant per contact).
-        opening_mode = campaign.opening_mode or "ai"
-        opening_line = campaign.opening_line
-        if opening_mode == "random" and campaign.opening_variants:
-            opening_line = random.choice(campaign.opening_variants)
-
-        # Generate message text
-        if campaign.use_gpt and settings.openai_api_key:
-            message = await generate_message(
-                first_name=contact.first_name or "",
-                last_name=contact.last_name or "",
-                gpt_prompt=effective_gpt_prompt or "یک پیام تبلیغاتی مختصر بنویس",
-                products=products if effective_include_products else None,
-                emoji_level=campaign.emoji_level or "medium",
-                show_prices=campaign.show_product_prices,
-                opening_mode=opening_mode,
-                opening_line=opening_line,
-                include_opt_out=campaign.include_opt_out,
-                opt_out_text=campaign.opt_out_text,
-                use_rich_formatting=getattr(campaign, "use_rich_formatting", False),
-            )
-        else:
-            message = (effective_template or "سلام {{first_name}} جان!")
-            message = message.replace("{{first_name}}", contact.first_name or "")
-            message = message.replace("{{last_name}}", contact.last_name or "")
-            # D6 — Persian variable aliases in templates
-            message = message.replace("{نام}", contact.first_name or "")
-            message = message.replace("{خانوادگی}", contact.last_name or "")
-            message = message.replace("{شهر}", contact.city or "")
-            message = message.replace("{استان}", contact.province or "")
-            # Honor opening + opt-out toggles on template messages too.
-            message = _apply_opening(message, opening_mode, opening_line)
-            message = _apply_opt_out(message, campaign.include_opt_out, campaign.opt_out_text)
-
-        # Append seller signature if configured
-        if campaign.append_seller_name and campaign.seller_name:
-            message += f"\n\n👤 {campaign.seller_name}"
-        if campaign.append_seller_phone and campaign.seller_phone:
-            message += f"\n📱 {campaign.seller_phone}"
-            if campaign.seller_phone2:
-                message += f"\n☎️ {campaign.seller_phone2}"
-
-        # Append Shamsi (Jalali) date if configured
-        if campaign.append_date:
-            try:
-                import jdatetime
-                message += f"\n\n📅 {jdatetime.date.today().strftime('%Y/%m/%d')}"
-            except Exception:
-                pass
-
+        # Build the message via the shared builder (same path the preview uses).
+        message = await build_message_text(
+            campaign, contact, products, effective_gpt_prompt, effective_template, effective_include_products
+        )
         cc.generated_message = message
         client = GreenAPIClient(account.instance_id, account.api_token)
 

@@ -73,6 +73,32 @@ class TestBody(BaseModel):
     message: str | None = None
 
 
+class CampaignPreviewBody(BaseModel):
+    """V13.6 — everything that affects the built message, so preview == real output."""
+    use_gpt: bool = True
+    gpt_prompt: str | None = None
+    message_template: str | None = None
+    include_products: bool = False
+    product_count: int = 3
+    product_label_filter: str | None = None
+    show_product_prices: bool = True
+    emoji_level: str = "medium"
+    opening_mode: str = "ai"
+    opening_line: str | None = None
+    opening_variants: list[str] | None = None
+    include_opt_out: bool = True
+    opt_out_text: str | None = None
+    use_rich_formatting: bool = False
+    append_seller_name: bool = False
+    seller_name: str | None = None
+    append_seller_phone: bool = False
+    seller_phone: str | None = None
+    seller_phone2: str | None = None
+    append_date: bool = False
+    sample_first_name: str | None = None
+    sample_last_name: str | None = None
+
+
 @router.get("/")
 async def list_campaigns(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Campaign).order_by(Campaign.created_at.desc()))
@@ -270,6 +296,51 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
     await db.commit()
     await db.refresh(campaign)
     return {"id": str(campaign.id), "name": campaign.name, "campaign_type": campaign.campaign_type}
+
+
+@router.post("/preview")
+async def preview_message(body: CampaignPreviewBody, db: AsyncSession = Depends(get_db)):
+    """V13.6 — return the FULLY BUILT message text exactly as the runner would produce
+    it (same build_message_text path), without sending. Uses a sample contact."""
+    from types import SimpleNamespace
+    from app.models.contact import Contact
+    from app.services.campaign_runner import build_message_text
+    from app.services.price_service import get_products, get_products_by_label
+
+    products = []
+    if body.include_products:
+        if body.product_label_filter:
+            products = await get_products_by_label(body.product_label_filter, body.product_count)
+        else:
+            products = await get_products(body.product_count)
+
+    campaign = SimpleNamespace(
+        use_gpt=body.use_gpt, gpt_prompt=body.gpt_prompt, message_template=body.message_template,
+        include_products=body.include_products, product_count=body.product_count,
+        show_product_prices=body.show_product_prices, emoji_level=body.emoji_level,
+        opening_mode=body.opening_mode, opening_line=body.opening_line, opening_variants=body.opening_variants,
+        include_opt_out=body.include_opt_out, opt_out_text=body.opt_out_text,
+        use_rich_formatting=body.use_rich_formatting,
+        append_seller_name=body.append_seller_name, seller_name=body.seller_name,
+        append_seller_phone=body.append_seller_phone, seller_phone=body.seller_phone,
+        seller_phone2=body.seller_phone2, append_date=body.append_date,
+    )
+
+    # Sample contact: explicit override → first real contact → dummy.
+    if body.sample_first_name or body.sample_last_name:
+        contact = SimpleNamespace(first_name=body.sample_first_name or "",
+                                  last_name=body.sample_last_name or "", city="", province="")
+    else:
+        row = (await db.execute(select(Contact).limit(1))).scalars().first()
+        if row:
+            contact = SimpleNamespace(first_name=row.first_name or "", last_name=row.last_name or "",
+                                      city=row.city or "", province=row.province or "")
+        else:
+            contact = SimpleNamespace(first_name="دوست", last_name="", city="", province="")
+
+    text = await build_message_text(campaign, contact, products, campaign.gpt_prompt,
+                                    campaign.message_template, campaign.include_products)
+    return {"preview": text}
 
 
 @router.post("/{campaign_id}/contacts")
