@@ -240,6 +240,45 @@ def task_check_status_schedules():
     run_async(check_and_post_due_statuses())
 
 
+@celery_app.task(name="tasks.resume_drip_campaigns")
+def task_resume_drip_campaigns():
+    """V13.8 — daily (start of send window): resume paused drip campaigns that still
+    have pending contacts; the per-day Redis counter resets on the new Tehran date."""
+    async def _r():
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        from sqlalchemy import select
+        from app.database import AsyncSessionLocal
+        from app.models.campaign import Campaign, CampaignStatus, CampaignContact, MessageStatus
+        from app.services.drip import PAUSE_REASON
+        resumed = []
+        async with AsyncSessionLocal() as db:
+            paused = (await db.execute(select(Campaign).where(
+                Campaign.drip_enabled == True,
+                Campaign.status == CampaignStatus.paused,
+            ))).scalars().all()
+            for c in paused:
+                if c.pause_reason != PAUSE_REASON:
+                    continue  # only resume drip-quota pauses, not other pauses
+                has_pending = (await db.execute(select(CampaignContact).where(
+                    CampaignContact.campaign_id == c.id,
+                    CampaignContact.status == MessageStatus.pending,
+                ).limit(1))).scalars().first()
+                if not has_pending:
+                    c.status = CampaignStatus.completed
+                    continue
+                c.status = CampaignStatus.running
+                c.pause_reason = None
+                c.drip_last_run_date = datetime.now(ZoneInfo("Asia/Tehran")).date()
+                resumed.append(str(c.id))
+            await db.commit()
+        for cid in resumed:
+            task_run_campaign.delay(cid)
+        if resumed:
+            print(f"[Drip] resumed {len(resumed)} drip campaign(s)")
+    run_async(_r())
+
+
 @celery_app.task(name="tasks.recheck_ai_keys")
 def task_recheck_ai_keys():
     """V12 — re-test failed/rate-limited AI keys so they auto-recover once quota resets."""

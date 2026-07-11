@@ -417,6 +417,17 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V13.7] {e}")
+        # V13.8 — drip sending
+        ddl_v13_drip = [
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS drip_enabled boolean DEFAULT false",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS drip_per_day integer DEFAULT 50",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS drip_last_run_date date",
+        ]
+        for stmt in ddl_v13_drip:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V13.8] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:

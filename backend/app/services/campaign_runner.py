@@ -300,11 +300,26 @@ async def _run_campaign_inner(campaign_id: str):
                 except Exception:
                     health_scores[str(a.id)] = 0.5
 
+        # V13.8 — drip: cap this campaign's sends per Tehran-day; pause when the quota
+        # is reached (the daily beat task resumes it the next day).
+        drip_remaining = None
+        drip_sent = 0
+        if getattr(campaign, "drip_enabled", False):
+            from app.services.drip import drip_count_today
+            already = await drip_count_today(campaign_id)
+            drip_remaining = max(0, (campaign.drip_per_day or 50) - already)
+
         acc_idx = 0
         for cc, contact in pending:
             await db.refresh(campaign)
             if campaign.status != CampaignStatus.running:
                 break
+            if drip_remaining is not None and drip_sent >= drip_remaining:
+                from app.services.drip import PAUSE_REASON
+                campaign.status = CampaignStatus.paused
+                campaign.pause_reason = PAUSE_REASON
+                await db.commit()
+                return
             if contact.blacklisted or contact.has_whatsapp is False:
                 cc.status = MessageStatus.skipped
                 await db.commit()
@@ -324,6 +339,11 @@ async def _run_campaign_inner(campaign_id: str):
                 continue
 
             products = await _deliver_message(db, campaign, cc, contact, account, products, poll_options, buttons)
+
+            if drip_remaining is not None and cc.status == MessageStatus.sent:
+                drip_sent += 1
+                from app.services.drip import drip_incr
+                await drip_incr(campaign_id)
 
             from app.services.delay_service import get_delay
             min_d, max_d = await get_delay(str(account.id))

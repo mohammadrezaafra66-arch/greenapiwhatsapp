@@ -1,6 +1,6 @@
 import uuid, enum
-from datetime import datetime
-from sqlalchemy import String, Boolean, Integer, DateTime, Text, ForeignKey, Enum as SAEnum
+from datetime import datetime, date as date_type
+from sqlalchemy import String, Boolean, Integer, DateTime, Date, Text, ForeignKey, Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
@@ -94,6 +94,10 @@ class Campaign(Base):
     use_rich_formatting: Mapped[bool] = mapped_column(Boolean, default=False)
     # Smart health-weighted account rotation (V13.2)
     smart_rotation: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Drip sending (V13.8) — spread over days with a daily quota
+    drip_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    drip_per_day: Mapped[int] = mapped_column(Integer, default=50)
+    drip_last_run_date: Mapped[date_type | None] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 

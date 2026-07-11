@@ -41,6 +41,8 @@ celery_app.conf.beat_schedule = {
     "recover-orphaned-campaigns": {"task": "tasks.recover_orphaned_campaigns", "schedule": 600.0},  # every 10 min
     "check-status-schedules": {"task": "tasks.check_status_schedules", "schedule": 300.0},  # every 5 min
     "recheck-ai-keys": {"task": "tasks.recheck_ai_keys", "schedule": 1800.0},  # every 30 min — auto-recover keys
+    # V13.8 — resume drip campaigns at the start of the daily send window (Tehran)
+    "resume-drip-campaigns": {"task": "tasks.resume_drip_campaigns", "schedule": crontab(hour=8, minute=1)},
     # 23:00 Tehran (celery timezone is Asia/Tehran, so crontab is interpreted there)
     "night-report": {"task": "tasks.send_night_report", "schedule": crontab(hour=23, minute=0)},
 }

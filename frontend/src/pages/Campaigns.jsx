@@ -402,6 +402,13 @@ function LiveLog({ campaignId }) {
         </div>
       )}
 
+      {prog?.drip?.enabled && (
+        <div className="rounded bg-sky-500/10 border border-sky-500/30 text-sky-200 p-2 text-xs">
+          💧 ارسال تدریجی — امروز: {fa(prog.drip.sent_today)} از {fa(prog.drip.per_day)} · باقی‌ماندهٔ کل: {fa(prog.pending)}
+          {prog.drip.est_days_remaining ? ` · تخمین ${fa(prog.drip.est_days_remaining)} روز دیگر` : ""}
+        </div>
+      )}
+
       {failed.length === 0 ? (
         <p className="text-xs text-slate-500">هیچ خطای ارسالی ثبت نشده است.</p>
       ) : (
@@ -449,6 +456,7 @@ const CAMPAIGN_DEFAULTS = {
   include_opt_out: true, opt_out_text: "",
   ab_test_enabled: false, variant_b_prompt: "", variant_b_template: "",
   use_rich_formatting: false, smart_rotation: false,
+  drip_enabled: false, drip_per_day: 50,
 };
 
 // Parse a "name=weight" per-line textarea into {name: number}. Blank → null.
@@ -512,6 +520,8 @@ function seedCampaignForm(d) {
     variant_b_template: d.variant_b_template || "",
     use_rich_formatting: d.use_rich_formatting || false,
     smart_rotation: d.smart_rotation || false,
+    drip_enabled: d.drip_enabled || false,
+    drip_per_day: d.drip_per_day || 50,
   };
 }
 
@@ -703,6 +713,8 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         variant_b_template: f.ab_test_enabled ? (f.variant_b_template || null) : null,
         use_rich_formatting: f.use_rich_formatting,
         smart_rotation: f.smart_rotation,
+        drip_enabled: f.drip_enabled,
+        drip_per_day: Number(f.drip_per_day) || 50,
       };
       if (editId) {
         await Api.update(editId, body);
@@ -1003,6 +1015,27 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
             چرخش هوشمند حساب‌ها (اولویت با حساب سالم‌تر)
           </label>
           <p className="text-xs text-slate-500 -mt-0.5">به‌جای چرخش ساده، حساب‌های سالم‌تر (یلوکارت کمتر، ظرفیت روزانه بیشتر) پیام بیشتری می‌فرستند.</p>
+        </div>
+
+        {/* V13.8 — drip sending */}
+        <div className="border-t border-slate-700 pt-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={f.drip_enabled} onChange={set("drip_enabled")} />
+            ارسال تدریجی (drip) — پخش در چند روز
+          </label>
+          <p className="text-xs text-slate-500 -mt-0.5">هر روز حداکثر «تعداد در روز» پیام ارسال می‌شود و فردا به‌طور خودکار ادامه می‌یابد (بهتر برای گرم‌نگه‌داشتن حساب).</p>
+          {f.drip_enabled && (
+            <div className="mt-2">
+              <label className="label">تعداد در روز</label>
+              <input type="number" className="input" min={1} max={5000} value={f.drip_per_day} onChange={set("drip_per_day")} />
+              {feasContactCount > 0 && Number(f.drip_per_day) > 0 && (
+                <p className="text-xs text-slate-400 mt-1">
+                  با {fa(f.drip_per_day)} در روز، کل کمپین (~{fa(feasContactCount)} مخاطب) در حدود{" "}
+                  {fa(Math.ceil(feasContactCount / Number(f.drip_per_day)))} روز تکمیل می‌شود.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {f.campaign_type === "image" && (

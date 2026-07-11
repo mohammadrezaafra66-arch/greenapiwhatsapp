@@ -68,6 +68,9 @@ class CampaignCreateBody(BaseModel):
     use_rich_formatting: bool = False
     # Smart rotation (V13.2)
     smart_rotation: bool = False
+    # Drip sending (V13.8)
+    drip_enabled: bool = False
+    drip_per_day: int = 50
 
 
 class TestBody(BaseModel):
@@ -165,6 +168,8 @@ def _campaign_detail(c: Campaign) -> dict:
         "variant_b_template": c.variant_b_template,
         "use_rich_formatting": c.use_rich_formatting,
         "smart_rotation": c.smart_rotation,
+        "drip_enabled": c.drip_enabled,
+        "drip_per_day": c.drip_per_day,
     }
 
 
@@ -226,6 +231,8 @@ async def update_campaign(campaign_id: str, body: CampaignCreateBody, db: AsyncS
     c.variant_b_template = body.variant_b_template
     c.use_rich_formatting = body.use_rich_formatting
     c.smart_rotation = body.smart_rotation
+    c.drip_enabled = body.drip_enabled
+    c.drip_per_day = body.drip_per_day or 50
     await db.commit()
     return {"id": campaign_id, "updated": True}
 
@@ -296,6 +303,8 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         variant_b_template=body.variant_b_template,
         use_rich_formatting=body.use_rich_formatting,
         smart_rotation=body.smart_rotation,
+        drip_enabled=body.drip_enabled,
+        drip_per_day=body.drip_per_day or 50,
     )
     db.add(campaign)
     await db.commit()
@@ -710,6 +719,21 @@ async def campaign_progress(campaign_id: str, db: AsyncSession = Depends(get_db)
         .group_by(CampaignContact.status)
     )
     status_counts = {row[0]: row[1] for row in stats.all()}
+    pending = status_counts.get(MessageStatus.pending, 0)
+
+    # V13.8 — drip progress (today's per-campaign send count from Redis).
+    drip = None
+    if campaign.drip_enabled:
+        from app.services.drip import drip_count_today
+        sent_today = await drip_count_today(campaign_id)
+        per_day = campaign.drip_per_day or 50
+        drip = {
+            "enabled": True,
+            "per_day": per_day,
+            "sent_today": sent_today,
+            "remaining_today": max(0, per_day - sent_today),
+            "est_days_remaining": (pending + per_day - 1) // per_day if per_day else None,
+        }
 
     return {
         "campaign_id": campaign_id,
@@ -721,7 +745,8 @@ async def campaign_progress(campaign_id: str, db: AsyncSession = Depends(get_db)
         "failed": campaign.failed_count,
         "delivered": campaign.delivered_count,
         "read": campaign.read_count,
-        "pending": status_counts.get(MessageStatus.pending, 0),
+        "pending": pending,
+        "drip": drip,
         "progress_pct": round(
             (campaign.sent_count / campaign.total_contacts * 100)
             if campaign.total_contacts > 0 else 0, 1
