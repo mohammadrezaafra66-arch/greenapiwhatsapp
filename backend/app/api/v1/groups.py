@@ -1,5 +1,6 @@
 import uuid
 import asyncio
+import httpx
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
@@ -12,6 +13,17 @@ from app.services.green_api import GreenAPIClient
 from app.config import settings
 
 router = APIRouter(prefix="/groups", tags=["groups"])
+
+
+def _green_error(e: Exception) -> str:
+    """Human-readable reason for a failed Green API call — never leaks the URL/token.
+    A 403 here usually means the instance isn't authorized (not connected) on Green API."""
+    if isinstance(e, httpx.HTTPStatusError):
+        code = e.response.status_code
+        if code == 403:
+            return "Green API 403 — این حساب مجاز/متصل نیست (اتصال اینستنس را بررسی کنید)"
+        return f"Green API {code}"
+    return str(e)[:200]
 
 
 class GroupCreateBody(BaseModel):
@@ -86,7 +98,7 @@ async def create_group(body: GroupCreateBody, db: AsyncSession = Depends(get_db)
             result = await client.create_group(body.name, body.phones)
             green_group_id = result.get("chatId") or result.get("groupId")
         except Exception as e:
-            raise HTTPException(502, f"Green API create_group failed: {e}")
+            raise HTTPException(502, f"Green API create_group failed: {_green_error(e)}")
 
     group = WhatsAppGroup(
         green_group_id=green_group_id,
@@ -194,12 +206,16 @@ async def sync_groups_from_wa(account_id: str, db: AsyncSession = Depends(get_db
     account = await db.get(Account, uuid.UUID(account_id))
     if not account:
         raise HTTPException(404, "Account not found")
+    # Guard: getChats on a non-active (pending/disconnected) instance always 403s.
+    # Fail fast with a clear message instead of hammering Green API.
+    if account.status != AccountStatus.active:
+        raise HTTPException(400, "این حساب متصل نیست؛ ابتدا حساب را متصل (authorized) کنید.")
 
     client = GreenAPIClient(account.instance_id, account.api_token)
     try:
         chats = await client.get_chats()
     except Exception as e:
-        raise HTTPException(502, f"Green API error: {e}")
+        raise HTTPException(502, f"خطای Green API: {_green_error(e)}")
 
     saved = 0
     updated = 0
@@ -294,7 +310,7 @@ async def auto_add_contacts_to_group(
             await asyncio.sleep(2)  # rate limiting
         except Exception as e:
             failed += 1
-            errors.append(f"{phone}: {str(e)}")
+            errors.append(f"{phone}: {_green_error(e)}")
 
     return {"added": added, "failed": failed, "errors": errors[:10]}
 
@@ -394,7 +410,7 @@ async def refresh_group_members(group_id: str, db: AsyncSession = Depends(get_db
         await db.commit()
         return {"member_count": grp.member_count, "name": grp.name}
     except Exception as e:
-        raise HTTPException(500, f"Green API error: {e}")
+        raise HTTPException(500, f"Green API error: {_green_error(e)}")
 
 
 @router.post("/{group_id}/extract-members")
@@ -411,7 +427,7 @@ async def extract_group_members(group_id: str, db: AsyncSession = Depends(get_db
     try:
         data = await client.get_group_data(grp.green_group_id)
     except Exception as e:
-        raise HTTPException(502, f"Green API error: {e}")
+        raise HTTPException(502, f"Green API error: {_green_error(e)}")
 
     phones = []
     seen = set()
