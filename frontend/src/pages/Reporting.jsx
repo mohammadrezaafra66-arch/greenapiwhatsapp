@@ -10,6 +10,7 @@ const TABS = [
   { key: "daily", label: "گزارش روزانه" },
   { key: "mentions", label: "رصد محصولات در گروه‌ها" },
   { key: "topProducts", label: "جدول محصولات پر تکرار" },
+  { key: "bestHours", label: "بهترین ساعت ارسال" },
 ];
 
 function today() {
@@ -85,6 +86,7 @@ export default function Reporting() {
       {tab === "daily" && <DailyTab />}
       {tab === "mentions" && <MentionsTab />}
       {tab === "topProducts" && <TopProductsTab />}
+      {tab === "bestHours" && <BestHoursTab />}
     </div>
   );
 }
@@ -418,6 +420,80 @@ function MentionsTab() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Tab 5: Best send hours (V13.3) ────────────────────────────
+function BestHoursTab() {
+  const [data, setData] = React.useState(null);
+  const [days, setDays] = React.useState(30);
+  const [loading, setLoading] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      setData(await Api.bestHours(days));
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [days]);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  const byHour = data?.by_hour || [];
+  const best = new Set(data?.best_hours || []);
+  const maxRead = Math.max(1, ...byHour.map((h) => h.read_pct));
+  const hasData = byHour.some((h) => h.sent > 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="card flex items-end gap-3 flex-wrap">
+        <div>
+          <label className="label">بازه</label>
+          <select className="input" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+            <option value={7}>۷ روز</option>
+            <option value={30}>۳۰ روز</option>
+            <option value={90}>۹۰ روز</option>
+          </select>
+        </div>
+        {data?.best_hours?.length > 0 && (
+          <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">
+            بهترین ساعت‌ها برای ارسال: {data.best_hours.map((h) => fa(h)).join("، ")}
+          </span>
+        )}
+      </div>
+
+      {loading && !data && <Spinner />}
+      {data && !hasData && (
+        <div className="card text-sm text-slate-400">
+          هنوز داده کافی ثبت نشده — با ارسال بیشتر، نرخ خوانده‌شدن به تفکیک ساعت اینجا نمایش داده می‌شود.
+        </div>
+      )}
+      {hasData && (
+        <div className="card overflow-x-auto">
+          <div className="flex items-end gap-1 h-48 min-w-[600px]" dir="ltr">
+            {byHour.map((h) => (
+              <div
+                key={h.hour}
+                className="flex-1 flex flex-col items-center justify-end"
+                title={`ساعت ${h.hour} — خوانده ${h.read_pct}٪ · تحویل ${h.delivered_pct}٪ · ارسال ${h.sent}`}
+              >
+                <div
+                  className={`w-full rounded-t ${best.has(h.hour) ? "bg-emerald-500" : "bg-sky-600"}`}
+                  style={{ height: `${(h.read_pct / maxRead) * 100}%` }}
+                />
+                <span className="text-[10px] text-slate-500 mt-1">{h.hour}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400 mt-2">
+            نرخ خوانده‌شدن به تفکیک ساعت (به وقت تهران). ستون‌های سبز = بهترین ساعت‌ها (حداقل {fa(data?.min_sample)} ارسال).
+          </p>
         </div>
       )}
     </div>

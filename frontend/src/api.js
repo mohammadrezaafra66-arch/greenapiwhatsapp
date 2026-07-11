@@ -274,6 +274,7 @@ export const ReportingApi = {
   clearMentions: () => http.delete("/reporting/product-mentions").then((r) => r.data),
   topProducts: (limit = 150, days = 30) =>
     http.get(`/reporting/top-products?limit=${limit}&days=${days}`).then((r) => r.data),
+  bestHours: (days = 30) => http.get(`/reporting/best-hours?days=${days}`).then((r) => r.data),
   productSellers: (productName, days = 30, limit = 100) =>
     http
       .get("/reporting/product-sellers", { params: { product_name: productName, days, limit } })

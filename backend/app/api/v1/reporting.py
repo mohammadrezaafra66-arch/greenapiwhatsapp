@@ -210,6 +210,54 @@ async def product_sellers(product_name: str, days: int = 30, limit: int = 100,
     return {"product_name": product_name, "total_sellers": len(sellers), "sellers": sellers}
 
 
+@router.get("/best-hours")
+async def best_hours(days: int = 30, db: AsyncSession = Depends(get_db)):
+    """V13.3 — read/delivered rate by Tehran hour-of-day (from campaign_contacts.sent_at).
+    best_hours lists the top-3 hours by read% among hours with a minimum sample size."""
+    from datetime import timedelta
+    from sqlalchemy import case
+    from app.models.campaign import CampaignContact
+    MIN_SAMPLE = 5
+    cutoff = datetime.utcnow() - timedelta(days=max(1, days))
+    # sent_at is stored UTC (naive) → interpret as UTC then convert to Tehran local.
+    hour_expr = func.extract(
+        "hour", func.timezone("Asia/Tehran", func.timezone("UTC", CampaignContact.sent_at))
+    )
+    rows = (await db.execute(
+        select(
+            hour_expr.label("hr"),
+            func.count().label("sent"),
+            func.sum(case((CampaignContact.delivery_status.in_(["delivered", "read"]), 1), else_=0)).label("delivered"),
+            func.sum(case((CampaignContact.delivery_status == "read", 1), else_=0)).label("read"),
+        )
+        .where(CampaignContact.sent_at.isnot(None), CampaignContact.sent_at >= cutoff)
+        .group_by(hour_expr)
+    )).all()
+    by_map = {int(r.hr): r for r in rows if r.hr is not None}
+    by_hour = []
+    for h in range(24):
+        r = by_map.get(h)
+        sent = int(r.sent) if r else 0
+        delivered = int(r.delivered or 0) if r else 0
+        read = int(r.read or 0) if r else 0
+        by_hour.append({
+            "hour": h,
+            "sent": sent,
+            "delivered_pct": round(100 * delivered / sent, 1) if sent else 0.0,
+            "read_pct": round(100 * read / sent, 1) if sent else 0.0,
+        })
+    best = sorted(
+        [b for b in by_hour if b["sent"] >= MIN_SAMPLE],
+        key=lambda b: (b["read_pct"], b["delivered_pct"]), reverse=True,
+    )[:3]
+    return {
+        "by_hour": by_hour,
+        "best_hours": [b["hour"] for b in best],
+        "min_sample": MIN_SAMPLE,
+        "period_days": days,
+    }
+
+
 # ── Products (for the Products page) ───────────────────────
 @router.get("/products")
 async def get_products_by_brand():
