@@ -19,7 +19,7 @@ from app.api.v1 import (
     keyword_rules, account_schedules,
     journals, files as files_router,
     contact_groups, wa_collections, reporting as reporting_router,
-    join_links, status_schedules,
+    join_links, status_schedules, ai_keys,
 )
 
 @asynccontextmanager
@@ -334,6 +334,29 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V11] {e}")
+        ddl_v12 = [
+            """CREATE TABLE IF NOT EXISTS ai_keys (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                provider varchar(30) NOT NULL,
+                api_key text NOT NULL,
+                label varchar(200),
+                is_active boolean DEFAULT true,
+                status varchar(30) DEFAULT 'unknown',
+                last_checked_at timestamp,
+                last_error text,
+                success_count integer DEFAULT 0,
+                fail_count integer DEFAULT 0,
+                rate_limited_until timestamp,
+                created_at timestamp DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_ai_keys_provider ON ai_keys(provider)",
+            "CREATE INDEX IF NOT EXISTS idx_ai_keys_active ON ai_keys(is_active)",
+        ]
+        for stmt in ddl_v12:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V12] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:
@@ -375,7 +398,7 @@ for router in [
     keyword_rules.router, account_schedules.router,
     journals.router, files_router.router,
     contact_groups.router, wa_collections.router, reporting_router.router,
-    join_links.router, status_schedules.router,
+    join_links.router, status_schedules.router, ai_keys.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

@@ -240,6 +240,13 @@ def task_check_status_schedules():
     run_async(check_and_post_due_statuses())
 
 
+@celery_app.task(name="tasks.recheck_ai_keys")
+def task_recheck_ai_keys():
+    """V12 — re-test failed/rate-limited AI keys so they auto-recover once quota resets."""
+    from app.services.ai_key_pool import recheck_stale_keys
+    run_async(recheck_stale_keys())
+
+
 @celery_app.task(name="tasks.join_all_links")
 def task_join_all_links(account_id: str, instance_id: str, api_token: str, links: list):
     """V11.3 — best-effort join all registered links with one account. Records

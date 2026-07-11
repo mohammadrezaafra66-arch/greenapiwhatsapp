@@ -34,6 +34,7 @@ const NAV = [
       { to: "/journals", label: "تاریخچه پیام‌ها" },
       { to: "/join-links", label: "لینک‌های گروه و کانال" },
       { to: "/ai-settings", label: "هوش مصنوعی" },
+      { to: "/ai-keys", label: "کلیدهای هوش مصنوعی" },
     ],
   },
   {

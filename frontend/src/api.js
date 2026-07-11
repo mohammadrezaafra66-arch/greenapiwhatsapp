@@ -293,6 +293,19 @@ export const JoinLinksApi = {
   status: () => http.get("/join-links/status").then((r) => r.data),
 };
 
+// ── AI Key Pool (V12) ──────────────────────────────────────
+export const AIKeysApi = {
+  list: () => http.get("/ai-keys/").then((r) => r.data),
+  create: (body) => http.post("/ai-keys/", body).then((r) => r.data),
+  bulk: (keys) => http.post("/ai-keys/bulk", keys).then((r) => r.data),
+  update: (id, body) => http.put(`/ai-keys/${id}`, body).then((r) => r.data),
+  delete: (id) => http.delete(`/ai-keys/${id}`).then((r) => r.data),
+  // per-key/test-all can be slow (live provider calls) — allow more time
+  test: (id) => http.post(`/ai-keys/${id}/test`, null, { timeout: 45000 }).then((r) => r.data),
+  testAll: () => http.post("/ai-keys/test-all", null, { timeout: 180000 }).then((r) => r.data),
+  poolStatus: () => http.get("/ai-keys/pool-status").then((r) => r.data),
+};
+
 // ── Products & Labels ──────────────────────────────────────
 export const ProductsApi = {
   list: () => http.get("/reporting/products").then((r) => r.data),

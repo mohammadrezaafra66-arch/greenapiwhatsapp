@@ -20,6 +20,15 @@ PROVIDERS = [
     {"name": "gemini",   "model": "gemini-2.0-flash",  "base": None},
 ]
 
+# V12 — provider → (model, base endpoint). Single source of truth used by both the
+# env-key path and the DB key-pool path.
+PROVIDER_MODELS = {p["name"]: p["model"] for p in PROVIDERS}
+PROVIDER_BASE = {p["name"]: p["base"] for p in PROVIDERS}
+
+# Order the key-pool tries providers in (any configured key works; this is a preference).
+PROVIDER_ORDER = ["openai", "deepseek", "gemini"]
+POOL_MAX_ATTEMPTS = 6  # try up to this many different keys before giving up
+
 SYSTEM_PROMPT = """
 تو یک دستیار فروش افراکالا هستی که پیام‌های واتس‌اپ کوتاه، صمیمی و حرفه‌ای فارسی می‌نویسی.
 قوانین:
@@ -115,18 +124,75 @@ async def _call_gemini(key: str, model: str, system: str, user: str,
         return text, pt, ct, tt
 
 
-async def _chat(system: str, user: str, max_tokens: int, temperature: float) -> str | None:
-    """Try each configured provider in order; return text on first success, else None."""
+async def _call_provider(provider: str, api_key: str, user: str,
+                         system: str = "You are a helpful assistant.",
+                         max_tokens: int = 500, temperature: float = 0.85):
+    """V12 — route a single call to the right provider API using an explicit key.
+    Returns (text, pt, ct, tt). Raises on HTTP/API error (caller classifies 429/401)."""
+    model = PROVIDER_MODELS.get(provider, "gpt-4o-mini")
+    if provider == "gemini":
+        return await _call_gemini(api_key, model, system, user, max_tokens, temperature)
+    base = PROVIDER_BASE.get(provider) or "https://api.openai.com/v1/chat/completions"
+    return await _call_openai_compatible(base, api_key, model, system, user, max_tokens, temperature)
+
+
+def _classify_error(msg: str) -> tuple[bool, bool]:
+    """(is_rate_limit, is_invalid) from an exception string."""
+    low = msg.lower()
+    is_rl = "429" in msg or "rate" in low or "quota" in low
+    is_inv = "401" in msg or "invalid" in low or "unauthorized" in low
+    return is_rl, is_inv
+
+
+async def _chat_via_pool(system: str, user: str, max_tokens: int, temperature: float) -> str | None:
+    """Pool-first: try up to POOL_MAX_ATTEMPTS distinct keys, preferring openai→
+    deepseek→gemini and known-'working' keys. Marks success/failure so rate-limited
+    and invalid keys are auto-skipped. Returns text or None if the whole pool fails."""
+    from app.services.ai_key_pool import get_working_key, mark_success, mark_failure
+    tried: set = set()
+    for _ in range(POOL_MAX_ATTEMPTS):
+        key_obj = None
+        for prov in PROVIDER_ORDER:
+            k = await get_working_key(prov)
+            if k and k.id not in tried:
+                key_obj = k
+                break
+        if not key_obj:
+            k = await get_working_key(None)  # any provider
+            if k and k.id not in tried:
+                key_obj = k
+        if not key_obj:
+            break  # nothing usable left
+        tried.add(key_obj.id)
+        model = PROVIDER_MODELS.get(key_obj.provider, key_obj.provider)
+        try:
+            text, pt, ct, tt = await _call_provider(
+                key_obj.provider, key_obj.api_key, user, system, max_tokens, temperature)
+            if text:
+                await mark_success(key_obj.id)
+                await _log_usage(key_obj.provider, model, pt, ct, tt, True, None)
+                return text
+            await mark_failure(key_obj.id, "empty response")
+            await _log_usage(key_obj.provider, model, 0, 0, 0, False, "empty response")
+        except Exception as e:
+            msg = str(e)
+            is_rl, is_inv = _classify_error(msg)
+            await mark_failure(key_obj.id, msg, is_rate_limit=is_rl, is_invalid=is_inv)
+            await _log_usage(key_obj.provider, model, 0, 0, 0, False, msg)
+            continue
+    return None
+
+
+async def _chat_via_env(system: str, user: str, max_tokens: int, temperature: float) -> str | None:
+    """Original behavior — try each env-configured provider in order (fallback when
+    the DB key pool is empty, so existing single-key setups keep working)."""
     for p in PROVIDERS:
         name, model = p["name"], p["model"]
         key = _key_for(name).strip()
         if not key:
             continue
         try:
-            if name == "gemini":
-                text, pt, ct, tt = await _call_gemini(key, model, system, user, max_tokens, temperature)
-            else:
-                text, pt, ct, tt = await _call_openai_compatible(p["base"], key, model, system, user, max_tokens, temperature)
+            text, pt, ct, tt = await _call_provider(name, key, user, system, max_tokens, temperature)
             if text:
                 await _log_usage(name, model, pt, ct, tt, True, None)
                 return text
@@ -135,6 +201,23 @@ async def _chat(system: str, user: str, max_tokens: int, temperature: float) -> 
             await _log_usage(name, model, 0, 0, 0, False, str(e))
             continue
     return None
+
+
+async def _chat(system: str, user: str, max_tokens: int, temperature: float) -> str | None:
+    """V12 — DB key pool takes priority when it has active keys; otherwise fall back
+    to env-var keys. Returns text on first success, else None (caller uses template)."""
+    from app.services.ai_key_pool import pool_has_keys
+    try:
+        use_pool = await pool_has_keys()
+    except Exception as e:
+        print(f"[AI] pool_has_keys failed, using env keys: {e}")
+        use_pool = False
+    if use_pool:
+        text = await _chat_via_pool(system, user, max_tokens, temperature)
+        if text:
+            return text
+        # Pool exhausted this call → still try env keys as a last resort.
+    return await _chat_via_env(system, user, max_tokens, temperature)
 
 
 def _fallback_message(first_name: str, products=None, show_prices: bool = True) -> str:
