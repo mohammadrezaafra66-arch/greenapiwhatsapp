@@ -1,19 +1,3 @@
 @echo off
-chcp 1256 >nul
-title ÇÝÑÇßÇáÇ - æÖÚíÊ
-echo ============================================
-echo    æÖÚíÊ ÓíÓÊã ÇÝÑÇßÇáÇ
-echo ============================================
-echo.
-
-echo æÖÚíÊ ßÇäÊíäÑåÇ:
-echo --------------------------------------------
-docker compose ps
-echo.
-
-echo ÈÑÑÓí ÓáÇãÊ ÓÑæíÓ (Backend):
-echo --------------------------------------------
-curl -s http://localhost:8002/health/detailed
-echo.
-echo.
-pause
+chcp 65001 >nul
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dpn0.ps1"

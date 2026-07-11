@@ -1,24 +1,3 @@
 @echo off
-chcp 1256 >nul
-title ÇÝÑÇßÇáÇ - ÊæÞÝ
-echo ============================================
-echo    ÊæÞÝ ÓíÓÊã ÇÝÑÇßÇáÇ
-echo ============================================
-echo.
-
-echo [1/2] ãÊæÞÝ ßÑÏä ßÇäÊíäÑåÇ (docker compose stop)...
-docker compose stop
-echo.
-
-echo [2/2] ÈÓÊä ngrok...
-taskkill /IM ngrok.exe /F >nul 2>&1
-if errorlevel 1 (
-  echo    ngrok ÏÑ ÍÇá ÇÌÑÇ äÈæÏ.
-) else (
-  echo    ngrok ÈÓÊå ÔÏ.
-)
-echo.
-
-echo ÓíÓÊã ãÊæÞÝ ÔÏ.
-echo.
-pause
+chcp 65001 >nul
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dpn0.ps1"

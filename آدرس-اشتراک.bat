@@ -1,24 +1,3 @@
 @echo off
-chcp 1256 >nul
-title ÇÝÑÇßÇáÇ - ÂÏÑÓ ÇÔÊÑÇß
-echo ============================================
-echo    ÂÏÑÓ ÇÔÊÑÇß ÐÇÑí ÏÑ ÔÈßå ãÍáí
-echo ============================================
-echo.
-
-echo ÏÑ ÍÇá íÇÝÊä ÂÏÑÓ Âíí Çíä ÏÓÊÇå...
-set "LANIP="
-for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /r /c:"IPv4.*192\.168\." /c:"IPv4.*10\."') do if not defined LANIP set "LANIP=%%a"
-set "LANIP=%LANIP: =%"
-if not defined LANIP set "LANIP=localhost"
-echo.
-
-echo ============================================
-echo    Çíä ÂÏÑÓ ÑÇ ÈÑÇí ÇÝÑÇÏ ÏíÑ ÈÝÑÓÊíÏ:
-echo.
-echo         http://%LANIP%:3002
-echo.
-echo    (ÈÇíÏ Èå åãÇä ÔÈßå/æÇíÝÇí ãÊÕá ÈÇÔäÏ)
-echo ============================================
-echo.
-pause
+chcp 65001 >nul
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dpn0.ps1"

@@ -1,15 +1,3 @@
 @echo off
-chcp 1256 >nul
-title ÇÝÑÇßÇáÇ - ÑíÇÓÊÇÑÊ
-echo ============================================
-echo    ÑíÇÓÊÇÑÊ ÓÑæíÓåÇí ÇÝÑÇßÇáÇ
-echo ============================================
-echo.
-
-echo ÏÑ ÍÇá ÑíÇÓÊÇÑÊ ÓÑæíÓåÇ...
-docker compose restart backend worker-general worker-webhooks beat frontend
-echo.
-
-echo ÑíÇÓÊÇÑÊ ßÇãá ÔÏ.
-echo.
-pause
+chcp 65001 >nul
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dpn0.ps1"
