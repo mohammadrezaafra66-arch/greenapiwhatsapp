@@ -329,4 +329,5 @@ export const BlacklistApi = {
   add: (phone, reason) =>
     http.post("/blacklist/", null, { params: { phone, reason } }).then((r) => r.data),
   remove: (phone) => http.delete(`/blacklist/${phone}`).then((r) => r.data),
+  optOutLog: () => http.get("/blacklist/opt-out-log").then((r) => r.data),
 };

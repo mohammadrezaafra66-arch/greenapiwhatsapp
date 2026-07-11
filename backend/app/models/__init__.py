@@ -26,6 +26,7 @@ from app.models.wa_extras import DisappearingChatSetting, WaBlockedContact
 from app.models.status_schedule import StatusSchedule
 from app.models.join_links import GroupJoinLink, AccountJoinStatus
 from app.models.ai_key import AIKey
+from app.models.optout import OptOutLog
 
 __all__ = [
     "Account",
@@ -62,4 +63,5 @@ __all__ = [
     "GroupJoinLink",
     "AccountJoinStatus",
     "AIKey",
+    "OptOutLog",
 ]

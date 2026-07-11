@@ -144,18 +144,20 @@ async def handle_incoming(instance_id: str, payload: dict):
                 except Exception:
                     pass
 
-            # If unsubscribe → blacklist
-            if text and text.strip() in ["11", "۱۱", "لغو"]:
+            # V13.4 — auto opt-out on keyword reply (configurable, digit-normalized)
+            from app.services.optout import is_opt_out
+            if is_opt_out(text):
                 from app.models.inbox import Blacklist
                 from app.models.contact import Contact
+                from app.models.optout import OptOutLog
                 bl_check = await db.execute(select(Blacklist).where(Blacklist.phone == sender_phone))
                 if not bl_check.scalar_one_or_none():
-                    bl = Blacklist(phone=sender_phone, reason="self_unsubscribed")
-                    db.add(bl)
+                    db.add(Blacklist(phone=sender_phone, reason="self_unsubscribed"))
                 contact_check = await db.execute(select(Contact).where(Contact.phone == sender_phone))
                 ct = contact_check.scalar_one_or_none()
                 if ct:
                     ct.blacklisted = True
+                db.add(OptOutLog(phone=sender_phone, reason="opt_out_keyword"))
 
             # Keyword auto-reply (runs even if auto_reply already fired — both can reply)
             if text and not msg.is_group or text:
@@ -385,6 +387,9 @@ async def handle_incoming_block(instance_id: str, payload: dict):
         if ct:
             ct.blacklisted = True
             ct.blacklist_reason = "blocked_this_number"
+        # V13.4 — record the auto opt-out reason
+        from app.models.optout import OptOutLog
+        db.add(OptOutLog(phone=blocker_phone, reason="blocked"))
         await db.commit()
 
 

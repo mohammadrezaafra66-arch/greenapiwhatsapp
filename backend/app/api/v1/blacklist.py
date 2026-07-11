@@ -52,6 +52,30 @@ async def remove_from_blacklist(phone: str, db: AsyncSession = Depends(get_db)):
     return {"success": True}
 
 
+@router.get("/opt-out-log")
+async def opt_out_log(limit: int = 100, db: AsyncSession = Depends(get_db)):
+    """V13.4 — recent auto opt-outs (keyword reply / block) + this-week count."""
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+    from app.models.optout import OptOutLog
+    rows = (await db.execute(
+        select(OptOutLog).order_by(OptOutLog.created_at.desc()).limit(min(limit, 500))
+    )).scalars().all()
+    week_ago = datetime.utcnow() - timedelta(days=7)
+    week_count = (await db.execute(
+        select(func.count()).select_from(OptOutLog).where(OptOutLog.created_at >= week_ago)
+    )).scalar() or 0
+    return {
+        "week_count": week_count,
+        "logs": [
+            {"id": str(r.id), "phone": r.phone, "reason": r.reason,
+             "campaign_id": str(r.campaign_id) if r.campaign_id else None,
+             "created_at": str(r.created_at)}
+            for r in rows
+        ],
+    }
+
+
 @router.get("/inbox/recent")
 async def recent_inbox(limit: int = 20, db: AsyncSession = Depends(get_db)):
     """Latest incoming messages across all accounts (kept for monitoring widgets)."""
