@@ -92,6 +92,27 @@ cd frontend && npm install && npm run dev                      # http://localhos
 
 ---
 
+## Ops: ngrok tunnel supervision
+
+The webhook ingestion path depends on the ngrok tunnel to the reserved domain
+`https://multidisciplinary-jeri-physiognomically.ngrok-free.dev → localhost:8002`.
+To make an ngrok outage self-heal across crashes and reboots, ngrok runs as a
+**Windows service** (supervised by the Windows Service Manager), not a hand-started
+process.
+
+- Tunnel definition lives in `%LOCALAPPDATA%\ngrok\ngrok.yml` (the `tunnels.afrakala`
+  block). Committed template: [`ngrok.yml.example`](./ngrok.yml.example) (token redacted).
+- Install / re-install (run once in an **admin** PowerShell):
+  `powershell -NoProfile -ExecutionPolicy Bypass -File .\install-ngrok-service.ps1`
+- Manage: `ngrok service status` · `ngrok service start` · `ngrok service stop`.
+- The service replaces the old `AfrakalaNgrokWatchdog` scheduled task (the installer
+  removes it so two supervisors don't fight over the one reserved domain).
+
+For a reboot to fully self-recover, Docker Desktop must also be set to start on login
+(Settings → General → "Start Docker Desktop when you sign in").
+
+---
+
 **Stack:** FastAPI · PostgreSQL · Redis · Celery · React · Green API · OpenAI/DeepSeek/Gemini
 
 </div>

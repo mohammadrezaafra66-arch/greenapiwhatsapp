@@ -1,0 +1,18 @@
+# Template for the ngrok agent config used by the Windows service.
+# The REAL file lives at %LOCALAPPDATA%\ngrok\ngrok.yml  (i.e.
+# C:\Users\AFRA\AppData\Local\ngrok\ngrok.yml) and is NOT committed because it
+# holds the authtoken (a secret). Keep this template in sync with that file
+# minus the token.
+#
+# The `tunnels:` block is what makes the service auto-start the reserved-domain
+# tunnel on boot. Without it, `ngrok service start` runs the agent but binds
+# nothing.
+version: "3"
+agent:
+    authtoken: <YOUR_NGROK_AUTHTOKEN>
+tunnels:
+    afrakala:
+        proto: http
+        addr: 8002
+        domain: multidisciplinary-jeri-physiognomically.ngrok-free.dev
+        inspect: true
