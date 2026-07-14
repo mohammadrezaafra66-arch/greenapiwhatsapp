@@ -1,5 +1,6 @@
 import React from "react";
 import { Campaigns as Api, FilesApi, Accounts, ContactGroupsApi, WaCollectionsApi, LabelsApi, Dashboard } from "../api.js";
+import ShamsiDateTimePicker from "../components/ShamsiDateTimePicker.jsx";
 import { Badge, Spinner, Empty, Modal, Progress, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
 
@@ -1202,24 +1203,26 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         </div>
 
         <div className="border-t border-slate-700 pt-3 mt-3">
-          <p className="font-bold text-sm mb-2">⏰ زمان‌بندی ارسال</p>
+          <p className="font-bold text-sm mb-2">⏰ زمان‌بندی ارسال (اختیاری)</p>
           <div className="grid grid-cols-2 gap-2">
-            <input
-              className="input"
-              dir="ltr"
-              value={f.schedule_start_shamsi}
-              onChange={set("schedule_start_shamsi")}
-              placeholder="۱۴۰۳/۰۱/۱۵ ۰۸:۰۰"
-            />
-            <input
-              className="input"
-              dir="ltr"
-              value={f.schedule_end_shamsi}
-              onChange={set("schedule_end_shamsi")}
-              placeholder="۱۴۰۳/۰۱/۲۰ ۲۲:۰۰"
-            />
+            <div>
+              <label className="label">تاریخ و ساعت شروع</label>
+              <ShamsiDateTimePicker
+                value={f.schedule_start_shamsi}
+                onChange={(v) => setF((p) => ({ ...p, schedule_start_shamsi: v }))}
+                placeholder="انتخاب تاریخ شروع"
+              />
+            </div>
+            <div>
+              <label className="label">تاریخ و ساعت پایان</label>
+              <ShamsiDateTimePicker
+                value={f.schedule_end_shamsi}
+                onChange={(v) => setF((p) => ({ ...p, schedule_end_shamsi: v }))}
+                placeholder="انتخاب تاریخ پایان"
+              />
+            </div>
           </div>
-          <p className="text-xs text-slate-500">فرمت: YYYY/MM/DD HH:MM</p>
+          <p className="text-xs text-slate-500">از تقویم شمسی انتخاب کنید. خالی = بدون زمان‌بندی (بلافاصله).</p>
         </div>
 
         <div className="border-t border-slate-700 pt-3 mt-3">
