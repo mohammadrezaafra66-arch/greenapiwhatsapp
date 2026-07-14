@@ -340,6 +340,30 @@ export const PartnerApi = {
   capabilities: () => http.get("/partner/capabilities").then((r) => r.data),
 };
 
+// ── Messaging (V14 PART B) ─────────────────────────────────
+export const MessagesApi = {
+  sendContact: (body) => http.post("/messages/contact", body).then((r) => r.data),
+  sendLocation: (body) => http.post("/messages/location", body).then((r) => r.data),
+  forward: (body) => http.post("/messages/forward", body).then((r) => r.data),
+  validateButtons: (buttons) => http.post("/messages/validate-buttons", { buttons }).then((r) => r.data),
+  // saved contact cards
+  savedContacts: () => http.get("/messages/saved-contacts").then((r) => r.data),
+  createSavedContact: (body) => http.post("/messages/saved-contacts", body).then((r) => r.data),
+  deleteSavedContact: (id) => http.delete(`/messages/saved-contacts/${id}`).then((r) => r.data),
+  // saved locations
+  savedLocations: () => http.get("/messages/saved-locations").then((r) => r.data),
+  createSavedLocation: (body) => http.post("/messages/saved-locations", body).then((r) => r.data),
+  deleteSavedLocation: (id) => http.delete(`/messages/saved-locations/${id}`).then((r) => r.data),
+  // button auto-replies
+  autoReplies: () => http.get("/messages/button-auto-replies").then((r) => r.data),
+  createAutoReply: (body) => http.post("/messages/button-auto-replies", body).then((r) => r.data),
+  updateAutoReply: (id, body) => http.put(`/messages/button-auto-replies/${id}`, body).then((r) => r.data),
+  deleteAutoReply: (id) => http.delete(`/messages/button-auto-replies/${id}`).then((r) => r.data),
+  // stats
+  campaignButtonReplies: (id) => http.get(`/messages/campaign/${id}/button-replies`).then((r) => r.data),
+  reactions: (chatId) => http.get("/messages/reactions", { params: chatId ? { chat_id: chatId } : {} }).then((r) => r.data),
+};
+
 // ── Blacklist ──────────────────────────────────────────
 export const BlacklistApi = {
   list: () => http.get("/blacklist/").then((r) => r.data),

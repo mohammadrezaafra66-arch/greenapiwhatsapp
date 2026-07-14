@@ -80,6 +80,17 @@ async def handle_incoming(instance_id: str, payload: dict):
     )
 
     type_message = data.get("typeMessage", "text")
+
+    # V14 F8/F11 — interactive button replies and reactions arrive as
+    # incomingMessageReceived. Handle and return before the normal text pipeline.
+    if type_message in ("interactiveButtons", "interactiveButtonsReply") \
+            or data.get("interactiveButtonsReply") or data.get("interactiveButtons"):
+        await _process_button_reply(instance_id, payload)
+        return
+    if type_message == "reactionMessage" or data.get("reactionMessage"):
+        await _process_reaction(instance_id, payload)
+        return
+
     is_edited = type_message == "editedMessage"
     is_deleted = type_message in ("deletedMessage", "revokedMessage")
 
@@ -286,34 +297,118 @@ async def handle_incoming_call(instance_id: str, payload: dict):
 
 
 async def handle_button_reply(instance_id: str, payload: dict):
-    """Handle interactive button reply from a recipient."""
-    data = payload.get("messageData", {})
-    button_data = data.get("buttonsResponseMessage", {})
+    """Legacy buttonsResponseMessage webhook → shared handler."""
+    await _process_button_reply(instance_id, payload)
+
+
+async def _process_button_reply(instance_id: str, payload: dict):
+    """FEATURE 8 — record a pressed interactive button, mark the campaign contact as
+    replied (feeds the V13.7 ROI funnel), and fire any matching auto-reply rule.
+    Tolerant of all webhook shapes (parse_button_reply never raises)."""
+    from app.services.interactive import parse_button_reply
+    from app.models.messaging import ButtonReply, ButtonAutoReply
+    from app.models.contact import Contact
+    from app.services.green_api import GreenAPIClient
+    from datetime import timedelta
+
+    parsed = parse_button_reply(payload)
+    if not parsed:
+        return
     sender = payload.get("senderData", {})
     sender_phone = sender.get("sender", "").split("@")[0]
+    chat_id = sender.get("chatId", "")
 
     async with AsyncSessionLocal() as db:
-        msg = InboxMessage(
+        # Inbox thread entry
+        db.add(InboxMessage(
             instance_id=instance_id,
             sender_phone=sender_phone,
             sender_name=sender.get("senderName", ""),
             message_type="button_reply",
-            text_content=button_data.get("selectedDisplayText", ""),
-            button_reply_id=button_data.get("selectedButtonId", ""),
-            button_reply_title=button_data.get("selectedDisplayText", ""),
+            text_content=parsed["button_text"],
+            button_reply_id=parsed["button_id"],
+            button_reply_title=parsed["button_text"],
             original_payload=json.dumps(payload, ensure_ascii=False),
-            timestamp=datetime.fromtimestamp(payload.get("timestamp", 0))
-        )
-        db.add(msg)
+            timestamp=datetime.fromtimestamp(payload.get("timestamp", 0) or 0),
+        ))
 
-        # Track campaign reply count
-        from app.models.campaign import CampaignContact
-        from sqlalchemy import select as sa_select
-        result = await db.execute(
-            sa_select(CampaignContact).where(
-                CampaignContact.status.in_(["sent"]),
+        campaign_id = None
+        # Best-effort: match sender → most recent sent campaign_contact → replied=true
+        ct = (await db.execute(select(Contact).where(Contact.phone == sender_phone))).scalar_one_or_none()
+        if ct:
+            recent = datetime.utcnow() - timedelta(days=14)
+            cc = (await db.execute(
+                select(CampaignContact).where(
+                    CampaignContact.contact_id == ct.id,
+                    CampaignContact.sent_at.isnot(None),
+                    CampaignContact.sent_at >= recent,
+                ).order_by(CampaignContact.sent_at.desc()).limit(1)
+            )).scalar_one_or_none()
+            if cc:
+                campaign_id = cc.campaign_id
+                if not cc.replied:
+                    cc.replied = True
+
+        db.add(ButtonReply(
+            campaign_id=campaign_id,
+            contact_phone=sender_phone,
+            chat_id=chat_id,
+            button_id=parsed["button_id"],
+            button_text=parsed["button_text"],
+            message_id=parsed["message_id"],
+        ))
+
+        # Auto-reply: match by button_id OR exact button_text (enabled rules only).
+        rule = (await db.execute(
+            select(ButtonAutoReply).where(
+                ButtonAutoReply.enabled.is_(True),
+                (ButtonAutoReply.button_id == parsed["button_id"])
+                | (ButtonAutoReply.button_text == parsed["button_text"]),
             ).limit(1)
-        )
+        )).scalar_one_or_none()
+        if rule and rule.reply_text:
+            acc = (await db.execute(select(Account).where(Account.instance_id == instance_id))).scalar_one_or_none()
+            if acc:
+                try:
+                    await GreenAPIClient(acc.instance_id, acc.api_token).send_message(sender_phone, rule.reply_text)
+                except Exception as e:
+                    logger.warning("button auto-reply send failed: %s", e)
+
+        await db.commit()
+
+
+async def _process_reaction(instance_id: str, payload: dict):
+    """FEATURE 11 (receive) — store an incoming emoji reaction and surface it in the
+    Inbox thread. Send-reaction is NOT shipped (probe = 403)."""
+    from app.services.interactive import parse_reaction
+    from app.models.messaging import MessageReaction
+
+    parsed = parse_reaction(payload)
+    if not parsed:
+        return
+    sender = payload.get("senderData", {})
+    sender_phone = sender.get("sender", "").split("@")[0]
+    chat_id = sender.get("chatId", "")
+
+    async with AsyncSessionLocal() as db:
+        db.add(MessageReaction(
+            chat_id=chat_id,
+            sender_phone=sender_phone,
+            sender_name=sender.get("senderName", ""),
+            emoji=parsed["emoji"],
+            reacted_message_id=parsed["reacted_message_id"],
+        ))
+        # Also surface inline in the inbox thread.
+        db.add(InboxMessage(
+            instance_id=instance_id,
+            sender_phone=sender_phone,
+            sender_name=sender.get("senderName", ""),
+            message_type="reaction",
+            text_content=parsed["emoji"],
+            original_message_id=parsed["reacted_message_id"],
+            original_payload=json.dumps(payload, ensure_ascii=False),
+            timestamp=datetime.fromtimestamp(payload.get("timestamp", 0) or 0),
+        ))
         await db.commit()
 
 

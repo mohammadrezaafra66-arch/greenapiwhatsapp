@@ -98,6 +98,11 @@ class Campaign(Base):
     drip_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     drip_per_day: Mapped[int] = mapped_column(Integer, default=50)
     drip_last_run_date: Mapped[date_type | None] = mapped_column(Date)
+    # V14 F7 — interactive buttons (opt-in; defaults reproduce today's plain-text send)
+    use_interactive_buttons: Mapped[bool] = mapped_column(Boolean, default=False)
+    buttons_config: Mapped[list | None] = mapped_column(JSONB)  # [{type,buttonId,buttonText,...}]
+    button_header: Mapped[str | None] = mapped_column(Text)
+    button_footer: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 

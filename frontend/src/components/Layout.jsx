@@ -28,6 +28,8 @@ const NAV = [
       { to: "/inbox", label: "صندوق ورودی" },
       { to: "/groups", label: "گروه‌های واتساپ" },
       { to: "/keyword-rules", label: "پاسخ خودکار" },
+      { to: "/button-auto-replies", label: "پاسخ خودکار دکمه‌ها" },
+      { to: "/content", label: "کارت تماس و موقعیت" },
       { to: "/templates", label: "قالب‌های پیام" },
       { to: "/statuses", label: "استوری‌ها" },
       { to: "/status-scheduler", label: "برنامه استوری" },

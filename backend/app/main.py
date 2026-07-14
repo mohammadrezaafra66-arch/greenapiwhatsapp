@@ -20,7 +20,7 @@ from app.api.v1 import (
     journals, files as files_router,
     contact_groups, wa_collections, reporting as reporting_router,
     join_links, status_schedules, ai_keys,
-    partner,
+    partner, messages,
 )
 
 @asynccontextmanager
@@ -460,6 +460,65 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V14 partner] {e}")
+        # V14 PART B — interactive & rich messaging.
+        ddl_v14_partb = [
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS use_interactive_buttons boolean DEFAULT false",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS buttons_config jsonb",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS button_header text",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS button_footer text",
+            """CREATE TABLE IF NOT EXISTS button_replies (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                campaign_id uuid,
+                contact_phone varchar(20),
+                chat_id varchar(60),
+                button_id varchar(20),
+                button_text text,
+                message_id varchar(80),
+                created_at timestamp DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_button_replies_campaign ON button_replies(campaign_id)",
+            """CREATE TABLE IF NOT EXISTS button_auto_replies (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                button_id varchar(20),
+                button_text text,
+                reply_text text NOT NULL,
+                enabled boolean DEFAULT true,
+                created_at timestamp DEFAULT now()
+            )""",
+            """CREATE TABLE IF NOT EXISTS message_reactions (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                chat_id varchar(60),
+                sender_phone varchar(20),
+                sender_name text,
+                emoji text,
+                reacted_message_id varchar(80),
+                created_at timestamp DEFAULT now()
+            )""",
+            """CREATE TABLE IF NOT EXISTS saved_contact_cards (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                label varchar(100) NOT NULL,
+                phone_contact varchar(20) NOT NULL,
+                first_name varchar(100),
+                last_name varchar(100),
+                company varchar(100) DEFAULT 'افراکالا',
+                is_default boolean DEFAULT false,
+                created_at timestamp DEFAULT now()
+            )""",
+            """CREATE TABLE IF NOT EXISTS saved_locations (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                name text NOT NULL,
+                address text,
+                latitude double precision NOT NULL,
+                longitude double precision NOT NULL,
+                is_default boolean DEFAULT false,
+                created_at timestamp DEFAULT now()
+            )""",
+        ]
+        for stmt in ddl_v14_partb:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V14 partB] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:
@@ -502,7 +561,7 @@ for router in [
     journals.router, files_router.router,
     contact_groups.router, wa_collections.router, reporting_router.router,
     join_links.router, status_schedules.router, ai_keys.router,
-    partner.router,
+    partner.router, messages.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

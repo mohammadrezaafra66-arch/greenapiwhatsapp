@@ -457,6 +457,8 @@ const CAMPAIGN_DEFAULTS = {
   ab_test_enabled: false, variant_b_prompt: "", variant_b_template: "",
   use_rich_formatting: false, smart_rotation: false,
   drip_enabled: false, drip_per_day: 50,
+  // V14 F7 — interactive buttons
+  use_interactive_buttons: false, buttons_config: [], button_header: "", button_footer: "",
 };
 
 // Parse a "name=weight" per-line textarea into {name: number}. Blank → null.
@@ -520,6 +522,10 @@ function seedCampaignForm(d) {
     variant_b_template: d.variant_b_template || "",
     use_rich_formatting: d.use_rich_formatting || false,
     smart_rotation: d.smart_rotation || false,
+    use_interactive_buttons: d.use_interactive_buttons || false,
+    buttons_config: Array.isArray(d.buttons_config) ? d.buttons_config : [],
+    button_header: d.button_header || "",
+    button_footer: d.button_footer || "",
     drip_enabled: d.drip_enabled || false,
     drip_per_day: d.drip_per_day || 50,
   };
@@ -715,6 +721,13 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         smart_rotation: f.smart_rotation,
         drip_enabled: f.drip_enabled,
         drip_per_day: Number(f.drip_per_day) || 50,
+        // V14 F7 — interactive buttons (text campaigns only)
+        use_interactive_buttons: f.use_interactive_buttons && f.campaign_type === "text",
+        buttons_config:
+          f.use_interactive_buttons && f.campaign_type === "text" && (f.buttons_config || []).length
+            ? f.buttons_config : null,
+        button_header: f.use_interactive_buttons ? (f.button_header || null) : null,
+        button_footer: f.use_interactive_buttons ? (f.button_footer || null) : null,
       };
       if (editId) {
         await Api.update(editId, body);
@@ -1037,6 +1050,70 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
             </div>
           )}
         </div>
+
+        {/* V14 F7 — interactive buttons (text campaigns only) */}
+        {f.campaign_type === "text" && (
+          <div className="border-t border-slate-700 pt-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={f.use_interactive_buttons} onChange={set("use_interactive_buttons")} />
+              ارسال با دکمه‌های تعاملی
+            </label>
+            {f.use_interactive_buttons && (
+              <div className="mt-2 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="label">سربرگ (header)</label>
+                    <input className="input" value={f.button_header} onChange={set("button_header")} />
+                  </div>
+                  <div>
+                    <label className="label">پانویس (footer)</label>
+                    <input className="input" value={f.button_footer} onChange={set("button_footer")} />
+                  </div>
+                </div>
+                {(f.buttons_config || []).map((b, i) => {
+                  const upd = (patch) => setF((prev) => {
+                    const arr = [...(prev.buttons_config || [])];
+                    arr[i] = { ...arr[i], ...patch };
+                    return { ...prev, buttons_config: arr };
+                  });
+                  const over = (b.buttonText || "").length > 25;
+                  return (
+                    <div key={i} className="flex flex-wrap gap-2 items-end bg-slate-900 rounded p-2">
+                      <div>
+                        <label className="label">نوع</label>
+                        <select className="input w-auto" value={b.type || "reply"} onChange={(e) => upd({ type: e.target.value })}>
+                          <option value="reply">پاسخ</option>
+                          <option value="copy">کپی</option>
+                          <option value="call">تماس</option>
+                          <option value="url">لینک</option>
+                        </select>
+                      </div>
+                      <div className="flex-1 min-w-[8rem]">
+                        <label className="label">متن دکمه <span className={over ? "text-red-400" : "text-slate-500"}>({fa((b.buttonText || "").length)}/۲۵)</span></label>
+                        <input className={`input ${over ? "border-red-500" : ""}`} value={b.buttonText || ""} onChange={(e) => upd({ buttonText: e.target.value })} />
+                      </div>
+                      {b.type === "copy" && <div className="flex-1 min-w-[8rem]"><label className="label">کد کپی</label><input className="input" value={b.copyCode || ""} onChange={(e) => upd({ copyCode: e.target.value })} /></div>}
+                      {b.type === "call" && <div className="flex-1 min-w-[8rem]"><label className="label">شماره تماس</label><input className="input" value={b.phoneNumber || ""} onChange={(e) => upd({ phoneNumber: e.target.value })} /></div>}
+                      {b.type === "url" && <div className="flex-1 min-w-[8rem]"><label className="label">لینک</label><input className="input" value={b.url || ""} onChange={(e) => upd({ url: e.target.value })} /></div>}
+                      <button type="button" className="btn-danger text-xs" onClick={() => setF((prev) => ({ ...prev, buttons_config: (prev.buttons_config || []).filter((_, j) => j !== i) }))}>حذف</button>
+                    </div>
+                  );
+                })}
+                {(f.buttons_config || []).length < 3 && (
+                  <button type="button" className="btn-secondary text-xs"
+                    onClick={() => setF((prev) => ({ ...prev, buttons_config: [...(prev.buttons_config || []), { type: "reply", buttonText: "" }] }))}>
+                    + افزودن دکمه (حداکثر ۳)
+                  </button>
+                )}
+                {feasContactCount > 0 && (
+                  <p className="text-xs text-amber-300">
+                    ⚠️ ارسال با دکمه حداکثر ۱ پیام در ثانیه است — این کمپین حدود {fa(Math.ceil(feasContactCount / 60))} دقیقه طول می‌کشد.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {f.campaign_type === "image" && (
           <div>

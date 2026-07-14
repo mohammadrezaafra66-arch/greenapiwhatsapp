@@ -237,6 +237,53 @@ class GreenAPIClient:
         })
         return r.get("idMessage")
 
+    # ── V14 PART B — rich messaging (raw chatId; accepts @c.us / @g.us) ────────
+    def _as_chat_id(self, chat: str) -> str:
+        """Pass through a full chatId (…@c.us / …@g.us); normalize a bare phone."""
+        return chat if "@" in str(chat) else self._chat_id(chat)
+
+    async def send_interactive_buttons_rich(self, chat: str, header: str, body: str,
+                                            footer: str, buttons: list[dict]) -> Optional[str]:
+        """FEATURE 7 — correct Green API shape: buttons carry type/buttonId/buttonText
+        (+ copyCode/phoneNumber/url per type). Rate limit 1/sec (enforce upstream)."""
+        r = await self._post("sendInteractiveButtons", {
+            "chatId": self._as_chat_id(chat),
+            "header": header or "",
+            "body": body,
+            "footer": footer or "",
+            "buttons": buttons,
+        })
+        return r.get("idMessage")
+
+    async def send_contact_card(self, chat: str, contact: dict) -> Optional[str]:
+        """FEATURE 12 — sendContact. `contact` must include phoneContact (int)."""
+        r = await self._post("sendContact", {
+            "chatId": self._as_chat_id(chat),
+            "contact": contact,
+        })
+        return r.get("idMessage")
+
+    async def send_location_full(self, chat: str, name: str, address: str,
+                                 latitude: float, longitude: float) -> Optional[str]:
+        """FEATURE 13 — sendLocation with name + address."""
+        r = await self._post("sendLocation", {
+            "chatId": self._as_chat_id(chat),
+            "nameLocation": name or "",
+            "address": address or "",
+            "latitude": latitude,
+            "longitude": longitude,
+        })
+        return r.get("idMessage")
+
+    async def forward_to(self, chat: str, chat_id_from: str, message_ids: list[str]) -> Optional[str]:
+        """FEATURE 14 — forwardMessages to a raw destination chatId."""
+        r = await self._post("forwardMessages", {
+            "chatId": self._as_chat_id(chat),
+            "chatIdFrom": chat_id_from,
+            "messages": message_ids,
+        })
+        return r.get("idMessage")
+
     # ── STATUSES ─────────────────────────────────────────
     async def send_status_text(self, text: str, bg_color: str = "#FFFFFF") -> Optional[str]:
         r = await self._post("sendTextStatus", {"message": text, "backgroundColor": bg_color, "font": "SANS_SERIF"})

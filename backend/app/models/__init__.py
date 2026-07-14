@@ -28,6 +28,9 @@ from app.models.join_links import GroupJoinLink, AccountJoinStatus
 from app.models.ai_key import AIKey
 from app.models.optout import OptOutLog
 from app.models.partner import PartnerInstanceLog, MethodSupport
+from app.models.messaging import (
+    ButtonReply, ButtonAutoReply, MessageReaction, SavedContactCard, SavedLocation,
+)
 
 __all__ = [
     "Account",
@@ -67,4 +70,9 @@ __all__ = [
     "OptOutLog",
     "PartnerInstanceLog",
     "MethodSupport",
+    "ButtonReply",
+    "ButtonAutoReply",
+    "MessageReaction",
+    "SavedContactCard",
+    "SavedLocation",
 ]

@@ -1,6 +1,6 @@
 import React from "react";
-import { Inbox as Api } from "../api.js";
-import { Spinner, Empty, Modal } from "../ui.jsx";
+import { Inbox as Api, MessagesApi } from "../api.js";
+import { Spinner, Empty, Modal, useAsync } from "../ui.jsx";
 import { toast } from "../ui/toast.jsx";
 
 const CAT_FA = {
@@ -18,6 +18,7 @@ const MSG_TYPE_FA = {
   poll_update: "رأی نظرسنجی",
   catalog_update: "آپدیت کاتالوگ 🛍️",
   outgoing_call: "تماس خروجی 📞",
+  reaction: "ری‌اکشن 😀",
 };
 
 function renderSpecial(m) {
@@ -32,6 +33,13 @@ function renderSpecial(m) {
     return (
       <p className="text-sm text-sky-300 mt-1">
         🔘 دکمه انتخاب‌شده: <b>{m.button_reply_title || m.text || "—"}</b>
+      </p>
+    );
+  }
+  if (m.message_type === "reaction") {
+    return (
+      <p className="text-sm text-pink-300 mt-1">
+        {m.text || "😀"} <span className="text-xs text-slate-500">ری‌اکشن روی پیام شما</span>
       </p>
     );
   }
@@ -63,6 +71,7 @@ export default function Inbox() {
   const [stats, setStats] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [reply, setReply] = React.useState(null);
+  const [richSend, setRichSend] = React.useState(null);
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -126,13 +135,63 @@ export default function Inbox() {
             <div className="flex flex-col gap-1">
               {!m.is_read && <button className="btn-secondary text-xs py-1" onClick={async () => { await Api.markRead(m.id); load(); }}>خواندم</button>}
               <button className="btn-primary text-xs py-1" onClick={() => setReply(m)}>پاسخ</button>
+              {!m.is_group && <button className="btn-secondary text-xs py-1" onClick={() => setRichSend({ msg: m, mode: "contact" })}>کارت تماس</button>}
+              {!m.is_group && <button className="btn-secondary text-xs py-1" onClick={() => setRichSend({ msg: m, mode: "location" })}>موقعیت</button>}
             </div>
           </div>
         ))}
       </div>
 
       {reply && <ReplyModal msg={reply} onClose={() => setReply(null)} onDone={load} />}
+      {richSend && <RichSendModal msg={richSend.msg} mode={richSend.mode} onClose={() => setRichSend(null)} />}
     </div>
+  );
+}
+
+// FEATURE 12/13 — send a saved contact card or a saved location to the sender.
+function RichSendModal({ msg, mode, onClose }) {
+  const isContact = mode === "contact";
+  const { data, loading } = useAsync(
+    () => (isContact ? MessagesApi.savedContacts() : MessagesApi.savedLocations()), [mode]);
+  const [sel, setSel] = React.useState("");
+  const [sending, setSending] = React.useState(false);
+
+  const send = async () => {
+    if (!sel) return toast.error(isContact ? "یک کارت انتخاب کنید" : "یک موقعیت انتخاب کنید");
+    setSending(true);
+    try {
+      if (isContact) {
+        await MessagesApi.sendContact({ chat_id: msg.sender_phone, saved_card_id: sel });
+      } else {
+        await MessagesApi.sendLocation({ chat_id: msg.sender_phone, saved_location_id: sel });
+      }
+      toast.success("ارسال شد");
+      onClose();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Modal title={`${isContact ? "ارسال کارت تماس" : "ارسال موقعیت"} به ${msg.sender_name || msg.sender_phone}`} onClose={onClose}>
+      <div className="space-y-3">
+        {loading ? <Spinner /> : (!data || data.length === 0) ? (
+          <Empty label={isContact ? "کارتی ذخیره نشده — از «کارت تماس و موقعیت» اضافه کنید." : "موقعیتی ذخیره نشده — از «کارت تماس و موقعیت» اضافه کنید."} />
+        ) : (
+          <select className="input" value={sel} onChange={(e) => setSel(e.target.value)}>
+            <option value="">— انتخاب —</option>
+            {data.map((x) => (
+              <option key={x.id} value={x.id}>{isContact ? `${x.label} (${x.phone_contact})` : `${x.name}`}</option>
+            ))}
+          </select>
+        )}
+        <button className="btn-primary w-full" disabled={sending || !sel} onClick={send}>
+          {sending ? "در حال ارسال..." : "ارسال"}
+        </button>
+      </div>
+    </Modal>
   );
 }
 

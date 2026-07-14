@@ -111,7 +111,32 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
             pass  # Non-fatal — never block sending
 
         msg_id = None
-        if campaign.campaign_type == CampaignType.text:
+        # V14 F7 — interactive buttons (opt-in, text campaigns only). Body = the built
+        # message + a plain-text mirror of the reply choices so it still works if buttons
+        # don't render. On a runtime 403, record UNSUPPORTED and re-send as plain text so
+        # the recipient is NEVER skipped.
+        if (getattr(campaign, "use_interactive_buttons", False) and campaign.buttons_config
+                and campaign.campaign_type == CampaignType.text):
+            from app.services.interactive import build_button_mirror, normalize_buttons
+            from app.services.capabilities import is_supported, is_403, record_support
+            body = message + build_button_mirror(campaign.buttons_config)
+            if await is_supported(db, "sendInteractiveButtons") is not False:
+                try:
+                    msg_id = await client.send_interactive_buttons_rich(
+                        contact.phone, campaign.button_header or "", body,
+                        campaign.button_footer or "", normalize_buttons(campaign.buttons_config),
+                    )
+                    await record_support(db, "sendInteractiveButtons", True, 200)
+                except Exception as e:
+                    if is_403(e):
+                        await record_support(db, "sendInteractiveButtons", False, 403,
+                                             "runtime 403 → plain-text fallback")
+                        msg_id = await client.send_message(contact.phone, body)  # never lose a send
+                    else:
+                        raise
+            else:
+                msg_id = await client.send_message(contact.phone, body)  # plan-restricted → plain text
+        elif campaign.campaign_type == CampaignType.text:
             msg_id = await client.send_message(contact.phone, message)
         elif campaign.campaign_type == CampaignType.image and campaign.image_url:
             msg_id = await client.send_image(contact.phone, campaign.image_url, message)

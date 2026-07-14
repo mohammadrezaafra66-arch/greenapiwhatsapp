@@ -71,6 +71,11 @@ class CampaignCreateBody(BaseModel):
     # Drip sending (V13.8)
     drip_enabled: bool = False
     drip_per_day: int = 50
+    # V14 F7 — interactive buttons
+    use_interactive_buttons: bool = False
+    buttons_config: list[dict] | None = None
+    button_header: str | None = None
+    button_footer: str | None = None
 
 
 class TestBody(BaseModel):
@@ -233,6 +238,17 @@ async def update_campaign(campaign_id: str, body: CampaignCreateBody, db: AsyncS
     c.smart_rotation = body.smart_rotation
     c.drip_enabled = body.drip_enabled
     c.drip_per_day = body.drip_per_day or 50
+    # V14 F7 — interactive buttons
+    if body.use_interactive_buttons and body.buttons_config:
+        from app.services.interactive import validate_buttons
+        try:
+            validate_buttons(body.buttons_config)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    c.use_interactive_buttons = body.use_interactive_buttons
+    c.buttons_config = body.buttons_config or None
+    c.button_header = body.button_header
+    c.button_footer = body.button_footer
     await db.commit()
     return {"id": campaign_id, "updated": True}
 
@@ -255,6 +271,12 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         raise HTTPException(400, f"Invalid campaign_type: {body.campaign_type}")
 
     buttons = body.buttons or []
+    if body.use_interactive_buttons and body.buttons_config:
+        from app.services.interactive import validate_buttons
+        try:
+            validate_buttons(body.buttons_config)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
     campaign = Campaign(
         name=body.name,
         campaign_type=ctype,
@@ -305,6 +327,10 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         smart_rotation=body.smart_rotation,
         drip_enabled=body.drip_enabled,
         drip_per_day=body.drip_per_day or 50,
+        use_interactive_buttons=body.use_interactive_buttons,
+        buttons_config=body.buttons_config or None,
+        button_header=body.button_header,
+        button_footer=body.button_footer,
     )
     db.add(campaign)
     await db.commit()
