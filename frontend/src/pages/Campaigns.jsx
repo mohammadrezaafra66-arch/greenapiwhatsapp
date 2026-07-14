@@ -458,6 +458,7 @@ const CAMPAIGN_DEFAULTS = {
   // Message customization
   opening_mode: "ai", opening_line: "", opening_variants: "",
   product_variation_mode: "same", products_per_group: 3, product_weights: "",
+  product_detail_level: "medium", selected_account_id: "",
   include_opt_out: true, opt_out_text: "",
   ab_test_enabled: false, variant_b_prompt: "", variant_b_template: "",
   use_rich_formatting: false, smart_rotation: false,
@@ -517,6 +518,8 @@ function seedCampaignForm(d) {
     opening_variants: join(d.opening_variants),
     product_variation_mode: d.product_variation_mode || "same",
     products_per_group: d.products_per_group || 3,
+    product_detail_level: d.product_detail_level || "medium",
+    selected_account_id: d.selected_account_id || "",
     product_weights: d.product_weights
       ? Object.entries(d.product_weights).map(([k, v]) => `${k}=${v}`).join("\n")
       : "",
@@ -543,6 +546,10 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
   const [contactGroups, setContactGroups] = React.useState([]);
   const [waCollections, setWaCollections] = React.useState([]);
   const [labels, setLabels] = React.useState([]);
+  const [activeAccounts, setActiveAccounts] = React.useState([]); // V15 Item 11
+  React.useEffect(() => {
+    Accounts.list().then((a) => setActiveAccounts((a || []).filter((x) => x.status === "active"))).catch(() => {});
+  }, []);
   const [feasContactCount, setFeasContactCount] = React.useState(100);
   const [feasResult, setFeasResult] = React.useState(null);
   const [feasLoading, setFeasLoading] = React.useState(false);
@@ -714,9 +721,11 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
           f.opening_mode === "random" && f.opening_variants
             ? f.opening_variants.split("\n").map((s) => s.trim()).filter(Boolean)
             : null,
-        product_variation_mode: f.product_variation_mode || "same",
+        product_variation_mode: f.campaign_scope === "group" ? (f.product_variation_mode || "same") : "same",
         products_per_group: Number(f.products_per_group) || 3,
-        product_weights: parseWeights(f.product_weights),
+        product_weights: f.campaign_scope === "group" ? parseWeights(f.product_weights) : null,
+        product_detail_level: f.product_detail_level || "medium",
+        selected_account_id: (!f.parallel_accounts && f.selected_account_id) ? f.selected_account_id : null,
         include_opt_out: f.include_opt_out !== false,
         opt_out_text: f.include_opt_out && f.opt_out_text ? f.opt_out_text : null,
         ab_test_enabled: f.ab_test_enabled,
@@ -841,27 +850,6 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
           </div>
         )}
 
-        {/* V13.6 — live message preview */}
-        <div className="border-t border-slate-700 pt-3">
-          <div className="flex items-center gap-2">
-            <button type="button" className="btn-secondary text-sm" disabled={previewing} onClick={doPreview}>
-              {previewing ? "در حال ساخت..." : "👁 پیش‌نمایش پیام"}
-            </button>
-            {preview !== null && (
-              <button type="button" className="btn-secondary text-xs" disabled={previewing} onClick={doPreview}>🔄 به‌روزرسانی</button>
-            )}
-          </div>
-          {preview !== null && (
-            <div className="mt-2 flex justify-end" dir="rtl">
-              <div className="max-w-sm rounded-2xl rounded-tr-sm bg-emerald-700/90 text-white p-3 text-sm leading-relaxed shadow break-words">
-                {preview ? <WhatsAppText text={preview} /> : <span className="text-white/70">—</span>}
-                <div className="text-[10px] text-white/60 text-left mt-1">پیش‌نمایش ✓✓</div>
-              </div>
-            </div>
-          )}
-          <p className="text-xs text-slate-500 mt-1">پیش‌نمایش دقیقاً از همان مسیر ساخت پیام واقعی تولید می‌شود (نمونه مخاطب: اولین مخاطب یا «دوست»).</p>
-        </div>
-
         {/* V13.1 — A/B testing */}
         <div className="border-t border-slate-700 pt-3">
           <label className="flex items-center gap-2 text-sm">
@@ -935,7 +923,8 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         {f.include_products && (
           <>
             <div>
-              <label className="label">تعداد محصول (اندازه مخزن)</label>
+              {/* V15 Item 10 — clearer label */}
+              <label className="label">تعداد محصول در هر پیام</label>
               <input
                 type="number"
                 className="input"
@@ -944,44 +933,57 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
                 value={f.product_count}
                 onChange={set("product_count")}
               />
-              <p className="text-xs text-slate-500 mt-1">در حالت تنوع، مخزن باید بزرگ‌تر از «تعداد در هر گروه» باشد.</p>
+              <p className="text-xs text-slate-500 mt-1">در حالت تنوع بین گروه‌ها، این عدد باید بزرگ‌تر از «تعداد در هر گروه» باشد.</p>
             </div>
 
-            {/* Phase 3 — per-group product variation */}
+            {/* V15 Item 8 — product detail level */}
             <div>
-              <label className="label">تنوع محصولات بین گروه‌ها</label>
-              <select className="input" value={f.product_variation_mode} onChange={set("product_variation_mode")}>
-                <option value="same">یکسان برای همه</option>
-                <option value="per_group_random">تصادفی برای هر گروه</option>
-                <option value="rotate">چرخشی</option>
+              <label className="label">سطح جزئیات محصول</label>
+              <select className="input" value={f.product_detail_level} onChange={set("product_detail_level")}>
+                <option value="minimal">مختصر (فقط نام و قیمت)</option>
+                <option value="medium">متوسط (نام، قیمت و ۱–۲ مشخصه)</option>
+                <option value="detailed">مفصل</option>
               </select>
-              <p className="text-xs text-slate-500 mt-1">تنوع بین گروه‌ها باعث می‌شود پیام‌ها شبیه هم نباشند (کاهش ریسک شناسایی توسط متا).</p>
             </div>
-            {f.product_variation_mode !== "same" && (
-              <div>
-                <label className="label">تعداد محصول در هر گروه</label>
-                <input
-                  type="number"
-                  className="input"
-                  min={1}
-                  max={10}
-                  value={f.products_per_group}
-                  onChange={set("products_per_group")}
-                />
-              </div>
-            )}
-            {/* Phase 4 — weighted selection (only meaningful with random variation) */}
-            {f.product_variation_mode === "per_group_random" && (
-              <div>
-                <label className="label">وزن محصولات (اختیاری)</label>
-                <textarea
-                  className="input h-20"
-                  value={f.product_weights}
-                  onChange={set("product_weights")}
-                  placeholder={"نام محصول=وزن (هر خط یکی):\nساید ال جی X24=8\nیخچال دوو=3"}
-                />
-                <p className="text-xs text-slate-500 mt-1">وزن (اهمیت): هرچه بیشتر، در گروه‌های بیشتری و با تکرار بیشتری تبلیغ می‌شود. پیش‌فرض ۱.</p>
-              </div>
+
+            {/* V15 Item 4 — per-group variation only makes sense for GROUP sends */}
+            {f.campaign_scope === "group" && (
+              <>
+                <div>
+                  <label className="label">تنوع محصولات بین گروه‌ها</label>
+                  <select className="input" value={f.product_variation_mode} onChange={set("product_variation_mode")}>
+                    <option value="same">یکسان برای همه</option>
+                    <option value="per_group_random">تصادفی برای هر گروه</option>
+                    <option value="rotate">چرخشی</option>
+                  </select>
+                  <p className="text-xs text-slate-500 mt-1">تنوع بین گروه‌ها باعث می‌شود پیام‌ها شبیه هم نباشند (کاهش ریسک شناسایی توسط متا).</p>
+                </div>
+                {f.product_variation_mode !== "same" && (
+                  <div>
+                    <label className="label">تعداد محصول در هر گروه</label>
+                    <input
+                      type="number"
+                      className="input"
+                      min={1}
+                      max={10}
+                      value={f.products_per_group}
+                      onChange={set("products_per_group")}
+                    />
+                  </div>
+                )}
+                {f.product_variation_mode === "per_group_random" && (
+                  <div>
+                    <label className="label">وزن محصولات (اختیاری)</label>
+                    <textarea
+                      className="input h-20"
+                      value={f.product_weights}
+                      onChange={set("product_weights")}
+                      placeholder={"نام محصول=وزن (هر خط یکی):\nساید ال جی X24=8\nیخچال دوو=3"}
+                    />
+                    <p className="text-xs text-slate-500 mt-1">وزن (اهمیت): هرچه بیشتر، در گروه‌های بیشتری و با تکرار بیشتری تبلیغ می‌شود. پیش‌فرض ۱.</p>
+                  </div>
+                )}
+              </>
             )}
 
             <div>
@@ -1225,8 +1227,19 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
             <input type="checkbox" checked={f.parallel_accounts} onChange={set("parallel_accounts")} />
             ارسال موازی با چند حساب
           </label>
-          {f.parallel_accounts && (
+          {f.parallel_accounts ? (
             <p className="text-xs text-sky-300">💡 مخاطبین به‌صورت مساوی بین حساب‌های فعال تقسیم می‌شوند</p>
+          ) : (
+            /* V15 Item 11 — choose which account sends when parallel is off */
+            <div className="mt-2">
+              <label className="label">ارسال با شماره:</label>
+              <select className="input" value={f.selected_account_id} onChange={set("selected_account_id")}>
+                <option value="">پیش‌فرض (چرخش بین حساب‌های فعال)</option>
+                {activeAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}{a.phone ? ` (${a.phone})` : ""}{a.is_default ? " ⭐" : ""}</option>
+                ))}
+              </select>
+            </div>
           )}
         </div>
 
@@ -1275,6 +1288,27 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
               ))}
             </div>
           )}
+        </div>
+
+        {/* V15 Item 5 — preview at the BOTTOM, right above the send button */}
+        <div className="border-t border-slate-700 pt-3">
+          <div className="flex items-center gap-2">
+            <button type="button" className="btn-secondary text-sm" disabled={previewing} onClick={doPreview}>
+              {previewing ? "در حال ساخت..." : "👁 پیش‌نمایش پیام"}
+            </button>
+            {preview !== null && (
+              <button type="button" className="btn-secondary text-xs" disabled={previewing} onClick={doPreview}>🔄 به‌روزرسانی</button>
+            )}
+          </div>
+          {preview !== null && (
+            <div className="mt-2 flex justify-end" dir="rtl">
+              <div className="max-w-sm rounded-2xl rounded-tr-sm bg-emerald-700/90 text-white p-3 text-sm leading-relaxed shadow break-words">
+                {preview ? <WhatsAppText text={preview} /> : <span className="text-white/70">—</span>}
+                <div className="text-[10px] text-white/60 text-left mt-1">پیش‌نمایش ✓✓</div>
+              </div>
+            </div>
+          )}
+          <p className="text-xs text-slate-500 mt-1">پیش‌نمایش دقیقاً از همان مسیر ساخت پیام واقعی تولید می‌شود (نمونه مخاطب: اولین مخاطب یا «دوست»).</p>
         </div>
 
         <button className="btn-primary w-full" disabled={saving} onClick={submit}>

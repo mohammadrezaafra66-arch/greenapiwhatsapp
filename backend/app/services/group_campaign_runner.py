@@ -87,7 +87,7 @@ async def run_group_campaign(campaign_id: str):
             try:
                 if campaign.use_gpt and settings.openai_api_key:
                     message = await generate_message(
-                        first_name="گروه",
+                        first_name="",
                         last_name="",
                         gpt_prompt=campaign.gpt_prompt or "یک پیام تبلیغاتی مختصر بنویس",
                         products=group_products,
@@ -98,6 +98,9 @@ async def run_group_campaign(campaign_id: str):
                         include_opt_out=campaign.include_opt_out,
                         opt_out_text=campaign.opt_out_text,
                         use_rich_formatting=getattr(campaign, "use_rich_formatting", False),
+                        # V15 Items 7/17/18 — group message: no group/individual name in the greeting.
+                        is_group=True,
+                        product_detail_level=getattr(campaign, "product_detail_level", "medium"),
                     )
                 else:
                     # Template path — still honor opening + opt-out toggles.

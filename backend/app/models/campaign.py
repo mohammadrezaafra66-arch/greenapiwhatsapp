@@ -103,6 +103,9 @@ class Campaign(Base):
     buttons_config: Mapped[list | None] = mapped_column(JSONB)  # [{type,buttonId,buttonText,...}]
     button_header: Mapped[str | None] = mapped_column(Text)
     button_footer: Mapped[str | None] = mapped_column(Text)
+    # V15 — product detail level (Item 8) + chosen account when parallel is off (Item 11)
+    product_detail_level: Mapped[str] = mapped_column(String(20), default="medium")  # minimal|medium|detailed
+    selected_account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 

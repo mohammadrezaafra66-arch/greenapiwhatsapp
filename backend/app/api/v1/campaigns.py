@@ -76,6 +76,9 @@ class CampaignCreateBody(BaseModel):
     buttons_config: list[dict] | None = None
     button_header: str | None = None
     button_footer: str | None = None
+    # V15 — product detail level (Item 8) + chosen account when parallel off (Item 11)
+    product_detail_level: str = "medium"
+    selected_account_id: str | None = None
 
 
 class TestBody(BaseModel):
@@ -249,6 +252,8 @@ async def update_campaign(campaign_id: str, body: CampaignCreateBody, db: AsyncS
     c.buttons_config = body.buttons_config or None
     c.button_header = body.button_header
     c.button_footer = body.button_footer
+    c.product_detail_level = body.product_detail_level or "medium"
+    c.selected_account_id = uuid.UUID(body.selected_account_id) if body.selected_account_id else None
     await db.commit()
     return {"id": campaign_id, "updated": True}
 
@@ -371,6 +376,8 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         buttons_config=body.buttons_config or None,
         button_header=body.button_header,
         button_footer=body.button_footer,
+        product_detail_level=body.product_detail_level or "medium",
+        selected_account_id=uuid.UUID(body.selected_account_id) if body.selected_account_id else None,
     )
     db.add(campaign)
     await db.commit()

@@ -599,6 +599,16 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V14 partF] {e}")
+        # V15 — campaign UX (product detail level, chosen account when parallel off).
+        ddl_v15 = [
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS product_detail_level varchar(20) DEFAULT 'medium'",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS selected_account_id uuid",
+        ]
+        for stmt in ddl_v15:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V15] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:

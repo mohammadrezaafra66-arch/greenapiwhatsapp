@@ -41,6 +41,9 @@ async def build_message_text(campaign, contact, products, effective_gpt_prompt,
             include_opt_out=campaign.include_opt_out,
             opt_out_text=campaign.opt_out_text,
             use_rich_formatting=getattr(campaign, "use_rich_formatting", False),
+            # V15 — group flag (Items 7/17/18) + product detail level (Item 8).
+            is_group=(getattr(campaign, "campaign_scope", "pv") == "group"),
+            product_detail_level=getattr(campaign, "product_detail_level", "medium"),
         )
     else:
         message = (effective_template or "سلام {{first_name}} جان!")
@@ -51,6 +54,10 @@ async def build_message_text(campaign, contact, products, effective_gpt_prompt,
         message = message.replace("{خانوادگی}", contact.last_name or "")
         message = message.replace("{شهر}", getattr(contact, "city", "") or "")
         message = message.replace("{استان}", getattr(contact, "province", "") or "")
+        # V15 Item 18 — an empty {{name}} leaves a double space (e.g. «سلام  جان»); collapse it.
+        while "  " in message:
+            message = message.replace("  ", " ")
+        message = "\n".join(l.rstrip() for l in message.split("\n"))
         # Honor opening + opt-out toggles on template messages too.
         message = _apply_opening(message, opening_mode, opening_line)
         message = _apply_opt_out(message, campaign.include_opt_out, campaign.opt_out_text)
@@ -271,6 +278,12 @@ async def _run_campaign_inner(campaign_id: str):
         # V14 F23 — never send from an account resting in a yellowCard cooldown.
         from app.services import governors
         accounts = [a for a in accounts if not governors.in_cooldown(a)]
+        # V15 Item 11 — when parallel is OFF and a specific account was chosen, send only
+        # from that account (fall back to all if it's currently unavailable, to never block).
+        if not getattr(campaign, "parallel_accounts", False) and getattr(campaign, "selected_account_id", None):
+            chosen = [a for a in accounts if a.id == campaign.selected_account_id]
+            if chosen:
+                accounts = chosen
         if not accounts:
             # No connected account to send with → auto-pause with a clear reason.
             campaign.status = CampaignStatus.paused

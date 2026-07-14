@@ -32,11 +32,23 @@ POOL_MAX_ATTEMPTS = 6  # try up to this many different keys before giving up
 SYSTEM_PROMPT = """
 تو یک دستیار فروش افراکالا هستی که پیام‌های واتس‌اپ کوتاه، صمیمی و حرفه‌ای فارسی می‌نویسی.
 قوانین:
-- پیام منحصربه‌فرد، شخصی، و با اسم مشتری
+- پیام منحصربه‌فرد و شخصی
 - لحن صمیمی اما حرفه‌ای
 - حداکثر ۳ پاراگراف کوتاه
 - بدون کلمات اضافه مثل "خلاصه" یا "در نتیجه"
 """
+
+# V15 Item 9 — always format products as a clean one-per-line list.
+_PRODUCT_FORMAT_RULE = (
+    "- محصولات را به صورت لیست مرتب بنویس، هر محصول در یک خط جداگانه با علامت ✅ ابتدای خط. "
+    "مثال:\n✅ یونیوا ۱۸۰۰۰ اینورتر — ۷۶,۹۰۰,۰۰۰ تومان\n✅ اسپلیت بوش ۲۴۰۰۰ — ۸۹,۵۰۰,۰۰۰ تومان"
+)
+# V15 Item 8 — product-detail level.
+_DETAIL_RULES = {
+    "minimal": "- برای هر محصول فقط نام و قیمت را بنویس. هیچ توضیح اضافی ننویس.",
+    "medium": "- برای هر محصول نام، قیمت و حداکثر ۲ مشخصه مهم (مثل ظرفیت، نوع) را بنویس. کوتاه باش.",
+    "detailed": "",  # current behavior — no extra restriction
+}
 
 # Default unsubscribe line (opt-out). Kept configurable per campaign.
 DEFAULT_OPT_OUT = "برای لغو عدد ۱۱ ارسال کنید"
@@ -287,24 +299,27 @@ async def _chat(system: str, user: str, max_tokens: int, temperature: float) -> 
 
 
 def _fallback_message(first_name: str, products=None, show_prices: bool = True,
-                      opening_mode: str = "ai", opening_line: str | None = None) -> str:
+                      opening_mode: str = "ai", opening_line: str | None = None,
+                      is_group: bool = False) -> str:
     """Template used when every AI provider fails. Greeting honors opening_mode;
     the opt-out line is added afterwards by _apply_opt_out (not here)."""
-    name = (first_name or "").strip() or "دوست عزیز"
+    # V15 Item 18 — no individual name for groups or nameless contacts (no «دوست عزیز»).
+    name = "" if is_group else (first_name or "").strip()
     lines = []
     if opening_mode in ("fixed", "random") and opening_line:
         lines.append(opening_line.strip())
     elif opening_mode != "none":
-        lines.append(f"سلام {name} جان! 🌟")
+        lines.append(f"سلام {name} جان! 🌟" if name else "سلام! 🌟")
     lines.append("از افراکالا با پیشنهادهای ویژه در خدمت شما هستیم.")
     if products:
         lines.append("")
         for prod in products[:3]:
+            # V15 Item 9 — clean ✅ list, one product per line.
             if show_prices:
                 price = f"{prod['price']:,} تومان" if prod.get("price") else "تماس بگیرید"
-                lines.append(f"• {prod['name']}: {price}")
+                lines.append(f"✅ {prod['name']} — {price}")
             else:
-                lines.append(f"• {prod['name']}")
+                lines.append(f"✅ {prod['name']}")
     return "\n".join(lines)
 
 
@@ -320,7 +335,8 @@ async def generate_message(first_name: str, last_name: str, gpt_prompt: str,
                            products: list[dict] = None, emoji_level: str = "medium",
                            show_prices: bool = True, opening_mode: str = "ai",
                            opening_line: str | None = None, include_opt_out: bool = True,
-                           opt_out_text: str | None = None, use_rich_formatting: bool = False) -> str:
+                           opt_out_text: str | None = None, use_rich_formatting: bool = False,
+                           is_group: bool = False, product_detail_level: str = "detailed") -> str:
     products_text = ""
     if products:
         products_text = "\n\nمحصولات امروز افراکالا:\n"
@@ -333,14 +349,33 @@ async def generate_message(first_name: str, last_name: str, gpt_prompt: str,
         if not show_prices:
             products_text += "(قیمت‌ها را در پیام درج نکن)\n"
 
-    user_msg = f"اسم مشتری: {first_name} {last_name}\n{gpt_prompt}{products_text}\nپیام واتس‌اپ فارسی بنویس:"
+    # V15 Item 18 — name only for a PV send that actually HAS a name; never for groups.
+    has_name = (not is_group) and bool((first_name or "").strip())
+    name_line = f"اسم مشتری: {first_name} {last_name}\n" if has_name else ""
+    user_msg = f"{name_line}{gpt_prompt}{products_text}\nپیام واتس‌اپ فارسی بنویس:"
 
     # Build dynamic rules for opening line + opt-out (Phases 2 & 5).
     extra_rules = []
+    # V15 Items 7/17/18 — greeting/name rules.
+    if is_group and opening_mode == "ai":
+        extra_rules.append(
+            "- این پیام برای یک گروه است. هرگز نام گروه را در سلام یا ابتدای پیام ننویس. "
+            "هرگز «سلام به گروه» یا «سلام به اعضای گروه» ننویس و از هیچ نام فردی استفاده نکن. "
+            "فقط یک سلام عمومی کوتاه بنویس مثل «سلام» یا «سلام و درود» یا مستقیم با پیشنهاد شروع کن.")
+    elif has_name:
+        extra_rules.append("- پیام را با نام مخاطب شخصی کن (مثلاً «سلام محمد»).")
+    elif opening_mode == "ai":
+        extra_rules.append("- اگر نام مخاطب مشخص نیست، فقط «سلام» بنویس بدون هیچ صفت یا کلمه اضافی مثل عزیز یا دوست.")
     if opening_mode in ("fixed", "random") and opening_line:
         extra_rules.append(f"- پیام را دقیقاً با این عبارت شروع کن: «{opening_line.strip()}»")
     elif opening_mode == "none":
         extra_rules.append("- پیام را بدون هیچ سلام و احوال‌پرسی شروع کن و مستقیم به پیشنهاد برو")
+    # V15 Items 8/9 — product detail level + clean list formatting.
+    if products:
+        extra_rules.append(_PRODUCT_FORMAT_RULE)
+        detail_rule = _DETAIL_RULES.get(product_detail_level or "detailed", "")
+        if detail_rule:
+            extra_rules.append(detail_rule)
     opt_text = (opt_out_text or DEFAULT_OPT_OUT).strip()
     if include_opt_out:
         extra_rules.append(f"- در پایان پیام دقیقاً این عبارت را قرار بده: «{opt_text}»")
@@ -381,7 +416,7 @@ async def generate_message(first_name: str, last_name: str, gpt_prompt: str,
             text = _strip_call_lines(text) + _price_list_text(products)
 
     if not text:
-        text = _fallback_message(first_name, products, show_prices, opening_mode, opening_line)
+        text = _fallback_message(first_name, products, show_prices, opening_mode, opening_line, is_group)
     # Deterministic post-processing so the settings hold even if the model drifts
     # or the template fallback was used.
     text = _apply_opening(text, opening_mode, opening_line)
