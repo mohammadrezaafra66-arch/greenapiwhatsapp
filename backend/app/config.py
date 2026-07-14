@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     deepseek_api_key: str = ""
     pricing_cache_minutes: int = 5
+    # V16 PART 4 — send-path price cache TTL (seconds). Short so a mid-campaign price
+    # change is reflected within a minute (per-message fetch + ≤60s cache).
+    price_cache_seconds: int = 60
     # Supabase REST API — primary source for product names + computed prices.
     # Self-hosted Supabase (Kong gateway) on the local network.
     # NOTE: the anon key is a secret — set SUPABASE_ANON_KEY in .env (not committed).

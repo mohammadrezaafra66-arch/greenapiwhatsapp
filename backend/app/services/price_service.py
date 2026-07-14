@@ -147,13 +147,11 @@ async def get_products(count: int = 3, category_filter: str | None = None) -> li
             price = price_map.get(str(item.get("id")))
             products.append({"name": name, "price": price})
 
-        # Cache the unfiltered result for configured minutes
+        # V16 PART 4 — cache for a SHORT TTL (≤60s) so per-message fetches during a
+        # campaign reflect a mid-campaign price change within a minute.
         if not category_filter:
-            await redis_client.setex(
-                CACHE_KEY,
-                settings.pricing_cache_minutes * 60,
-                json.dumps(products, ensure_ascii=False),
-            )
+            ttl = max(5, min(int(settings.price_cache_seconds or 60), 60))
+            await redis_client.setex(CACHE_KEY, ttl, json.dumps(products, ensure_ascii=False))
         return products[:count]
 
     except Exception as e:
