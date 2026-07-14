@@ -404,6 +404,11 @@ export const MessagesApi = {
   disappearing: (body) => http.post("/messages/disappearing", body).then((r) => r.data),
 };
 
+// ── Capability registry (V14 PART G) ───────────────────────
+export const CapabilitiesApi = {
+  get: () => http.get("/capabilities/").then((r) => r.data),
+};
+
 // ── Safety incidents + protection (V14 F23) ────────────────
 export const IncidentsApi = {
   list: (unresolved = false) => http.get("/incidents/", { params: unresolved ? { unresolved: true } : {} }).then((r) => r.data),

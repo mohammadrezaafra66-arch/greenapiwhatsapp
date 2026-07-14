@@ -21,6 +21,7 @@ from app.api.v1 import (
     contact_groups, wa_collections, reporting as reporting_router,
     join_links, status_schedules, ai_keys,
     partner, messages, incidents, calls,
+    capabilities as capabilities_router,
 )
 
 @asynccontextmanager
@@ -641,6 +642,7 @@ for router in [
     contact_groups.router, wa_collections.router, reporting_router.router,
     join_links.router, status_schedules.router, ai_keys.router,
     partner.router, messages.router, incidents.router, calls.router,
+    capabilities_router.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

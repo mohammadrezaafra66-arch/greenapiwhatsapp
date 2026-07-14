@@ -190,6 +190,47 @@ def task_reply_rate_monitor():
     run_async(_run())
 
 
+@celery_app.task(name="tasks.recheck_method_support")
+def task_recheck_method_support():
+    """V14 PART G — weekly re-probe of ONLY the safe, read-only methods (never the
+    destructive ones), so newly-enabled plan entitlements get picked up automatically."""
+    SAFE_METHODS = [
+        ("getSettings", "get"), ("getStateInstance", "get"), ("getWaSettings", "get"),
+        ("getContacts", "get"), ("getMessagesCount", "get"), ("showMessagesQueue", "get"),
+        ("getWebhooksBufferCount", "get"), ("lastIncomingMessages", "get"),
+        ("lastOutgoingMessages", "get"), ("getOutgoingStatuses", "get"),
+        ("getIncomingStatuses", "get"), ("lastIncomingCalls", "get"), ("lastOutgoingCalls", "get"),
+    ]
+    async def _run():
+        import httpx
+        from sqlalchemy import select
+        from app.database import AsyncSessionLocal
+        from app.models.account import Account, AccountStatus
+        from app.services.capabilities import record_support
+        from app.services import green_partner
+        async with AsyncSessionLocal() as db:
+            acc = (await db.execute(select(Account).where(Account.status == AccountStatus.active))).scalars().first()
+            if acc:
+                base = f"https://api.green-api.com/waInstance{acc.instance_id}"
+                for method, _verb in SAFE_METHODS:
+                    params = {"minutes": 60} if method.startswith("last") or method.startswith("get") and "Statuses" in method else None
+                    try:
+                        async with httpx.AsyncClient(timeout=20) as c:
+                            r = await c.get(f"{base}/{method}/{acc.api_token}", params=params)
+                        supported = True if 200 <= r.status_code < 300 else (False if r.status_code == 403 else None)
+                        await record_support(db, method, supported, r.status_code)
+                    except Exception:
+                        continue
+            # Partner getInstances (safe, read-only).
+            if green_partner.is_configured():
+                try:
+                    await green_partner.get_instances()
+                    await record_support(db, "getInstances", True, 200)
+                except Exception:
+                    pass
+    run_async(_run())
+
+
 @celery_app.task(name="tasks.sync_partner_instances")
 def task_sync_partner_instances():
     """V14 F3 — reconcile local accounts with the Green API Partner list every 6h.

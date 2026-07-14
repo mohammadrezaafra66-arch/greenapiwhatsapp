@@ -53,4 +53,6 @@ celery_app.conf.beat_schedule = {
     "sync-call-logs": {"task": "tasks.sync_call_logs", "schedule": 1800.0},
     # V14 F23.6 — reply-rate monitor hourly.
     "reply-rate-monitor": {"task": "tasks.reply_rate_monitor", "schedule": 3600.0},
+    # V14 PART G — weekly re-probe of safe read-only methods (604800s = 7 days).
+    "recheck-method-support": {"task": "tasks.recheck_method_support", "schedule": 604800.0},
 }
