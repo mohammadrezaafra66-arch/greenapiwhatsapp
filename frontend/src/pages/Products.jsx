@@ -5,6 +5,7 @@ import { Spinner, Empty } from "../ui.jsx";
 export default function Products() {
   const [data, setData] = React.useState(null); // brand-grouped array
   const [mentions, setMentions] = React.useState([]);
+  const [supa, setSupa] = React.useState(null); // V16 PART 1 — connectivity state
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
   const [search, setSearch] = React.useState("");
@@ -13,10 +14,15 @@ export default function Products() {
 
   const load = React.useCallback(async () => {
     try {
-      const [p, m] = await Promise.all([Api.list(), ReportingApi.productMentions()]);
+      const [p, m, s] = await Promise.all([
+        Api.list(),
+        ReportingApi.productMentions(),
+        Api.supabaseStatus().catch(() => null),
+      ]);
       const groups = p || [];
       setData(groups);
       setMentions(m || []);
+      setSupa(s);
       setError(null);
       // Auto-expand the first brand after the initial load.
       if (firstLoadRef.current && groups.length > 0) {
@@ -89,9 +95,18 @@ export default function Products() {
         </div>
       )}
 
+      {/* V16 PART 1 — three distinct states: loading / disconnected / connected-but-empty */}
       {loading && !data && <Spinner />}
       {error && <div className="card text-red-400">{error}</div>}
-      {data && data.length === 0 && !loading && <Empty label="محصولی یافت نشد" />}
+      {supa && supa.status === "disconnected" && (
+        <div className="card border-amber-500/50 bg-amber-500/10 text-amber-200 text-sm">
+          ⚠️ اتصال به Supabase برقرار نیست — لپ‌تاپ Supabase (۱۹۲.۱۶۸.۱۷۰.۱۰) را روشن کنید یا آدرس آن را بررسی کنید.
+          <div className="text-xs text-amber-300/80 mt-1">{supa?.rest_products?.detail || supa?.tcp?.detail || ""}</div>
+        </div>
+      )}
+      {data && data.length === 0 && !loading && (!supa || supa.status !== "disconnected") && (
+        <Empty label="محصولی یافت نشد" />
+      )}
       {data && data.length > 0 && filtered.length === 0 && (
         <Empty label="محصولی یافت نشد" />
       )}

@@ -354,6 +354,7 @@ export const AIKeysApi = {
 // ── Products & Labels ──────────────────────────────────────
 export const ProductsApi = {
   list: () => http.get("/reporting/products").then((r) => r.data),
+  supabaseStatus: () => http.get("/reporting/supabase-status").then((r) => r.data),
 };
 export const LabelsApi = {
   list: () => http.get("/reporting/product-labels").then((r) => r.data),

@@ -259,6 +259,14 @@ async def best_hours(days: int = 30, db: AsyncSession = Depends(get_db)):
 
 
 # ── Products (for the Products page) ───────────────────────
+@router.get("/supabase-status")
+async def supabase_status():
+    """V16 PART 1 — connectivity diagnostic so the catalog UI can distinguish
+    'connected/empty' from 'disconnected' instead of always showing «محصولی یافت نشد»."""
+    from app.services.supabase_health import check_supabase
+    return await check_supabase()
+
+
 @router.get("/products")
 async def get_products_by_brand():
     """Products grouped by brand, sorted cheap→expensive within each brand (Feature 43).
