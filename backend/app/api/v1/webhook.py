@@ -139,6 +139,19 @@ async def handle_incoming(instance_id: str, payload: dict):
         )
         db.add(msg)
 
+        # V14 F9 — confirm an edit of one of OUR sent messages: mark the campaign
+        # contact is_edited (the editedMessage webhook carries the original stanzaId).
+        if is_edited and original_message_id:
+            _cc_edit = (await db.execute(
+                select(CampaignContact).where(
+                    CampaignContact.green_api_message_id == original_message_id)
+            )).scalar_one_or_none()
+            if _cc_edit:
+                _cc_edit.is_edited = True
+                _cc_edit.edited_at = datetime.utcnow()
+                if edited_text:
+                    _cc_edit.generated_message = edited_text
+
         # Update account received count
         acc_result = await db.execute(select(Account).where(Account.instance_id == instance_id))
         account = acc_result.scalar_one_or_none()
@@ -268,6 +281,12 @@ async def handle_outgoing_status(instance_id: str, payload: dict):
         cc = result.scalar_one_or_none()
         if cc:
             cc.delivery_status = status
+            # V14 F9 — a silent edit failure (Green API returned 200 but WhatsApp
+            # rejected it) arrives here as status=failed with a descriptive reason.
+            if status == "failed":
+                desc = payload.get("description") or payload.get("sendByApi") or ""
+                if desc:
+                    cc.error_message = str(desc)[:500]
             from app.models.campaign import Campaign
             campaign = await db.get(Campaign, cc.campaign_id)
             if campaign:

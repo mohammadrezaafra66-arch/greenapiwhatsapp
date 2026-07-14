@@ -284,6 +284,32 @@ class GreenAPIClient:
         })
         return r.get("idMessage")
 
+    # ── V14 PART C — message control (raw chatId) ──────────────────────────────
+    async def edit_message_raw(self, chat: str, message_id: str, new_text: str) -> dict:
+        """FEATURE 9 — editMessage. ⚠️ Green API returns HTTP 200 even when the edit
+        silently fails (>15 min / not API-sent); confirm via the editedMessage /
+        outgoingMessageStatus webhooks. Returns the raw response."""
+        return await self._post("editMessage", {
+            "chatId": self._as_chat_id(chat),
+            "idMessage": message_id,
+            "message": new_text,
+        })
+
+    async def delete_message_raw(self, chat: str, message_id: str, only_sender: bool = False) -> dict:
+        """FEATURE 10 — deleteMessage. only_sender=True deletes on our side only.
+        ⚠️ HTTP 200 does not guarantee success; confirm via the deletedMessage webhook."""
+        body = {"chatId": self._as_chat_id(chat), "idMessage": message_id}
+        if only_sender:
+            body["onlySenderDelete"] = True
+        return await self._post("deleteMessage", body)
+
+    async def read_chat(self, chat: str, message_id: str | None = None) -> dict:
+        """FEATURE 21 — readChat (idMessage optional)."""
+        body = {"chatId": self._as_chat_id(chat)}
+        if message_id:
+            body["idMessage"] = message_id
+        return await self._post("readChat", body)
+
     # ── STATUSES ─────────────────────────────────────────
     async def send_status_text(self, text: str, bg_color: str = "#FFFFFF") -> Optional[str]:
         r = await self._post("sendTextStatus", {"message": text, "backgroundColor": bg_color, "font": "SANS_SERIF"})

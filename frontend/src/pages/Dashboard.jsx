@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Dashboard as DashApi, Inbox as InboxApi, AiApi } from "../api.js";
+import { Dashboard as DashApi, Inbox as InboxApi, AiApi, QueueApi } from "../api.js";
 import { Spinner } from "../ui.jsx";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -134,6 +134,15 @@ export default function Dashboard() {
     return () => clearInterval(t);
   }, [load]);
 
+  // V14 F20 — send-queue banner (poll every 15s)
+  const [queueTotal, setQueueTotal] = React.useState(0);
+  React.useEffect(() => {
+    const q = () => QueueApi.summary().then((r) => setQueueTotal(r.total || 0)).catch(() => {});
+    q();
+    const t = setInterval(q, 15000);
+    return () => clearInterval(t);
+  }, []);
+
   // AI usage polls on a slower 30s cadence
   const loadAi = React.useCallback(async () => {
     try {
@@ -241,6 +250,11 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {queueTotal > 0 && (
+        <Link to="/send-queue" className="block card border-amber-500/50 bg-amber-500/10 text-amber-200 text-sm hover:bg-amber-500/20">
+          ⏳ {fa(queueTotal)} پیام در صف ارسال — مشاهده صف
+        </Link>
+      )}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-2xl font-bold">داشبورد زنده</h2>
         <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">

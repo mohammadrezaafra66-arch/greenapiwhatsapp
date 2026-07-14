@@ -70,6 +70,8 @@ export const Campaigns = {
   abResults: (id) => http.get(`/campaigns/${id}/ab-results`).then((r) => r.data),
   roi: (id) => http.get(`/campaigns/${id}/roi`).then((r) => r.data),
   setOutcome: (id, ccId, body) => http.put(`/campaigns/${id}/contacts/${ccId}/outcome`, body).then((r) => r.data),
+  recall: (id) => http.post(`/campaigns/${id}/recall`).then((r) => r.data),
+  recallProgress: (id) => http.get(`/campaigns/${id}/recall-progress`).then((r) => r.data),
   remove: (id) => http.delete(`/campaigns/${id}`).then((r) => r.data),
 };
 
@@ -362,6 +364,18 @@ export const MessagesApi = {
   // stats
   campaignButtonReplies: (id) => http.get(`/messages/campaign/${id}/button-replies`).then((r) => r.data),
   reactions: (chatId) => http.get("/messages/reactions", { params: chatId ? { chat_id: chatId } : {} }).then((r) => r.data),
+  // V14 PART C — message control
+  edit: (body) => http.post("/messages/edit", body).then((r) => r.data),
+  del: (body) => http.post("/messages/delete", body).then((r) => r.data),
+  read: (body) => http.post("/messages/read", body).then((r) => r.data),
+  readAll: (body) => http.post("/messages/read-all", body).then((r) => r.data),
+};
+
+// ── Send queue (V14 F20) ───────────────────────────────────
+export const QueueApi = {
+  summary: () => http.get("/queue/summary").then((r) => r.data),
+  get: (accountId) => http.get(`/queue/${accountId}`).then((r) => r.data),
+  clear: (accountId) => http.delete(`/queue/${accountId}`).then((r) => r.data),
 };
 
 // ── Blacklist ──────────────────────────────────────────

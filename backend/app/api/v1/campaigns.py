@@ -253,6 +253,46 @@ async def update_campaign(campaign_id: str, body: CampaignCreateBody, db: AsyncS
     return {"id": campaign_id, "updated": True}
 
 
+@router.post("/{campaign_id}/recall")
+async def recall_campaign_endpoint(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    """V14 F10 — delete every message this campaign sent (background, 10/sec).
+    Group campaigns are not supported (the per-contact chat differs from the group)."""
+    c = await db.get(Campaign, uuid.UUID(campaign_id))
+    if not c:
+        raise HTTPException(404, "Campaign not found")
+    if (c.campaign_scope or "pv") == "group":
+        raise HTTPException(400, "فراخوانی برای کمپین‌های گروهی پشتیبانی نمی‌شود")
+    total = (await db.execute(
+        select(func.count()).select_from(CampaignContact).where(
+            CampaignContact.campaign_id == c.id,
+            CampaignContact.green_api_message_id.isnot(None),
+        )
+    )).scalar() or 0
+    if total == 0:
+        raise HTTPException(400, "پیامی برای حذف یافت نشد")
+    from app.workers.tasks import task_recall_campaign
+    task_recall_campaign.delay(campaign_id)
+    return {"started": True, "total": total}
+
+
+@router.get("/{campaign_id}/recall-progress")
+async def recall_progress(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    cid = uuid.UUID(campaign_id)
+    total = (await db.execute(
+        select(func.count()).select_from(CampaignContact).where(
+            CampaignContact.campaign_id == cid,
+            CampaignContact.green_api_message_id.isnot(None),
+        )
+    )).scalar() or 0
+    recalled = (await db.execute(
+        select(func.count()).select_from(CampaignContact).where(
+            CampaignContact.campaign_id == cid,
+            CampaignContact.recalled.is_(True),
+        )
+    )).scalar() or 0
+    return {"total": total, "recalled": recalled, "done": recalled >= total}
+
+
 @router.post("/{campaign_id}/toggle-active")
 async def toggle_campaign_active(campaign_id: str, db: AsyncSession = Depends(get_db)):
     c = await db.get(Campaign, uuid.UUID(campaign_id))

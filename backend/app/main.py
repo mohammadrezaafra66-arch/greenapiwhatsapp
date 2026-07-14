@@ -519,6 +519,17 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V14 partB] {e}")
+        # V14 PART C — message control (edit/delete/recall).
+        ddl_v14_partc = [
+            "ALTER TABLE campaign_contacts ADD COLUMN IF NOT EXISTS is_edited boolean DEFAULT false",
+            "ALTER TABLE campaign_contacts ADD COLUMN IF NOT EXISTS edited_at timestamp",
+            "ALTER TABLE campaign_contacts ADD COLUMN IF NOT EXISTS recalled boolean DEFAULT false",
+        ]
+        for stmt in ddl_v14_partc:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V14 partC] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:

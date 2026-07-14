@@ -40,6 +40,13 @@ def task_send_night_report():
     from app.services.night_report import send_night_report
     run_async(send_night_report())
 
+@celery_app.task(name="tasks.recall_campaign")
+def task_recall_campaign(campaign_id: str):
+    """V14 F10 — delete every message a campaign sent (10/sec), in the background."""
+    from app.services.recall import recall_campaign
+    run_async(recall_campaign(campaign_id))
+
+
 @celery_app.task(name="tasks.sync_partner_instances")
 def task_sync_partner_instances():
     """V14 F3 — reconcile local accounts with the Green API Partner list every 6h.

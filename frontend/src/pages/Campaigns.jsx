@@ -57,6 +57,7 @@ export default function Campaigns() {
   };
 
   const [roi, setRoi] = React.useState(null);
+  const [recall, setRecall] = React.useState(null);
   const openRoi = async (c) => {
     try {
       const d = await Api.roi(c.id);
@@ -125,6 +126,9 @@ export default function Campaigns() {
                 <button className="btn-secondary" onClick={() => act(() => Api.toggleActive(c.id))}>
                   {c.is_active ? "⏸️ غیرفعال" : "▶️ فعال"}
                 </button>
+                {(c.campaign_scope || "pv") !== "group" && (
+                  <button className="btn-danger text-xs" title="حذف تمام پیام‌های ارسال‌شده این کمپین" onClick={() => setRecall(c)}>↩️ فراخوانی پیام‌ها</button>
+                )}
                 <button className="btn-danger" onClick={async () => { if (await confirmDialog("این گروه پیام حذف شود؟")) act(() => Api.remove(c.id)); }}>حذف</button>
               </div>
             </div>
@@ -153,6 +157,7 @@ export default function Campaigns() {
       {test && <TestModal campaign={test} onClose={() => setTest(null)} />}
       {analytics && <AnalyticsModal data={analytics} onClose={() => setAnalytics(null)} />}
       {roi && <RoiModal roi={roi} onClose={() => setRoi(null)} onChanged={() => openRoi({ id: roi.campaignId, name: roi.name })} />}
+      {recall && <RecallModal campaign={recall} onClose={() => setRecall(null)} />}
     </div>
   );
 }
@@ -1315,6 +1320,66 @@ function TestModal({ campaign, onClose }) {
         <button className="btn-primary w-full" disabled={sending} onClick={send}>
           {sending ? "در حال ارسال..." : "ارسال تست"}
         </button>
+      </div>
+    </Modal>
+  );
+}
+
+// FEATURE 10 — campaign recall: typed-confirm + live progress.
+function RecallModal({ campaign, onClose }) {
+  const [typed, setTyped] = React.useState("");
+  const [running, setRunning] = React.useState(false);
+  const [prog, setProg] = React.useState(null);
+  const armed = typed.trim() === campaign.name.trim();
+
+  React.useEffect(() => {
+    if (!running) return;
+    const t = setInterval(async () => {
+      try {
+        const p = await Api.recallProgress(campaign.id);
+        setProg(p);
+        if (p.done) { clearInterval(t); }
+      } catch { /* ignore */ }
+    }, 1500);
+    return () => clearInterval(t);
+  }, [running, campaign.id]);
+
+  async function start() {
+    if (!armed) return toast.error("برای تأیید، نام دقیق کمپین را تایپ کنید");
+    try {
+      const r = await Api.recall(campaign.id);
+      setRunning(true);
+      setProg({ total: r.total, recalled: 0, done: false });
+      toast.info("حذف پیام‌ها آغاز شد…");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    }
+  }
+
+  return (
+    <Modal title={`فراخوانی پیام‌های «${campaign.name}»`} onClose={onClose}>
+      <div className="space-y-3 text-sm">
+        <p className="text-red-300">
+          ⚠️ این کار تمام پیام‌های این کمپین را برای همه گیرندگان حذف می‌کند. پیام‌هایی که از مهلت حذف واتساپ گذشته باشند حذف نخواهند شد. این عمل برگشت‌ناپذیر است.
+        </p>
+        {!running ? (
+          <>
+            <label className="label">برای تأیید، نام کمپین را تایپ کنید: <b>{campaign.name}</b></label>
+            <input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} />
+            <button className="btn-danger w-full" disabled={!armed} onClick={start}>↩️ حذف همه پیام‌های این کمپین</button>
+          </>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-slate-300">
+              حذف شد: {fa(prog?.recalled ?? 0)} از {fa(prog?.total ?? 0)}
+            </p>
+            <div className="w-full bg-slate-700 rounded-full h-2">
+              <div className="bg-red-500 h-2 rounded-full" style={{ width: `${prog?.total ? Math.round((prog.recalled / prog.total) * 100) : 0}%` }} />
+            </div>
+            {prog?.done && <p className="text-emerald-300">✅ فراخوانی کامل شد.</p>}
+            <button className="btn-secondary w-full" onClick={onClose}>بستن</button>
+          </div>
+        )}
       </div>
     </Modal>
   );

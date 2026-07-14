@@ -8,6 +8,7 @@ const NAV = [
       { to: "/campaigns", label: "گروه‌های پیام" },
       { to: "/contact-groups", label: "گروه مخاطبین" },
       { to: "/wa-collections", label: "مجموعه گروه‌های واتساپ" },
+      { to: "/send-queue", label: "صف ارسال" },
     ],
   },
   {

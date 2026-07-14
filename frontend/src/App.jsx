@@ -27,6 +27,7 @@ import AiKeys from "./pages/AiKeys.jsx";
 import PartnerInstances from "./pages/PartnerInstances.jsx";
 import Content from "./pages/Content.jsx";
 import ButtonAutoReplies from "./pages/ButtonAutoReplies.jsx";
+import SendQueue from "./pages/SendQueue.jsx";
 
 export default function App() {
   return (
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="partner-instances" element={<PartnerInstances />} />
         <Route path="content" element={<Content />} />
         <Route path="button-auto-replies" element={<ButtonAutoReplies />} />
+        <Route path="send-queue" element={<SendQueue />} />
         <Route path="*" element={<div className="text-slate-400">صفحه یافت نشد</div>} />
       </Route>
       </Routes>

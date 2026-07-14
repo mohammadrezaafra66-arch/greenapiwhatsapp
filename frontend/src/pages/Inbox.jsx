@@ -90,6 +90,14 @@ export default function Inbox() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-2xl font-bold">صندوق ورودی</h2>
         <div className="flex flex-wrap gap-2 items-center">
+          <button className="btn-secondary text-sm" onClick={async () => {
+            const chats = [...new Set((data || []).filter((m) => !m.is_group && m.sender_phone).map((m) => m.sender_phone))];
+            if (chats.length === 0) return toast.info("چتی برای علامت‌گذاری نیست");
+            try {
+              const r = await MessagesApi.readAll({ chat_ids: chats });
+              toast.success(`${r.marked} چت در واتساپ خوانده‌شده شد`);
+            } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+          }}>✓ همه را خوانده‌شده کن</button>
           <label className="flex items-center gap-2 text-sm text-slate-300">
             <input type="checkbox" checked={filter.unread} onChange={(e) => setFilter({ ...filter, unread: e.target.checked })} />
             فقط خوانده‌نشده
@@ -137,6 +145,10 @@ export default function Inbox() {
               <button className="btn-primary text-xs py-1" onClick={() => setReply(m)}>پاسخ</button>
               {!m.is_group && <button className="btn-secondary text-xs py-1" onClick={() => setRichSend({ msg: m, mode: "contact" })}>کارت تماس</button>}
               {!m.is_group && <button className="btn-secondary text-xs py-1" onClick={() => setRichSend({ msg: m, mode: "location" })}>موقعیت</button>}
+              {!m.is_group && <button className="btn-secondary text-xs py-1" title="علامت‌گذاری خوانده‌شده در واتساپ" onClick={async () => {
+                try { await MessagesApi.read({ chat_id: m.sender_phone }); toast.success("در واتساپ خوانده‌شده شد"); }
+                catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+              }}>✓ واتساپ</button>}
             </div>
           </div>
         ))}

@@ -15,11 +15,13 @@ from sqlalchemy import select, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.account import Account, AccountStatus
+from app.models.campaign import CampaignContact
 from app.models.messaging import (
     ButtonReply, ButtonAutoReply, MessageReaction, SavedContactCard, SavedLocation,
 )
 from app.services.green_api import GreenAPIClient
 from app.services.interactive import validate_buttons
+from app.services.msgcontrol import edit_window_ok
 from app.utils.shamsi import to_shamsi
 
 logger = logging.getLogger("afrakala.messages")
@@ -301,6 +303,94 @@ async def campaign_button_replies(campaign_id: str, db: AsyncSession = Depends(g
         "presses": [{"phone": r.contact_phone, "button_id": r.button_id,
                      "button_text": r.button_text, "at": to_shamsi(r.created_at)} for r in rows],
     }
+
+
+# ── FEATURE 9 — edit a sent message (15-min window, silent-failure aware) ───
+class EditBody(BaseModel):
+    account_id: str | None = None
+    chat_id: str
+    message_id: str
+    message: str
+
+
+@router.post("/edit")
+async def edit_message(body: EditBody, db: AsyncSession = Depends(get_db)):
+    acc = await _account(db, body.account_id)
+    # Server-side 15-minute re-check when we know when the message was sent.
+    cc = (await db.execute(
+        select(CampaignContact).where(CampaignContact.green_api_message_id == body.message_id)
+    )).scalar_one_or_none()
+    if cc is not None and not edit_window_ok(cc.sent_at):
+        raise HTTPException(400, "مهلت ۱۵ دقیقه‌ای ویرایش این پیام تمام شده است")
+    try:
+        # ⚠️ HTTP 200 even on silent failure — the editedMessage/outgoingMessageStatus
+        # webhooks confirm/deny; we optimistically update local state.
+        await GreenAPIClient(acc.instance_id, acc.api_token).edit_message_raw(
+            body.chat_id, body.message_id, body.message)
+    except Exception as e:
+        logger.error("editMessage failed: %s", e)
+        raise HTTPException(502, "ویرایش پیام ناموفق بود")
+    if cc is not None:
+        cc.generated_message = body.message
+        await db.commit()
+    return {"ok": True, "note": "ویرایش ارسال شد؛ در صورت گذشتن مهلت، واتساپ آن را اعمال نمی‌کند"}
+
+
+# ── FEATURE 10 — delete a sent message (for everyone / only me) ──────────────
+class DeleteBody(BaseModel):
+    account_id: str | None = None
+    chat_id: str
+    message_id: str
+    only_sender: bool = False
+
+
+@router.post("/delete")
+async def delete_message(body: DeleteBody, db: AsyncSession = Depends(get_db)):
+    acc = await _account(db, body.account_id)
+    try:
+        await GreenAPIClient(acc.instance_id, acc.api_token).delete_message_raw(
+            body.chat_id, body.message_id, only_sender=body.only_sender)
+    except Exception as e:
+        logger.error("deleteMessage failed: %s", e)
+        raise HTTPException(502, "حذف پیام ناموفق بود")
+    return {"ok": True}
+
+
+# ── FEATURE 21 — mark chat(s) as read ───────────────────────────────────────
+class ReadBody(BaseModel):
+    account_id: str | None = None
+    chat_id: str
+    message_id: str | None = None
+
+
+@router.post("/read")
+async def read_chat(body: ReadBody, db: AsyncSession = Depends(get_db)):
+    acc = await _account(db, body.account_id)
+    try:
+        await GreenAPIClient(acc.instance_id, acc.api_token).read_chat(body.chat_id, body.message_id)
+    except Exception as e:
+        logger.error("readChat failed: %s", e)
+        raise HTTPException(502, "علامت‌گذاری خوانده‌شده ناموفق بود")
+    return {"ok": True}
+
+
+class ReadAllBody(BaseModel):
+    account_id: str | None = None
+    chat_ids: list[str]
+
+
+@router.post("/read-all")
+async def read_all(body: ReadAllBody, db: AsyncSession = Depends(get_db)):
+    acc = await _account(db, body.account_id)
+    client = GreenAPIClient(acc.instance_id, acc.api_token)
+    done = 0
+    for chat in body.chat_ids[:500]:
+        try:
+            await client.read_chat(chat)
+            done += 1
+        except Exception:
+            continue
+    return {"ok": True, "marked": done}
 
 
 # ── Recent reactions — FEATURE 11 (receive) ─────────────────────────────────

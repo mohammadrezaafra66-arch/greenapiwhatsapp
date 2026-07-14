@@ -124,6 +124,10 @@ class CampaignContact(Base):
     replied: Mapped[bool] = mapped_column(Boolean, default=False)
     outcome: Mapped[str | None] = mapped_column(String(30))  # interested|purchased|not_interested
     outcome_note: Mapped[str | None] = mapped_column(Text)
+    # V14 PART C — message control
+    is_edited: Mapped[bool] = mapped_column(Boolean, default=False)   # F9
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime)
+    recalled: Mapped[bool] = mapped_column(Boolean, default=False)    # F10 campaign recall
 
 class HourRateLimit(Base):
     __tablename__ = "hour_rate_limits"
