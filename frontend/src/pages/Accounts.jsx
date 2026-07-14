@@ -2,6 +2,7 @@ import React from "react";
 import { Accounts as Api, ProxyApi } from "../api.js";
 import { Badge, Spinner, Empty, Modal, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
+import HelpTip, { TIPS } from "../components/HelpTip.jsx";
 
 const fa = (n) => Number(n || 0).toLocaleString("fa-IR");
 
@@ -134,6 +135,7 @@ export default function Accounts() {
                   ? <img src={a.profile_picture_url} alt="" className="w-8 h-8 rounded-full object-cover" />
                   : <div className="w-8 h-8 rounded-full bg-slate-700" />}
                 <span className="font-bold">{a.name}</span>
+                <HelpTip text={TIPS.name} />
                 {a.is_default && (
                   <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">پیش‌فرض ⭐</span>
                 )}
@@ -141,11 +143,11 @@ export default function Accounts() {
               <Badge status={a.status} />
             </div>
             <div className="text-sm text-slate-400 space-y-0.5">
-              <p>شماره واتس‌اپ: {a.instance_id}</p>
-              <p>تلفن: {a.phone || "—"}</p>
+              <p>شناسه (idInstance): {a.instance_id}<HelpTip text={TIPS.idInstance} /></p>
+              <p>شماره واتساپ: {a.phone || "—"}<HelpTip text={TIPS.phone} /></p>
               <p>ارسال امروز: {a.sent_today} / {a.daily_limit}</p>
               <p>دریافت امروز: {a.received_today}</p>
-              <p>روزهای فعال: {a.days_active}</p>
+              <p>روزهای فعال: {a.days_active}<HelpTip text={TIPS.daysActive} /></p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button className="btn-secondary" disabled={busy === a.id} onClick={() => act(() => Api.status(a.id), a.id)}>بررسی وضعیت</button>

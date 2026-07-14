@@ -2,6 +2,7 @@ import React from "react";
 import { PartnerApi } from "../api.js";
 import { Modal, useAsync, Spinner, Empty } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
+import HelpTip, { TIPS } from "../components/HelpTip.jsx";
 
 // Persian digit helper
 const fa = (n) => (n == null ? "" : String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]));
@@ -111,12 +112,12 @@ export default function PartnerInstances() {
           <table className="w-full text-sm">
             <thead className="text-slate-400 text-xs">
               <tr>
-                <th className="text-right p-2">نام</th>
-                <th className="text-right p-2">idInstance</th>
+                <th className="text-right p-2">نام<HelpTip text={TIPS.name} /></th>
+                <th className="text-right p-2">idInstance<HelpTip text={TIPS.idInstance} /></th>
                 <th className="text-right p-2">وضعیت</th>
-                <th className="text-right p-2">تعرفه</th>
+                <th className="text-right p-2">تعرفه<HelpTip text={TIPS.tariff} /></th>
                 <th className="text-right p-2">تاریخ ساخت</th>
-                <th className="text-right p-2">روزهای فعال</th>
+                <th className="text-right p-2">روزهای فعال<HelpTip text={TIPS.daysActive} /></th>
                 <th className="text-right p-2">اقدامات</th>
               </tr>
             </thead>

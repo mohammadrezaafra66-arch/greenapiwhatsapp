@@ -2,6 +2,7 @@ import React from "react";
 import { IncidentsApi } from "../api.js";
 import { useAsync, Spinner, Empty, Progress } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
+import HelpTip, { TIPS } from "../components/HelpTip.jsx";
 
 const fa = (n) => (n == null ? "—" : String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]));
 const pct = (r) => (r == null ? "—" : `${fa(Math.round(r * 100))}٪`);
@@ -37,7 +38,7 @@ export default function Protection() {
               {a.in_cooldown && <span className="badge bg-red-500/20 text-red-300 border-red-500/40">در خنک‌سازی تا {a.cooldown_until}</span>}
               {!a.in_cooldown && a.throttle_factor < 1 && <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40">کاهش سرعت ({pct(a.throttle_factor)})</span>}
             </div>
-            <div className="text-xs text-slate-400">امتیاز سلامت</div>
+            <div className="text-xs text-slate-400">امتیاز سلامت<HelpTip text={TIPS.health} /></div>
             <Progress value={Math.round((a.health_score || 0) * 100)} max={100} color={a.health_score > 0.6 ? "bg-emerald-500" : a.health_score > 0.3 ? "bg-amber-500" : "bg-red-500"} />
             <div className="grid grid-cols-2 gap-1 text-xs text-slate-400">
               <span>ارسال امروز: {fa(a.sent_today)} / {fa(a.effective_cap)}</span>
