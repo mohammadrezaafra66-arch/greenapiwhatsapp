@@ -340,6 +340,55 @@ class GreenAPIClient:
         """FEATURE 18 — getContactInfo for a raw chatId or bare phone."""
         return await self._post("getContactInfo", {"chatId": self._as_chat_id(chat)})
 
+    # ── V14 PART E — targeted statuses (participants) ─────────────────────────
+    @staticmethod
+    def _status_participants(participants) -> list[str] | None:
+        """Normalize a participants list to chatIds; None/empty ⇒ public (omit)."""
+        if not participants:
+            return None
+        out = []
+        for p in participants:
+            p = str(p)
+            out.append(p if "@" in p else f"{GreenAPIClient._normalize(p)}@c.us")
+        return out or None
+
+    async def send_text_status_full(self, message: str, bg_color: str = "#228B22",
+                                    font: str = "SERIF", participants=None) -> Optional[str]:
+        body = {"message": message, "backgroundColor": bg_color, "font": font}
+        parts = self._status_participants(participants)
+        if parts:
+            body["participants"] = parts
+        r = await self._post("sendTextStatus", body)
+        return r.get("idMessage")
+
+    async def send_media_status_full(self, url_file: str, filename: str = "status.jpg",
+                                     caption: str = "", participants=None) -> Optional[str]:
+        body = {"urlFile": url_file, "fileName": filename, "caption": caption}
+        parts = self._status_participants(participants)
+        if parts:
+            body["participants"] = parts
+        r = await self._post("sendMediaStatus", body)
+        return r.get("idMessage")
+
+    async def send_voice_status_full(self, url_file: str, filename: str = "voice.mp3",
+                                     bg_color: str = "#228B22", participants=None) -> Optional[str]:
+        body = {"urlFile": url_file, "fileName": filename, "backgroundColor": bg_color}
+        parts = self._status_participants(participants)
+        if parts:
+            body["participants"] = parts
+        r = await self._post("sendVoiceStatus", body)
+        return r.get("idMessage")
+
+    # ── V14 PART E — group settings (beta) ────────────────────────────────────
+    async def update_group_settings(self, group_id: str, allow_edit: bool | None = None,
+                                    allow_send: bool | None = None) -> dict:
+        body = {"groupId": group_id}
+        if allow_edit is not None:
+            body["allowParticipantsEditGroupSettings"] = bool(allow_edit)
+        if allow_send is not None:
+            body["allowParticipantsSendMessages"] = bool(allow_send)
+        return await self._post("updateGroupSettings", body)
+
     # ── STATUSES ─────────────────────────────────────────
     async def send_status_text(self, text: str, bg_color: str = "#FFFFFF") -> Optional[str]:
         r = await self._post("sendTextStatus", {"message": text, "backgroundColor": bg_color, "font": "SANS_SERIF"})

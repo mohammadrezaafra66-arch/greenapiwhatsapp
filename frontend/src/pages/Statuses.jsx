@@ -215,7 +215,7 @@ function RoadmapView({ data, loading, onRefresh }) {
 
 export default function Statuses() {
   const [mainTab, setMainTab] = React.useState("mine"); // mine | incoming | history | roadmap
-  const [tab, setTab] = React.useState("text"); // text | image (within "mine")
+  const [tab, setTab] = React.useState("image"); // image | text | voice (within "mine"); media default
 
   // Accounts + selected account (used by incoming/history/roadmap tabs)
   const [accounts, setAccounts] = React.useState([]);
@@ -224,8 +224,16 @@ export default function Statuses() {
   const [bg, setBg] = React.useState("#25D366");
   const [imageUrl, setImageUrl] = React.useState("");
   const [caption, setCaption] = React.useState("");
+  const [voiceUrl, setVoiceUrl] = React.useState("");
+  const [participantsText, setParticipantsText] = React.useState(""); // V14 F19 targeted
   const [result, setResult] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
+
+  // null = public to all contacts; otherwise a list of phones.
+  const parseParticipants = () => {
+    const arr = participantsText.split(/[\n,،]+/).map((s) => s.trim()).filter(Boolean);
+    return arr.length ? arr : null;
+  };
 
   // Incoming statuses (fetched on demand — no auto-poll, so a Green API 403
   // can't repeatedly trip the per-instance circuit breaker).
@@ -304,7 +312,7 @@ export default function Statuses() {
     if (!text) return toast.error("متن لازم است");
     setBusy(true);
     try {
-      setResult(await Api.sendText(text, bg, null));
+      setResult(await Api.sendText(text, bg, null, parseParticipants()));
     } catch (e) {
       toast.error(e?.response?.data?.detail || e.message);
     } finally {
@@ -316,7 +324,19 @@ export default function Statuses() {
     if (!imageUrl) return toast.error("آدرس تصویر لازم است");
     setBusy(true);
     try {
-      setResult(await Api.sendImage(imageUrl, caption, null));
+      setResult(await Api.sendImage(imageUrl, caption, null, parseParticipants()));
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendVoice = async () => {
+    if (!voiceUrl) return toast.error("آدرس فایل صوتی لازم است");
+    setBusy(true);
+    try {
+      setResult(await Api.sendVoice(voiceUrl, null, parseParticipants()));
     } catch (e) {
       toast.error(e?.response?.data?.detail || e.message);
     } finally {
@@ -352,9 +372,20 @@ export default function Statuses() {
         <>
           <p className="text-sm text-slate-400">استوری روی همه حساب‌های فعال منتشر می‌شود.</p>
 
+          <div className="card bg-amber-500/10 border-amber-500/30 text-amber-200 text-sm">
+            💡 استوری عکس‌دار معمولاً بازدید بیشتری از استوری متنی می‌گیرد. برای تبلیغات، «عکس با کپشن» را انتخاب کنید.
+          </div>
+
           <div className="flex gap-2">
+            <button className={tab === "image" ? "btn-primary" : "btn-secondary"} onClick={() => setTab("image")}>عکس</button>
             <button className={tab === "text" ? "btn-primary" : "btn-secondary"} onClick={() => setTab("text")}>متنی</button>
-            <button className={tab === "image" ? "btn-primary" : "btn-secondary"} onClick={() => setTab("image")}>تصویری</button>
+            <button className={tab === "voice" ? "btn-primary" : "btn-secondary"} onClick={() => setTab("voice")}>صوتی</button>
+          </div>
+
+          <div className="card space-y-2">
+            <label className="label mb-0">ارسال فقط به افراد خاص (اختیاری)</label>
+            <textarea className="input h-16" placeholder="شماره‌ها را با کاما یا خط جدید وارد کنید — خالی = عمومی برای همه مخاطبین"
+              value={participantsText} onChange={(e) => setParticipantsText(e.target.value)} />
           </div>
 
           {tab === "text" ? (
@@ -367,10 +398,16 @@ export default function Statuses() {
               </div>
               <button className="btn-primary w-full" disabled={busy} onClick={sendText}>{busy ? "..." : "انتشار استوری متنی"}</button>
             </div>
+          ) : tab === "voice" ? (
+            <div className="card space-y-3">
+              <div><label className="label">آدرس فایل صوتی (mp3/ogg)</label><input className="input" value={voiceUrl} onChange={(e) => setVoiceUrl(e.target.value)} placeholder="https://…/voice.mp3" /></div>
+              <p className="text-xs text-slate-500">فایل صوتی را ابتدا در «فایل‌ها» آپلود کنید و لینک آن را اینجا بگذارید.</p>
+              <button className="btn-primary w-full" disabled={busy} onClick={sendVoice}>{busy ? "..." : "انتشار استوری صوتی"}</button>
+            </div>
           ) : (
             <div className="card space-y-3">
               <div><label className="label">آدرس تصویر (لینک)</label><input className="input" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} /></div>
-              <div><label className="label">توضیح تصویر</label><input className="input" value={caption} onChange={(e) => setCaption(e.target.value)} /></div>
+              <div><label className="label">توضیح تصویر (کپشن)</label><input className="input" value={caption} onChange={(e) => setCaption(e.target.value)} /></div>
               <button className="btn-primary w-full" disabled={busy} onClick={sendImage}>{busy ? "..." : "انتشار استوری تصویری"}</button>
             </div>
           )}

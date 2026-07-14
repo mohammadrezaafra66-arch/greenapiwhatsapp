@@ -15,12 +15,21 @@ class TextStatusBody(BaseModel):
     text: str
     bg_color: str = "#25D366"
     account_ids: list[str] | None = None  # None = all active accounts
+    participants: list[str] | None = None  # V14 F19 — null/[] = public to all contacts
 
 
 class ImageStatusBody(BaseModel):
     image_url: str
     caption: str = ""
     account_ids: list[str] | None = None
+    participants: list[str] | None = None
+
+
+class VoiceStatusBody(BaseModel):
+    audio_url: str
+    bg_color: str = "#228B22"
+    account_ids: list[str] | None = None
+    participants: list[str] | None = None
 
 
 async def _target_accounts(account_ids, db: AsyncSession):
@@ -45,7 +54,7 @@ async def send_text_status(body: TextStatusBody, db: AsyncSession = Depends(get_
     for account in accounts:
         client = GreenAPIClient(account.instance_id, account.api_token)
         try:
-            msg_id = await client.send_status_text(body.text, body.bg_color)
+            msg_id = await client.send_text_status_full(body.text, body.bg_color, participants=body.participants)
             db.add(StatusSend(
                 account_id=account.id, instance_id=account.instance_id,
                 status_type="text", content=body.text, green_api_message_id=msg_id
@@ -66,7 +75,7 @@ async def send_image_status(body: ImageStatusBody, db: AsyncSession = Depends(ge
     for account in accounts:
         client = GreenAPIClient(account.instance_id, account.api_token)
         try:
-            msg_id = await client.send_status_image(body.image_url, body.caption)
+            msg_id = await client.send_media_status_full(body.image_url, caption=body.caption, participants=body.participants)
             db.add(StatusSend(
                 account_id=account.id, instance_id=account.instance_id,
                 status_type="image", content=body.caption, media_url=body.image_url,
@@ -80,15 +89,25 @@ async def send_image_status(body: ImageStatusBody, db: AsyncSession = Depends(ge
 
 
 @router.post("/voice")
-async def send_voice_status(audio_url: str, db: AsyncSession = Depends(get_db)):
-    acc_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
-    accounts = acc_result.scalars().all()
+async def send_voice_status(body: VoiceStatusBody, db: AsyncSession = Depends(get_db)):
+    accounts = await _target_accounts(body.account_ids, db)
+    if not accounts:
+        raise HTTPException(400, "No target accounts")
     results = []
     for account in accounts:
         client = GreenAPIClient(account.instance_id, account.api_token)
-        msg_id = await client.send_voice_status(audio_url)
-        results.append({"account": account.name, "message_id": msg_id})
-    return {"sent": len(results), "results": results}
+        try:
+            msg_id = await client.send_voice_status_full(body.audio_url, bg_color=body.bg_color, participants=body.participants)
+            db.add(StatusSend(
+                account_id=account.id, instance_id=account.instance_id,
+                status_type="voice", content=body.audio_url, media_url=body.audio_url,
+                green_api_message_id=msg_id
+            ))
+            results.append({"account": account.name, "message_id": msg_id})
+        except Exception as e:
+            results.append({"account": account.name, "error": str(e)})
+    await db.commit()
+    return {"sent_to": len(results), "results": results}
 
 
 @router.delete("/{message_id}")

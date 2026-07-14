@@ -48,6 +48,7 @@ export default function Groups() {
   const [addMembers, setAddMembers] = React.useState(null);
   const [extracting, setExtracting] = React.useState(null); // group id being extracted
   const [extracted, setExtracted] = React.useState(null); // { group, phones, count } | null
+  const [manage, setManage] = React.useState(null); // group being managed (F22)
 
   const extractMembers = async (g) => {
     setExtracting(g.id);
@@ -288,6 +289,11 @@ export default function Groups() {
                   ➕ افزودن اعضا از اکسل
                 </button>
               )}
+              {g.is_admin && g.group_chat_id && (
+                <button className="btn-secondary text-xs w-full" onClick={() => setManage(g)}>
+                  ⚙️ مدیریت گروه
+                </button>
+              )}
             </div>
           );
         })}
@@ -297,7 +303,124 @@ export default function Groups() {
       {send && <SendModal group={send} onClose={() => setSend(null)} />}
       {addMembers && <AddMembersModal group={addMembers} onClose={() => setAddMembers(null)} />}
       {extracted && <ExtractedMembersModal data={extracted} onClose={() => setExtracted(null)} />}
+      {manage && <GroupManagerModal group={manage} onClose={() => setManage(null)} onChanged={loadGroups} />}
     </div>
+  );
+}
+
+// FEATURE 22 — full group manager (⚠️ highest ban risk). Warning banner + participants
+// table + settings toggles + ban-guarded add pipeline with live per-number progress.
+function GroupManagerModal({ group, onClose, onChanged }) {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [tab, setTab] = React.useState("members"); // members | add | settings
+  const [addText, setAddText] = React.useState("");
+  const [prog, setProg] = React.useState(null);
+  const acct = group.account_id;
+  const gid = group.id;
+  const gchat = group.group_chat_id;
+
+  const load = React.useCallback(() => {
+    setLoading(true);
+    Api.data(gid).then(setData).catch((e) => toast.error(e?.response?.data?.detail || e.message)).finally(() => setLoading(false));
+  }, [gid]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const participants = (data?.participants) || [];
+  const inviteLink = data?.groupInviteLink;
+
+  async function startAdd() {
+    const phones = addText.split(/[\n,،]+/).map((s) => s.trim()).filter(Boolean);
+    if (!phones.length) return toast.error("شماره‌ای وارد نشده");
+    try {
+      await Api.safeAdd(gid, phones);
+      setProg({ total: phones.length, results: [], finished: false });
+      const t = setInterval(async () => {
+        try {
+          const p = await Api.safeAddProgress(gid);
+          setProg(p);
+          if (p.finished) { clearInterval(t); onChanged && onChanged(); }
+        } catch { /* ignore */ }
+      }, 1500);
+    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+  }
+
+  const STATUS_FA = { added: "✅ افزوده شد", no_whatsapp: "⛔ واتساپ ندارد", queued: "⏳ در نوبت", failed: "❌ ناموفق — دعوت بفرستید" };
+
+  return (
+    <Modal title={`مدیریت گروه: ${group.name}`} onClose={onClose} wide>
+      <div className="space-y-3">
+        <div className="card bg-red-500/10 border-red-500/40 text-red-200 text-xs">
+          ⚠️ افزودن عضو به گروه پرخطرترین کار در واتساپ است. افزودن شماره‌ای که واتساپ ندارد می‌تواند باعث مسدود شدن خط شما شود.
+          سامانه قبل از افزودن، وجود واتساپ را چک می‌کند و سرعت را محدود می‌کند (۵ در دقیقه). بهتر است ابتدا در پیام خصوصی از فرد اجازه بگیرید.
+        </div>
+
+        <div className="flex gap-2 items-center flex-wrap">
+          <button className={tab === "members" ? "btn-primary text-xs" : "btn-secondary text-xs"} onClick={() => setTab("members")}>اعضا</button>
+          <button className={tab === "add" ? "btn-primary text-xs" : "btn-secondary text-xs"} onClick={() => setTab("add")}>➕ افزودن عضو</button>
+          <button className={tab === "settings" ? "btn-primary text-xs" : "btn-secondary text-xs"} onClick={() => setTab("settings")}>تنظیمات</button>
+          {inviteLink && <button className="btn-secondary text-xs mr-auto" onClick={() => { navigator.clipboard?.writeText(inviteLink); toast.success("لینک دعوت کپی شد"); }}>📋 لینک دعوت</button>}
+        </div>
+
+        {loading ? <Spinner /> : tab === "members" ? (
+          <div className="max-h-80 overflow-y-auto">
+            <p className="text-xs text-slate-400 mb-2">اعضا: {participants.length} {data?.size ? `از ${data.size}` : ""}</p>
+            <table className="w-full text-sm">
+              <tbody>
+                {participants.map((p, i) => {
+                  const phone = String(p.id || "").split("@")[0];
+                  const isAdmin = p.isAdmin || p.isSuperAdmin;
+                  return (
+                    <tr key={i} className="border-t border-slate-800">
+                      <td className="p-1 font-mono text-xs">{phone}</td>
+                      <td className="p-1">{isAdmin && <span className="text-amber-400 text-xs">👑 ادمین</span>}</td>
+                      <td className="p-1 text-left">
+                        <div className="flex gap-1 justify-end flex-wrap">
+                          {!isAdmin && <button className="btn-secondary text-xs" onClick={async () => { try { await Api.promote(gchat, phone, acct); toast.success("ادمین شد"); load(); } catch (e) { toast.error(e?.response?.data?.detail || e.message); } }}>ارتقا</button>}
+                          {isAdmin && !p.isSuperAdmin && <button className="btn-secondary text-xs" onClick={async () => { try { await Api.demote(gchat, phone, acct); toast.success("حذف ادمین شد"); load(); } catch (e) { toast.error(e?.response?.data?.detail || e.message); } }}>حذف ادمین</button>}
+                          <button className="btn-danger text-xs" onClick={async () => { if (await confirmDialog(`حذف ${phone} از گروه؟`)) { try { await Api.removeMember(gchat, phone); toast.success("حذف شد"); load(); } catch (e) { toast.error(e?.response?.data?.detail || e.message); } } }}>حذف</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : tab === "add" ? (
+          <div className="space-y-2">
+            <textarea className="input h-24" placeholder="شماره‌ها را با کاما یا خط جدید وارد کنید" value={addText} onChange={(e) => setAddText(e.target.value)} />
+            <button className="btn-primary w-full" onClick={startAdd}>➕ افزودن با بررسی ایمنی</button>
+            {prog && (
+              <div className="card space-y-1 max-h-56 overflow-y-auto">
+                <p className="text-xs text-slate-400">{prog.finished ? "✅ پایان" : "در حال افزودن…"} ({(prog.results || []).length} / {prog.total})</p>
+                {prog.error && <p className="text-red-300 text-xs">{prog.error}</p>}
+                {(prog.results || []).map((r, i) => (
+                  <div key={i} className="flex justify-between text-xs">
+                    <span className="font-mono">{r.phone}</span>
+                    <span>{STATUS_FA[r.status] || r.status}</span>
+                  </div>
+                ))}
+                {prog.finished && (prog.results || []).some((r) => r.status === "failed") && inviteLink && (
+                  <button className="btn-secondary text-xs w-full mt-1" onClick={() => { navigator.clipboard?.writeText(inviteLink); toast.success("لینک دعوت کپی شد — برای ناموفق‌ها بفرستید"); }}>📋 کپی لینک دعوت برای ناموفق‌ها</button>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <button className="btn-secondary w-full text-sm" onClick={async () => { try { await Api.settings(gid, { allow_send: false }); toast.success("فقط ادمین‌ها می‌توانند پیام بفرستند"); } catch (e) { toast.error(e?.response?.data?.detail || e.message); } }}>فقط ادمین‌ها پیام بفرستند</button>
+            <button className="btn-secondary w-full text-sm" onClick={async () => { try { await Api.settings(gid, { allow_send: true }); toast.success("همه می‌توانند پیام بفرستند"); } catch (e) { toast.error(e?.response?.data?.detail || e.message); } }}>همه بتوانند پیام بفرستند</button>
+            <button className="btn-secondary w-full text-sm" onClick={async () => { try { await Api.settings(gid, { allow_edit: false }); toast.success("فقط ادمین‌ها تنظیمات را تغییر دهند"); } catch (e) { toast.error(e?.response?.data?.detail || e.message); } }}>فقط ادمین‌ها تنظیمات را تغییر دهند</button>
+            <label className="btn-secondary cursor-pointer w-full text-sm block text-center">
+              🖼 تغییر عکس گروه
+              <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return; try { await Api.setPicture(gid, f); toast.success("عکس گروه تنظیم شد"); } catch (err) { toast.error(err?.response?.data?.detail || err.message); } }} />
+            </label>
+            <button className="btn-danger w-full text-sm" onClick={async () => { if (await confirmDialog(`از گروه «${group.name}» خارج می‌شوید؟`)) { try { await Api.leave(gchat, acct); toast.success("از گروه خارج شدید"); onClose(); onChanged && onChanged(); } catch (e) { toast.error(e?.response?.data?.detail || e.message); } } }}>🚪 خروج از گروه</button>
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 

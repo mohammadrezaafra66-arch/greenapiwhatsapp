@@ -146,6 +146,20 @@ export const Groups = {
   send: (id, message) =>
     http.post(`/groups/${id}/send`, { message }).then((r) => r.data),
   info: (id) => http.get(`/groups/${id}/info`).then((r) => r.data),
+  // V14 F22 — full group management
+  data: (id) => http.get(`/groups/${id}/data`).then((r) => r.data),
+  settings: (id, body) => http.post(`/groups/${id}/settings`, body).then((r) => r.data),
+  setPicture: (id, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return http.post(`/groups/${id}/picture`, fd, { headers: { "Content-Type": "multipart/form-data" }, timeout: 60000 }).then((r) => r.data);
+  },
+  updateName: (id, name, accountId) => http.put(`/groups/${id}/name`, null, { params: { name, account_id: accountId } }).then((r) => r.data),
+  promote: (greenId, phone, accountId) => http.post(`/groups/${greenId}/admin/${phone}`, null, { params: { account_id: accountId } }).then((r) => r.data),
+  demote: (greenId, phone, accountId) => http.delete(`/groups/${greenId}/admin/${phone}`, { params: { account_id: accountId } }).then((r) => r.data),
+  leave: (greenId, accountId) => http.post(`/groups/${greenId}/leave`, null, { params: { account_id: accountId } }).then((r) => r.data),
+  safeAdd: (id, phones) => http.post(`/groups/${id}/safe-add`, { phones }).then((r) => r.data),
+  safeAddProgress: (id) => http.get(`/groups/${id}/safe-add-progress`).then((r) => r.data),
   sync: (accountId) => http.post(`/groups/sync/${accountId}`, null, { timeout: 120000 }).then((r) => r.data),
   extractAll: (accountId, minMembers = 0) =>
     http.post(`/groups/extract-all-members`, null, { params: { account_id: accountId, min_members: minMembers } }).then((r) => r.data),
@@ -173,10 +187,12 @@ export const Groups = {
 
 // ── Statuses ───────────────────────────────────────────
 export const Statuses = {
-  sendText: (text, bg_color, account_ids) =>
-    http.post("/statuses/text", { text, bg_color, account_ids }).then((r) => r.data),
-  sendImage: (image_url, caption, account_ids) =>
-    http.post("/statuses/image", { image_url, caption, account_ids }).then((r) => r.data),
+  sendText: (text, bg_color, account_ids, participants) =>
+    http.post("/statuses/text", { text, bg_color, account_ids, participants }).then((r) => r.data),
+  sendImage: (image_url, caption, account_ids, participants) =>
+    http.post("/statuses/image", { image_url, caption, account_ids, participants }).then((r) => r.data),
+  sendVoice: (audio_url, account_ids, participants) =>
+    http.post("/statuses/voice", { audio_url, account_ids, participants }).then((r) => r.data),
   incoming: (accountId) =>
     http.get("/statuses/incoming", { params: accountId ? { account_id: accountId } : {} }).then((r) => r.data),
   history: (accountId) => http.get(`/statuses/history/${accountId}`).then((r) => r.data),

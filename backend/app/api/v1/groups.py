@@ -41,6 +41,15 @@ class GroupSendBody(BaseModel):
     message: str
 
 
+class GroupSettingsBody(BaseModel):
+    allow_edit: bool | None = None    # allowParticipantsEditGroupSettings
+    allow_send: bool | None = None    # allowParticipantsSendMessages
+
+
+class SafeAddBody(BaseModel):
+    phones: list[str]
+
+
 async def _client_for_group(group: WhatsAppGroup, db: AsyncSession) -> GreenAPIClient:
     account = await db.get(Account, group.account_id)
     if not account:
@@ -93,9 +102,20 @@ async def create_group(body: GroupCreateBody, db: AsyncSession = Depends(get_db)
     client = GreenAPIClient(account.instance_id, account.api_token)
 
     green_group_id = None
+    valid_phones = []
     if body.phones:
+        # F22.7 — creating a group with a non-existent number is a documented ban
+        # trigger. checkWhatsapp every seed member first and DROP invalid ones.
+        for p in body.phones:
+            try:
+                if await client.check_whatsapp(p):
+                    valid_phones.append(p)
+            except Exception:
+                pass
+        if not valid_phones:
+            raise HTTPException(400, "هیچ‌کدام از شماره‌های اولیه واتساپ ندارند — ساخت گروه لغو شد")
         try:
-            result = await client.create_group(body.name, body.phones)
+            result = await client.create_group(body.name, valid_phones)
             green_group_id = result.get("chatId") or result.get("groupId")
         except Exception as e:
             raise HTTPException(502, f"Green API create_group failed: {_green_error(e)}")
@@ -105,7 +125,7 @@ async def create_group(body: GroupCreateBody, db: AsyncSession = Depends(get_db)
         account_id=account.id,
         name=body.name,
         description=body.description,
-        member_count=len(body.phones),
+        member_count=len(valid_phones),
     )
     db.add(group)
     await db.commit()
@@ -198,6 +218,80 @@ async def leave_group(group_id: str, account_id: str, db: AsyncSession = Depends
     client = GreenAPIClient(account.instance_id, account.api_token)
     ok = await client.leave_group(group_id)
     return {"left": ok}
+
+
+# ── V14 F22 — full group management ─────────────────────────────────────────
+@router.get("/{group_id}/data")
+async def group_data(group_id: str, db: AsyncSession = Depends(get_db)):
+    """getGroupData for the group manager (participants, settings, invite link, size)."""
+    group = await db.get(WhatsAppGroup, uuid.UUID(group_id))
+    if not group or not group.green_group_id:
+        raise HTTPException(404, "گروه یافت نشد")
+    client = await _client_for_group(group, db)
+    try:
+        data = await client.get_group_data(group.green_group_id)
+    except Exception as e:
+        raise HTTPException(502, f"خطای Green API: {_green_error(e)}")
+    return data
+
+
+@router.post("/{group_id}/settings")
+async def update_settings(group_id: str, body: GroupSettingsBody, db: AsyncSession = Depends(get_db)):
+    group = await db.get(WhatsAppGroup, uuid.UUID(group_id))
+    if not group or not group.green_group_id:
+        raise HTTPException(404, "گروه یافت نشد")
+    client = await _client_for_group(group, db)
+    try:
+        res = await client.update_group_settings(group.green_group_id, body.allow_edit, body.allow_send)
+    except Exception as e:
+        raise HTTPException(502, f"خطای Green API: {_green_error(e)}")
+    return res
+
+
+@router.post("/{group_id}/picture")
+async def set_picture(group_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    group = await db.get(WhatsAppGroup, uuid.UUID(group_id))
+    if not group or not group.green_group_id:
+        raise HTTPException(404, "گروه یافت نشد")
+    client = await _client_for_group(group, db)
+    try:
+        ok = await client.set_group_picture(group.green_group_id, await file.read())
+    except Exception as e:
+        raise HTTPException(502, f"خطای Green API: {_green_error(e)}")
+    return {"ok": ok}
+
+
+@router.post("/{group_id}/safe-add")
+async def safe_add_members(group_id: str, body: SafeAddBody, db: AsyncSession = Depends(get_db)):
+    """⚠️ Ban-guarded add: checkWhatsapp + AddContact + 5/min·30/hr cap + 1024 guard.
+    Runs in the background; poll safe-add-progress for per-number results."""
+    group = await db.get(WhatsAppGroup, uuid.UUID(group_id))
+    if not group or not group.green_group_id:
+        raise HTTPException(404, "گروه یافت نشد")
+    if not body.phones:
+        raise HTTPException(400, "شماره‌ای وارد نشده است")
+    # reset any stale progress
+    try:
+        from app.services import redis_rate_limiter
+        r = await redis_rate_limiter.get_redis()
+        await r.delete(f"groupadd_progress:{group_id}")
+    except Exception:
+        pass
+    from app.workers.tasks import task_safe_add_participants
+    task_safe_add_participants.delay(group_id, body.phones)
+    return {"started": True, "total": len(body.phones)}
+
+
+@router.get("/{group_id}/safe-add-progress")
+async def safe_add_progress(group_id: str):
+    import json
+    try:
+        from app.services import redis_rate_limiter
+        r = await redis_rate_limiter.get_redis()
+        raw = await r.get(f"groupadd_progress:{group_id}")
+        return json.loads(raw) if raw else {"total": 0, "results": [], "finished": True}
+    except Exception:
+        return {"total": 0, "results": [], "finished": True}
 
 
 @router.post("/sync/{account_id}")

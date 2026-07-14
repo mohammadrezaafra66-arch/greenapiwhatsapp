@@ -92,12 +92,16 @@ async def post_scheduled_status(schedule_id):
             return
         client = GreenAPIClient(account.instance_id, account.api_token)
         text = await build_status_text(schedule)
+        # V14 F19 — targeted statuses: null/[] target_participants = public.
+        participants = getattr(schedule, "target_participants", None) or None
         try:
-            if schedule.content_type in ("image", "image_caption") and schedule.image_url:
+            if schedule.content_type == "voice" and getattr(schedule, "voice_file_url", None):
+                await client.send_voice_status_full(schedule.voice_file_url, participants=participants)
+            elif schedule.content_type in ("image", "image_caption", "media") and schedule.image_url:
                 caption = text if schedule.include_caption else ""
-                await client.send_status_image(schedule.image_url, caption)
+                await client.send_media_status_full(schedule.image_url, caption=caption, participants=participants)
             else:
-                await client.send_status_text(text)
+                await client.send_text_status_full(text, participants=participants)
             schedule.last_run_at = datetime.utcnow()
             schedule.next_run_at = compute_next_run(schedule)
             await db.commit()

@@ -12,7 +12,9 @@ class StatusSchedule(Base):
     account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="CASCADE"))
     name: Mapped[str | None] = mapped_column(String(200))
     status_type: Mapped[str] = mapped_column(String(50), nullable=False)   # intro | special_offer | custom
-    content_type: Mapped[str] = mapped_column(String(30), default="text")  # text | text_price | image | image_caption
+    content_type: Mapped[str] = mapped_column(String(30), default="text")  # text | image | voice (V14 F19)
+    voice_file_url: Mapped[str | None] = mapped_column(Text)                 # V14 F19
+    target_participants: Mapped[list | None] = mapped_column(JSONB)          # V14 F19 — null/[] = public
     intro_subtype: Mapped[str | None] = mapped_column(String(50))          # history/services/... (Feature 4)
     custom_text: Mapped[str | None] = mapped_column(Text)
     show_price: Mapped[bool] = mapped_column(Boolean, default=False)

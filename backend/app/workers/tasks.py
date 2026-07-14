@@ -47,6 +47,13 @@ def task_recall_campaign(campaign_id: str):
     run_async(recall_campaign(campaign_id))
 
 
+@celery_app.task(name="tasks.safe_add_participants")
+def task_safe_add_participants(group_db_id: str, phones: list):
+    """V14 F22 — ban-guarded group-member add (checkWhatsapp + caps + 1024 guard)."""
+    from app.services.group_add import safe_add_participants
+    run_async(safe_add_participants(group_db_id, list(phones)))
+
+
 @celery_app.task(name="tasks.apply_profile_picture_all")
 def task_apply_profile_picture_all(image_path: str):
     """V14 F17 — set the same profile picture on every active account, 10s apart

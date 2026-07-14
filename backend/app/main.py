@@ -545,6 +545,17 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V14 partD] {e}")
+        # V14 PART E — statuses & groups.
+        ddl_v14_parte = [
+            "ALTER TABLE status_schedules ADD COLUMN IF NOT EXISTS content_type varchar(20) DEFAULT 'text'",
+            "ALTER TABLE status_schedules ADD COLUMN IF NOT EXISTS voice_file_url text",
+            "ALTER TABLE status_schedules ADD COLUMN IF NOT EXISTS target_participants jsonb",
+        ]
+        for stmt in ddl_v14_parte:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V14 partE] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:
