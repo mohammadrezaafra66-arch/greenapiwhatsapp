@@ -30,6 +30,7 @@ from app.models.optout import OptOutLog
 from app.models.partner import PartnerInstanceLog, MethodSupport
 from app.models.messaging import (
     ButtonReply, ButtonAutoReply, MessageReaction, SavedContactCard, SavedLocation,
+    ContactInfoCache,
 )
 
 __all__ = [
@@ -75,4 +76,5 @@ __all__ = [
     "MessageReaction",
     "SavedContactCard",
     "SavedLocation",
+    "ContactInfoCache",
 ]

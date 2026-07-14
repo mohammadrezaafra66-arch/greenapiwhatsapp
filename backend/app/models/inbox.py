@@ -27,6 +27,7 @@ class InboxMessage(Base):
     edited_text: Mapped[str | None] = mapped_column(Text)
     original_message_id: Mapped[str | None] = mapped_column(String(200))
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)  # V14 F15
     original_payload: Mapped[str | None] = mapped_column(Text)
     timestamp: Mapped[datetime | None] = mapped_column(DateTime)
     received_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

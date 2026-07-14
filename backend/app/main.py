@@ -530,6 +530,21 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V14 partC] {e}")
+        # V14 PART D — chat & profile.
+        ddl_v14_partd = [
+            "ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS archived boolean DEFAULT false",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS profile_picture_url text",  # (also in PART A)
+            """CREATE TABLE IF NOT EXISTS contact_info_cache (
+                chat_id varchar(60) PRIMARY KEY,
+                payload jsonb,
+                fetched_at timestamp DEFAULT now()
+            )""",
+        ]
+        for stmt in ddl_v14_partd:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V14 partD] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:

@@ -21,7 +21,9 @@ from app.models.messaging import (
 )
 from app.services.green_api import GreenAPIClient
 from app.services.interactive import validate_buttons
-from app.services.msgcontrol import edit_window_ok
+from app.models.inbox import InboxMessage
+from app.models.wa_extras import DisappearingChatSetting
+from app.services.msgcontrol import edit_window_ok, valid_disappearing, DISAPPEARING_VALUES
 from app.utils.shamsi import to_shamsi
 
 logger = logging.getLogger("afrakala.messages")
@@ -391,6 +393,67 @@ async def read_all(body: ReadAllBody, db: AsyncSession = Depends(get_db)):
         except Exception:
             continue
     return {"ok": True, "marked": done}
+
+
+# ── FEATURE 15 — archive / unarchive a chat ─────────────────────────────────
+class ArchiveBody(BaseModel):
+    account_id: str | None = None
+    chat_id: str
+    archived: bool = True
+
+
+@router.post("/archive")
+async def archive_chat(body: ArchiveBody, db: AsyncSession = Depends(get_db)):
+    acc = await _account(db, body.account_id)
+    client = GreenAPIClient(acc.instance_id, acc.api_token)
+    try:
+        if body.archived:
+            await client.archive_chat_raw(body.chat_id)
+        else:
+            await client.unarchive_chat_raw(body.chat_id)
+    except Exception as e:
+        logger.error("archiveChat failed: %s", e)
+        raise HTTPException(502, "آرشیو/بازگردانی چت ناموفق بود")
+    # Reflect locally so the Inbox updates instantly (match by bare phone).
+    phone = _digits(body.chat_id.split("@")[0])
+    await db.execute(
+        text("UPDATE inbox_messages SET archived = :a WHERE sender_phone = :p"),
+        {"a": body.archived, "p": phone},
+    )
+    await db.commit()
+    return {"ok": True, "archived": body.archived}
+
+
+# ── FEATURE 16 — disappearing messages ──────────────────────────────────────
+class DisappearingBody(BaseModel):
+    account_id: str | None = None
+    chat_id: str
+    ephemeral: int
+
+
+@router.post("/disappearing")
+async def set_disappearing(body: DisappearingBody, db: AsyncSession = Depends(get_db)):
+    if not valid_disappearing(body.ephemeral):
+        raise HTTPException(400, f"مقدار نامعتبر — فقط {sorted(DISAPPEARING_VALUES)} مجاز است")
+    acc = await _account(db, body.account_id)
+    try:
+        await GreenAPIClient(acc.instance_id, acc.api_token).set_disappearing_raw(body.chat_id, body.ephemeral)
+    except Exception as e:
+        logger.error("setDisappearingChat failed: %s", e)
+        raise HTTPException(502, "تنظیم پیام ناپدیدشونده ناموفق بود")
+    # Upsert the local record (unique on account_id + chat_id).
+    existing = (await db.execute(
+        select(DisappearingChatSetting).where(
+            DisappearingChatSetting.account_id == acc.id,
+            DisappearingChatSetting.chat_id == body.chat_id,
+        )
+    )).scalar_one_or_none()
+    if existing:
+        existing.ephemeral = body.ephemeral
+    else:
+        db.add(DisappearingChatSetting(account_id=acc.id, chat_id=body.chat_id, ephemeral=body.ephemeral))
+    await db.commit()
+    return {"ok": True, "ephemeral": body.ephemeral}
 
 
 # ── Recent reactions — FEATURE 11 (receive) ─────────────────────────────────

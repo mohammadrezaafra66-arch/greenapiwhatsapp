@@ -1,7 +1,15 @@
 import React from "react";
-import { Inbox as Api, MessagesApi } from "../api.js";
+import { Inbox as Api, MessagesApi, Contacts } from "../api.js";
 import { Spinner, Empty, Modal, useAsync } from "../ui.jsx";
 import { toast } from "../ui/toast.jsx";
+
+// FEATURE 16 — the only allowed disappearing-timer values.
+const DISAPPEARING_OPTS = [
+  { v: 0, fa: "خاموش" },
+  { v: 86400, fa: "۲۴ ساعت" },
+  { v: 604800, fa: "۷ روز" },
+  { v: 7776000, fa: "۹۰ روز" },
+];
 
 const CAT_FA = {
   price_inquiry: "استعلام قیمت",
@@ -66,18 +74,20 @@ function renderSpecial(m) {
 }
 
 export default function Inbox() {
-  const [filter, setFilter] = React.useState({ unread: false, category: "", msgType: "" });
+  const [filter, setFilter] = React.useState({ unread: false, category: "", msgType: "", archived: false });
   const [data, setData] = React.useState(null);
   const [stats, setStats] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [reply, setReply] = React.useState(null);
   const [richSend, setRichSend] = React.useState(null);
+  const [infoPhone, setInfoPhone] = React.useState(null);
 
   const load = React.useCallback(() => {
     setLoading(true);
     const params = {};
     if (filter.unread) params.unread = true;
     if (filter.category) params.category = filter.category;
+    if (filter.archived) params.archived = true;
     Promise.all([Api.list(params), Api.stats()])
       .then(([list, s]) => { setData(list); setStats(s); })
       .finally(() => setLoading(false));
@@ -102,6 +112,10 @@ export default function Inbox() {
             <input type="checkbox" checked={filter.unread} onChange={(e) => setFilter({ ...filter, unread: e.target.checked })} />
             فقط خوانده‌نشده
           </label>
+          <button className={`text-sm px-2 py-1 rounded ${filter.archived ? "bg-brand/20 text-brand" : "text-slate-300 hover:bg-slate-800"}`}
+            onClick={() => setFilter({ ...filter, archived: !filter.archived })}>
+            {filter.archived ? "→ صندوق اصلی" : "آرشیوشده‌ها"}
+          </button>
           <select className="input w-auto" value={filter.category} onChange={(e) => setFilter({ ...filter, category: e.target.value })}>
             <option value="">همه دسته‌ها</option>
             {Object.entries(CAT_FA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -130,7 +144,10 @@ export default function Inbox() {
           <div key={m.id} className={`card flex justify-between items-start gap-3 ${!m.is_read ? "border-brand/40" : ""}`}>
             <div className="flex-1">
               <p className="text-sm">
-                <span className="font-bold text-emerald-300">{m.sender_name || m.sender_phone}</span>
+                <button className="font-bold text-emerald-300 hover:underline" title="مشاهده اطلاعات مخاطب"
+                  onClick={() => !m.is_group && setInfoPhone(m.sender_phone)}>
+                  {m.sender_name || m.sender_phone}
+                </button>
                 {m.is_group && <span className="text-xs text-purple-300"> (گروه)</span>}
                 {MSG_TYPE_FA[m.message_type] && <span className="badge mr-2 bg-indigo-500/20 text-indigo-300 border-indigo-500/40">{MSG_TYPE_FA[m.message_type]}</span>}
                 {m.category && <span className="badge mr-2 bg-slate-700 text-slate-300 border-slate-600">{CAT_FA[m.category] || m.category}</span>}
@@ -149,6 +166,25 @@ export default function Inbox() {
                 try { await MessagesApi.read({ chat_id: m.sender_phone }); toast.success("در واتساپ خوانده‌شده شد"); }
                 catch (e) { toast.error(e?.response?.data?.detail || e.message); }
               }}>✓ واتساپ</button>}
+              <button className="btn-secondary text-xs py-1" onClick={async () => {
+                try {
+                  await MessagesApi.archive({ chat_id: m.sender_phone, archived: !m.archived });
+                  toast.success(m.archived ? "از آرشیو خارج شد" : "آرشیو شد");
+                  load();
+                } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+              }}>{m.archived ? "بازگردانی" : "آرشیو"}</button>
+              {!m.is_group && (
+                <select className="input text-xs py-1 w-auto" defaultValue="" title="پیام ناپدیدشونده"
+                  onChange={async (e) => {
+                    const v = e.target.value; e.target.value = "";
+                    if (v === "") return;
+                    try { await MessagesApi.disappearing({ chat_id: m.sender_phone, ephemeral: Number(v) }); toast.success("تنظیم شد"); }
+                    catch (err) { toast.error(err?.response?.data?.detail || err.message); }
+                  }}>
+                  <option value="">⏱ ناپدیدشونده</option>
+                  {DISAPPEARING_OPTS.map((o) => <option key={o.v} value={o.v}>{o.fa}</option>)}
+                </select>
+              )}
             </div>
           </div>
         ))}
@@ -156,6 +192,66 @@ export default function Inbox() {
 
       {reply && <ReplyModal msg={reply} onClose={() => setReply(null)} onDone={load} />}
       {richSend && <RichSendModal msg={richSend.msg} mode={richSend.mode} onClose={() => setRichSend(null)} />}
+      {infoPhone && <ContactInfoDrawer phone={infoPhone} onClose={() => setInfoPhone(null)} />}
+    </div>
+  );
+}
+
+// FEATURE 18 — lead-qualification drawer (avatar, business badge, catalog…).
+function ContactInfoDrawer({ phone, onClose }) {
+  const [data, setData] = React.useState(null);
+  const [err, setErr] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+
+  const load = React.useCallback((refresh = false) => {
+    setLoading(true); setErr(null);
+    Contacts.info(phone, refresh)
+      .then((d) => setData(d.info || {}))
+      .catch((e) => setErr(e?.response?.data?.detail || e.message))
+      .finally(() => setLoading(false));
+  }, [phone]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const info = data || {};
+  const products = Array.isArray(info.products) ? info.products : [];
+  const isBusiness = info.isBusiness === true || info.isBusiness === "true";
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="w-full max-w-sm h-full bg-slate-900 border-r border-slate-700 overflow-y-auto p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold">اطلاعات مخاطب</h3>
+          <button onClick={onClose} className="text-slate-400 text-xl leading-none">×</button>
+        </div>
+        {loading ? <Spinner /> : err ? <p className="text-red-400 text-sm">{err}</p> : (
+          <>
+            <div className="flex items-center gap-3">
+              {info.avatar ? <img src={info.avatar} alt="" className="w-16 h-16 rounded-full object-cover" /> : <div className="w-16 h-16 rounded-full bg-slate-700" />}
+              <div>
+                <p className="font-bold">{info.name || info.contactName || phone}</p>
+                <p className="text-xs text-slate-400 font-mono">{phone}</p>
+                {isBusiness && <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40 mt-1">حساب تجاری</span>}
+              </div>
+            </div>
+            {info.contactName && <p className="text-sm"><span className="text-slate-500">نام در دفترچه: </span>{info.contactName}</p>}
+            {info.category && <p className="text-sm"><span className="text-slate-500">دسته: </span>{info.category}</p>}
+            {info.email && <p className="text-sm"><span className="text-slate-500">ایمیل: </span>{info.email}</p>}
+            {info.description && <p className="text-sm text-slate-300">{info.description}</p>}
+            {isBusiness && products.length > 0 && (
+              <div>
+                <p className="text-sm text-amber-300 mb-1">⚠️ این مخاطب کاتالوگ محصول دارد (رقیب/فروشنده احتمالی):</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {products.slice(0, 9).map((p, i) => {
+                    const img = p?.imageUrls?.requested || p?.imageUrls?.original;
+                    return img ? <img key={i} src={img} alt="" className="w-full h-16 object-cover rounded" /> : null;
+                  })}
+                </div>
+              </div>
+            )}
+            <button className="btn-secondary text-xs w-full" onClick={() => load(true)}>🔄 به‌روزرسانی اطلاعات</button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

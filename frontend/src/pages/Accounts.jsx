@@ -37,6 +37,28 @@ export default function Accounts() {
   const [busy, setBusy] = React.useState(null);
   const [renaming, setRenaming] = React.useState(null); // account id being renamed
   const [newName, setNewName] = React.useState("");
+  const [pfpProg, setPfpProg] = React.useState(null); // {done,total,finished}
+
+  // FEATURE 17 — apply one picture to every account (0.1/s → 10s apart, background).
+  const applyPfpAll = async (file) => {
+    if (!file) return;
+    const n = (data || []).filter((a) => a.status === "active").length;
+    const secs = Math.max(0, (n - 1) * 10);
+    if (!(await confirmDialog(`⚠️ به دلیل محدودیت Green API، هر شماره ۱۰ ثانیه فاصله دارد. برای ${n} شماره حدود ${secs} ثانیه طول می‌کشد. ادامه؟`))) return;
+    try {
+      const r = await Api.applyProfilePictureAll(file);
+      setPfpProg({ done: 0, total: r.total, finished: false });
+      const t = setInterval(async () => {
+        try {
+          const p = await Api.pfpProgress();
+          setPfpProg(p);
+          if (p.finished) { clearInterval(t); reload(); setTimeout(() => setPfpProg(null), 4000); }
+        } catch { /* ignore */ }
+      }, 2000);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    }
+  };
 
   const startRename = (acc) => { setRenaming(acc.id); setNewName(acc.name); };
   const saveRename = async (id) => {
@@ -80,8 +102,20 @@ export default function Accounts() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">حساب‌ها</h2>
-        <button className="btn-primary" onClick={() => setShowAdd(true)}>+ افزودن حساب</button>
+        <div className="flex gap-2">
+          <label className="btn-secondary cursor-pointer whitespace-nowrap">
+            🖼 اعمال عکس روی همه شماره‌ها
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; applyPfpAll(f); }} />
+          </label>
+          <button className="btn-primary" onClick={() => setShowAdd(true)}>+ افزودن حساب</button>
+        </div>
       </div>
+
+      {pfpProg && (
+        <div className="card border-amber-500/40 bg-amber-500/10 text-amber-200 text-sm">
+          {pfpProg.finished ? "✅ عکس روی همه شماره‌ها اعمال شد" : `در حال اعمال عکس پروفایل: ${pfpProg.done} از ${pfpProg.total} شماره…`}
+        </div>
+      )}
 
       <div className="card text-sm text-slate-300 bg-sky-500/10 border-sky-500/30">
         هر حساب یک شماره واتساپ مستقل است. می‌توانید چندین حساب همزمان فعال داشته باشید. کمپین‌ها به‌صورت چرخشی (round-robin) بین حساب‌های فعال ارسال می‌شوند.
@@ -96,6 +130,9 @@ export default function Accounts() {
           <div key={a.id} className="card space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
+                {a.profile_picture_url
+                  ? <img src={a.profile_picture_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+                  : <div className="w-8 h-8 rounded-full bg-slate-700" />}
                 <span className="font-bold">{a.name}</span>
                 {a.is_default && (
                   <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">پیش‌فرض ⭐</span>
@@ -115,6 +152,15 @@ export default function Accounts() {
               <button className="btn-secondary" onClick={() => showQr(a.id)}>QR</button>
               <button className="btn-secondary" disabled={busy === a.id} onClick={() => act(() => Api.reboot(a.id), a.id)}>ری‌بوت</button>
               <button className="btn-secondary" onClick={() => startRename(a)}>✏️ ویرایش نام</button>
+              <label className="btn-secondary cursor-pointer whitespace-nowrap">
+                🖼 عکس پروفایل
+                <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                  const file = e.target.files?.[0]; e.target.value = "";
+                  if (!file) return;
+                  try { await Api.setProfilePicture(a.id, file); toast.success("عکس پروفایل تنظیم شد"); reload(); }
+                  catch (err) { toast.error(err?.response?.data?.detail || err.message); }
+                }} />
+              </label>
               {!a.is_default && (
                 <button className="btn-secondary" disabled={busy === a.id} onClick={() => act(() => Api.setDefault(a.id), a.id)}>تنظیم به‌عنوان پیش‌فرض</button>
               )}

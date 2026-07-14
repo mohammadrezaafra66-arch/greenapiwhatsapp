@@ -21,3 +21,14 @@ def edit_seconds_left(sent_at: datetime | None, now: datetime | None = None) -> 
     now = now or datetime.utcnow()
     left = EDIT_WINDOW_SECONDS - int((now - sent_at).total_seconds())
     return max(0, left)
+
+
+# FEATURE 16 — the ONLY values setDisappearingChat accepts (seconds).
+DISAPPEARING_VALUES = {0, 86400, 604800, 7776000}   # off · 24h · 7d · 90d
+
+
+def valid_disappearing(value) -> bool:
+    try:
+        return int(value) in DISAPPEARING_VALUES
+    except (TypeError, ValueError):
+        return False

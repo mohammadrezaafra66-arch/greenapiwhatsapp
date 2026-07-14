@@ -20,6 +20,7 @@ async def list_inbox(
     unread: bool = None,
     category: str = None,
     instance_id: str = None,
+    archived: bool = False,
     limit: int = 100,
     db: AsyncSession = Depends(get_db)
 ):
@@ -31,6 +32,8 @@ async def list_inbox(
         query = query.where(InboxMessage.category == category)
     if instance_id:
         query = query.where(InboxMessage.instance_id == instance_id)
+    # V14 F15 — exclude archived by default; archived=True shows only archived.
+    query = query.where(InboxMessage.archived.is_(bool(archived)))
     query = query.order_by(InboxMessage.received_at.desc()).limit(limit)
 
     result = await db.execute(query)
@@ -46,6 +49,7 @@ async def list_inbox(
             "category": m.category,
             "is_group": m.is_group,
             "is_read": m.is_read,
+            "archived": m.archived,
             "auto_replied": m.auto_replied,
             "call_status": m.call_status,
             "button_reply_id": m.button_reply_id,

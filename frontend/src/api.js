@@ -45,6 +45,18 @@ export const Accounts = {
   queue: (id) => http.get(`/accounts/${id}/queue`).then((r) => r.data),
   clearQueue: (id) => http.delete(`/accounts/${id}/queue`).then((r) => r.data),
   remove: (id) => http.delete(`/accounts/${id}`).then((r) => r.data),
+  // V14 F17 — profile picture
+  setProfilePicture: (id, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return http.post(`/accounts/${id}/profile-picture`, fd, { headers: { "Content-Type": "multipart/form-data" }, timeout: 60000 }).then((r) => r.data);
+  },
+  applyProfilePictureAll: (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return http.post("/accounts/profile-picture/apply-all", fd, { headers: { "Content-Type": "multipart/form-data" }, timeout: 60000 }).then((r) => r.data);
+  },
+  pfpProgress: () => http.get("/accounts/profile-picture/apply-all/progress").then((r) => r.data),
 };
 
 // ── Campaigns ──────────────────────────────────────────
@@ -100,6 +112,8 @@ export const Contacts = {
     http.get(`/contacts/${id}/history`, { params: { count } }).then((r) => r.data),
   blacklist: (id, reason) =>
     http.post(`/contacts/${id}/blacklist`, null, { params: { reason } }).then((r) => r.data),
+  info: (phone, refresh = false) =>
+    http.get(`/contacts/${phone}/info`, { params: refresh ? { refresh: true } : {} }).then((r) => r.data),
   remove: (id) => http.delete(`/contacts/${id}`).then((r) => r.data),
 };
 
@@ -369,6 +383,9 @@ export const MessagesApi = {
   del: (body) => http.post("/messages/delete", body).then((r) => r.data),
   read: (body) => http.post("/messages/read", body).then((r) => r.data),
   readAll: (body) => http.post("/messages/read-all", body).then((r) => r.data),
+  // V14 PART D — chat control
+  archive: (body) => http.post("/messages/archive", body).then((r) => r.data),
+  disappearing: (body) => http.post("/messages/disappearing", body).then((r) => r.data),
 };
 
 // ── Send queue (V14 F20) ───────────────────────────────────

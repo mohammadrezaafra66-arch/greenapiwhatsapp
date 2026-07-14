@@ -47,6 +47,50 @@ def task_recall_campaign(campaign_id: str):
     run_async(recall_campaign(campaign_id))
 
 
+@celery_app.task(name="tasks.apply_profile_picture_all")
+def task_apply_profile_picture_all(image_path: str):
+    """V14 F17 — set the same profile picture on every active account, 10s apart
+    (0.1/sec limit). Publishes {done,total,finished} to Redis for the progress UI."""
+    import os, json
+    async def _run():
+        from sqlalchemy import select
+        from app.database import AsyncSessionLocal
+        from app.models.account import Account, AccountStatus
+        from app.services.green_api import GreenAPIClient
+        from app.services import redis_rate_limiter
+        r = await redis_rate_limiter.get_redis()
+        try:
+            with open(image_path, "rb") as fh:
+                data = fh.read()
+            async with AsyncSessionLocal() as db:
+                accounts = (await db.execute(
+                    select(Account).where(Account.status == AccountStatus.active)
+                )).scalars().all()
+                total = len(accounts)
+                done = 0
+                await r.set("pfp_apply_progress", json.dumps({"done": 0, "total": total, "finished": False}), ex=3600)
+                for i, acc in enumerate(accounts):
+                    try:
+                        res = await GreenAPIClient(acc.instance_id, acc.api_token).set_profile_picture_upload(data)
+                        url = res.get("urlAvatar") if isinstance(res, dict) else None
+                        if url:
+                            acc.profile_picture_url = url
+                            await db.commit()
+                        done += 1
+                    except Exception as e:
+                        print(f"[pfp-all] account {acc.instance_id} failed: {e}")
+                    await r.set("pfp_apply_progress", json.dumps({"done": done, "total": total, "finished": False}), ex=3600)
+                    if i < total - 1:
+                        await asyncio.sleep(10)   # 0.1/sec — one call per 10 seconds
+                await r.set("pfp_apply_progress", json.dumps({"done": done, "total": total, "finished": True}), ex=3600)
+        finally:
+            try:
+                os.remove(image_path)
+            except Exception:
+                pass
+    run_async(_run())
+
+
 @celery_app.task(name="tasks.sync_partner_instances")
 def task_sync_partner_instances():
     """V14 F3 — reconcile local accounts with the Green API Partner list every 6h.

@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import String, Boolean, Text, DateTime, Float
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
 
 
@@ -66,3 +66,11 @@ class SavedLocation(Base):
     longitude: Mapped[float] = mapped_column(Float, nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class ContactInfoCache(Base):
+    """FEATURE 18 — 24h cache of getContactInfo (rate limit is only 1/sec)."""
+    __tablename__ = "contact_info_cache"
+    chat_id: Mapped[str] = mapped_column(String(60), primary_key=True)
+    payload: Mapped[dict | None] = mapped_column(JSONB)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

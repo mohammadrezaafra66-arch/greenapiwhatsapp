@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -7,7 +7,11 @@ from app.models.account import Account, AccountStatus
 from app.models.contact import Contact
 from app.services.green_api import GreenAPIClient
 from app.config import settings
+import os
 import uuid
+import logging
+
+_logger = logging.getLogger("afrakala.accounts")
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -46,6 +50,7 @@ async def list_accounts(db: AsyncSession = Depends(get_db)):
             "auto_reply_outside_hours": a.auto_reply_outside_hours,
             "is_default": a.is_default,
             "proxy_enabled": a.proxy_enabled,
+            "profile_picture_url": a.profile_picture_url,
         }
         for a in accounts
     ]
@@ -409,6 +414,59 @@ async def refresh_api_token(account_id: str, db: AsyncSession = Depends(get_db))
         account.api_token = new_token
         await db.commit()
     return {"new_token": new_token, "updated_in_db": bool(new_token)}
+
+
+# ── V14 F17 — profile picture (multipart; ⚠️ 0.1/sec = one call per 10 seconds) ──
+_PFP_DIR = "/app/.pfp_tmp"
+_PFP_PROGRESS_KEY = "pfp_apply_progress"
+
+
+@router.post("/profile-picture/apply-all")
+async def apply_profile_picture_all(file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    """⭐ Set the SAME picture on every active account. Because of the 0.1/s limit this
+    runs as a Celery task with a 10s gap between accounts. Poll the progress endpoint."""
+    total = (await db.execute(
+        select(Account).where(Account.status == AccountStatus.active)
+    )).scalars().all()
+    if not total:
+        raise HTTPException(400, "هیچ حساب فعالی وجود ندارد")
+    os.makedirs(_PFP_DIR, exist_ok=True)
+    ext = (os.path.splitext(file.filename or "")[1] or ".jpg")
+    path = os.path.join(_PFP_DIR, f"{uuid.uuid4().hex}{ext}")
+    with open(path, "wb") as fh:
+        fh.write(await file.read())
+    from app.workers.tasks import task_apply_profile_picture_all
+    task_apply_profile_picture_all.delay(path)
+    return {"started": True, "total": len(total)}
+
+
+@router.get("/profile-picture/apply-all/progress")
+async def apply_profile_picture_progress():
+    import json
+    try:
+        from app.services import redis_rate_limiter
+        r = await redis_rate_limiter.get_redis()
+        raw = await r.get(_PFP_PROGRESS_KEY)
+        return json.loads(raw) if raw else {"done": 0, "total": 0, "finished": True}
+    except Exception:
+        return {"done": 0, "total": 0, "finished": True}
+
+
+@router.post("/{account_id}/profile-picture")
+async def set_profile_picture(account_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    account = await _get_account(account_id, db)
+    data = await file.read()
+    try:
+        res = await GreenAPIClient(account.instance_id, account.api_token).set_profile_picture_upload(
+            data, file.filename or "avatar.jpg")
+    except Exception as e:
+        _logger.error("setProfilePicture failed: %s", e)
+        raise HTTPException(502, "تنظیم عکس پروفایل ناموفق بود")
+    url_avatar = res.get("urlAvatar") if isinstance(res, dict) else None
+    if url_avatar:
+        account.profile_picture_url = url_avatar
+        await db.commit()
+    return {"ok": bool(res.get("setProfilePicture") if isinstance(res, dict) else res), "url_avatar": url_avatar}
 
 
 @router.delete("/{account_id}")

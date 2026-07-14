@@ -392,6 +392,48 @@ async def edit_contact_in_phonebook(contact_id: str, first_name: str, last_name:
     return {"updated": ok, "phone": contact.phone}
 
 
+# ── V14 F18 — full contact info (getContactInfo, cached 24h) ────────────────
+@router.get("/{phone}/info")
+async def contact_info(phone: str, refresh: bool = False, db: AsyncSession = Depends(get_db)):
+    """Rich contact profile for lead qualification (avatar/name/isBusiness/products…).
+    Served from a 24h cache; getContactInfo is only 1/sec so we never hammer it."""
+    from datetime import timedelta
+    from app.models.messaging import ContactInfoCache
+    norm = normalize_phone(phone)
+    chat_id = f"{norm}@c.us"
+    cached = await db.get(ContactInfoCache, chat_id)
+    fresh = cached and cached.fetched_at and (datetime.utcnow() - cached.fetched_at) < timedelta(hours=24)
+    if cached and fresh and not refresh:
+        return {"chat_id": chat_id, "cached": True, "info": cached.payload}
+
+    acc = (await db.execute(
+        select(Account).where(Account.is_default.is_(True), Account.status == AccountStatus.active)
+    )).scalars().first()
+    if not acc:
+        acc = (await db.execute(
+            select(Account).where(Account.status == AccountStatus.active)
+        )).scalars().first()
+    if not acc:
+        if cached:
+            return {"chat_id": chat_id, "cached": True, "info": cached.payload}
+        raise HTTPException(400, "هیچ حساب متصلی برای دریافت اطلاعات نیست")
+
+    try:
+        info = await GreenAPIClient(acc.instance_id, acc.api_token).get_contact_info_raw(chat_id)
+    except Exception:
+        if cached:  # serve stale on error
+            return {"chat_id": chat_id, "cached": True, "info": cached.payload}
+        raise HTTPException(502, "دریافت اطلاعات مخاطب ناموفق بود")
+
+    if cached:
+        cached.payload = info
+        cached.fetched_at = datetime.utcnow()
+    else:
+        db.add(ContactInfoCache(chat_id=chat_id, payload=info, fetched_at=datetime.utcnow()))
+    await db.commit()
+    return {"chat_id": chat_id, "cached": False, "info": info}
+
+
 @router.delete("/{contact_id}")
 async def delete_contact(contact_id: str, db: AsyncSession = Depends(get_db)):
     contact = await db.get(Contact, uuid.UUID(contact_id))

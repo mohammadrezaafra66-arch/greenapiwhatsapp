@@ -310,6 +310,36 @@ class GreenAPIClient:
             body["idMessage"] = message_id
         return await self._post("readChat", body)
 
+    # ── V14 PART D — chat & profile (raw chatId) ──────────────────────────────
+    async def archive_chat_raw(self, chat: str) -> dict:
+        """FEATURE 15 — archiveChat."""
+        return await self._post("archiveChat", {"chatId": self._as_chat_id(chat)})
+
+    async def unarchive_chat_raw(self, chat: str) -> dict:
+        """FEATURE 15 — unarchiveChat."""
+        return await self._post("unarchiveChat", {"chatId": self._as_chat_id(chat)})
+
+    async def set_disappearing_raw(self, chat: str, ephemeral_expiration: int) -> dict:
+        """FEATURE 16 — setDisappearingChat. ephemeralExpiration ∈ {0, 86400, 604800, 7776000}."""
+        return await self._post("setDisappearingChat", {
+            "chatId": self._as_chat_id(chat),
+            "ephemeralExpiration": int(ephemeral_expiration),
+        })
+
+    async def set_profile_picture_upload(self, image_bytes: bytes, filename: str = "avatar.jpg") -> dict:
+        """FEATURE 17 — setProfilePicture (multipart/form-data, field `file`).
+        ⚠️ 0.1/sec (one call per 10 seconds). Returns {reason, urlAvatar, setProfilePicture}."""
+        url = f"{self.base_url}/setProfilePicture/{self.api_token}"
+        files = {"file": (filename, image_bytes)}
+        async with httpx.AsyncClient(timeout=60) as c:
+            r = await c.post(url, files=files)
+            r.raise_for_status()
+            return r.json()
+
+    async def get_contact_info_raw(self, chat: str) -> dict:
+        """FEATURE 18 — getContactInfo for a raw chatId or bare phone."""
+        return await self._post("getContactInfo", {"chatId": self._as_chat_id(chat)})
+
     # ── STATUSES ─────────────────────────────────────────
     async def send_status_text(self, text: str, bg_color: str = "#FFFFFF") -> Optional[str]:
         r = await self._post("sendTextStatus", {"message": text, "backgroundColor": bg_color, "font": "SANS_SERIF"})
