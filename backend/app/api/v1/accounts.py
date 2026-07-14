@@ -32,7 +32,10 @@ class AccountLimitsUpdate(BaseModel):
 
 @router.get("/")
 async def list_accounts(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Account).order_by(Account.created_at.desc()))
+    # Hide soft-deleted accounts (status='deleted') from the UI.
+    result = await db.execute(
+        select(Account).where(Account.status != AccountStatus.deleted).order_by(Account.created_at.desc())
+    )
     accounts = result.scalars().all()
     return [
         {
@@ -163,7 +166,17 @@ async def check_account_status(account_id: str, db: AsyncSession = Depends(get_d
 async def get_account_qr(account_id: str, db: AsyncSession = Depends(get_db)):
     account = await _get_account(account_id, db)
     client = GreenAPIClient(account.instance_id, account.api_token)
-    info = await client.get_qr_info()
+    # Degrade gracefully: a dead/unauthorized instance (or an open circuit breaker after
+    # repeated failures) must NOT surface as a 500. Return a friendly Persian message.
+    try:
+        info = await client.get_qr_info()
+    except Exception as e:
+        msg = "دریافت QR برای این حساب ممکن نیست"
+        if "403" in str(e):
+            msg = "این حساب روی Green API مجاز/متصل نیست (خطای ۴۰۳)"
+        elif "circuit" in str(e).lower() or "degraded" in str(e).lower():
+            msg = "این حساب موقتاً پاسخ نمی‌دهد (اتصال instance را در Green API بررسی کنید)"
+        return {"qr": "", "type": "error", "message": msg, "error": msg}
     qtype = info.get("type", "")
     message = info.get("message", "")
     # base64 PNG is only present when Green API is waiting for a scan (qrCode)
