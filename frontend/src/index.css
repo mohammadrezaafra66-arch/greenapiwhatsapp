@@ -9,7 +9,22 @@ body,
 }
 
 body {
-  @apply bg-slate-900 text-slate-100 font-sans;
+  @apply font-sans;
+  /* V14 PART H — dark theme: no pure black bg, slightly-muted (not pure white) text.
+     Persian needs more line height for descenders/dots. */
+  background-color: #0F1214;
+  color: #E6E8EA;
+  line-height: 1.7;
+}
+
+/* Visible focus ring for full keyboard navigation (WCAG 2.2). */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #25D366;
+  outline-offset: 2px;
 }
 
 /* Reusable component classes */
