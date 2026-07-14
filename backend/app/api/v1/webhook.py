@@ -263,11 +263,19 @@ async def handle_state_change(instance_id: str, payload: dict):
                 account.status = AccountStatus.banned
                 account.banned_at = datetime.utcnow()
                 account.ban_reason = "blocked by WhatsApp"
+                await db.commit()
             elif state == "notAuthorized":
                 account.status = AccountStatus.disconnected
+                await db.commit()
             elif state == "authorized":
                 account.status = AccountStatus.active
-            await db.commit()
+                await db.commit()
+            elif state == "yellowCard":
+                # V14 F23 — automatic incident response (commits internally).
+                from app.services.incident_handler import handle_yellow_card
+                await handle_yellow_card(account, "webhook", db)
+            else:
+                await db.commit()
 
 async def handle_outgoing_status(instance_id: str, payload: dict):
     msg_id = payload.get("idMessage", "")
@@ -281,8 +289,16 @@ async def handle_outgoing_status(instance_id: str, payload: dict):
         cc = result.scalar_one_or_none()
         if cc:
             cc.delivery_status = status
-            # V14 F9 — a silent edit failure (Green API returned 200 but WhatsApp
-            # rejected it) arrives here as status=failed with a descriptive reason.
+            if status == "yellowCard":
+                # V14 F23 — a yellowCard can also surface on an outgoing status.
+                acc = (await db.execute(
+                    select(Account).where(Account.instance_id == instance_id)
+                )).scalar_one_or_none()
+                if acc:
+                    from app.services.incident_handler import handle_yellow_card
+                    await handle_yellow_card(acc, "messageStatus", db)
+            # V14 F9 — a silent edit failure (Green API returned 200 but WhatsApp rejected
+            # it) arrives as status=failed with a descriptive reason.
             if status == "failed":
                 desc = payload.get("description") or payload.get("sendByApi") or ""
                 if desc:
@@ -298,20 +314,28 @@ async def handle_outgoing_status(instance_id: str, payload: dict):
 
 
 async def handle_incoming_call(instance_id: str, payload: dict):
-    """Log incoming WhatsApp calls."""
+    """Log incoming WhatsApp calls (also to call_logs — F24)."""
     sender = payload.get("senderData", {})
     sender_phone = sender.get("sender", "").split("@")[0]
+    status = payload.get("status", "missed")
     async with AsyncSessionLocal() as db:
         msg = InboxMessage(
             instance_id=instance_id,
             sender_phone=sender_phone,
             sender_name=sender.get("senderName", ""),
             message_type="call",
-            call_status=payload.get("status", "missed"),
+            call_status=status,
             original_payload=json.dumps(payload, ensure_ascii=False),
             timestamp=datetime.fromtimestamp(payload.get("timestamp", 0))
         )
         db.add(msg)
+        acc = (await db.execute(select(Account).where(Account.instance_id == instance_id))).scalar_one_or_none()
+        from app.models.incident import CallLog
+        db.add(CallLog(
+            account_id=acc.id if acc else None, direction="incoming",
+            from_phone=sender_phone, status=status, contact_name=sender.get("senderName", ""),
+            called_at=datetime.fromtimestamp(payload.get("timestamp", 0) or 0),
+        ))
         await db.commit()
 
 
@@ -524,17 +548,43 @@ async def handle_incoming_block(instance_id: str, payload: dict):
         db.add(OptOutLog(phone=blocker_phone, reason="blocked"))
         await db.commit()
 
+        # V14 F23.6 — post-complaint quiet period: ≥3 blocks in 24h for one account →
+        # auto-throttle 0.5 for 10 days (warning-severity incident, no cooldown).
+        try:
+            from app.services import redis_rate_limiter
+            r = await redis_rate_limiter.get_redis()
+            key = f"blocks24h:{instance_id}"
+            n = await r.incr(key)
+            if n == 1:
+                await r.expire(key, 86400)
+            if n == 3:
+                acc = (await db.execute(select(Account).where(Account.instance_id == instance_id))).scalar_one_or_none()
+                if acc:
+                    from app.services.incident_handler import apply_warning_throttle
+                    await apply_warning_throttle(acc, "blockSpike", "webhook", db, factor=0.5, days=10)
+        except Exception as e:
+            logger.warning("block-spike check failed: %s", e)
+
 
 async def handle_outgoing_call(instance_id: str, payload: dict):
-    """Log outgoing calls to inbox for tracking."""
+    """Log outgoing calls to inbox + call_logs (F24)."""
+    from_phone = payload.get("from", "").split("@")[0]
+    status = payload.get("status", "outgoing")
     async with AsyncSessionLocal() as db:
         msg = InboxMessage(
             instance_id=instance_id,
-            sender_phone=payload.get("from", "").split("@")[0],
+            sender_phone=from_phone,
             message_type="outgoing_call",
-            call_status=payload.get("status", "outgoing"),
+            call_status=status,
             original_payload=json.dumps(payload, ensure_ascii=False),
             timestamp=datetime.fromtimestamp(payload.get("timestamp", 0) or 0)
         )
         db.add(msg)
+        acc = (await db.execute(select(Account).where(Account.instance_id == instance_id))).scalar_one_or_none()
+        from app.models.incident import CallLog
+        db.add(CallLog(
+            account_id=acc.id if acc else None, direction="outgoing",
+            from_phone=from_phone, status=status,
+            called_at=datetime.fromtimestamp(payload.get("timestamp", 0) or 0),
+        ))
         await db.commit()

@@ -21,6 +21,7 @@ class Contact(Base):
     blacklisted: Mapped[bool] = mapped_column(Boolean, default=False)
     blacklist_reason: Mapped[str | None] = mapped_column(Text)
     last_replied_at: Mapped[datetime | None] = mapped_column(DateTime)
+    first_messaged_at: Mapped[datetime | None] = mapped_column(DateTime)  # V14 F23.6 — warm-up new-contact cap
     source: Mapped[str | None] = mapped_column(String(200))
     group_source: Mapped[str | None] = mapped_column(String(500))  # V9: originating group name
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

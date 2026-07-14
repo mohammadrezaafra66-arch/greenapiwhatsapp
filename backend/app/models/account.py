@@ -40,6 +40,12 @@ class Account(Base):
     proxy_password: Mapped[str | None] = mapped_column(String(200))
     proxy_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    # V14 PART F — yellowCard safety (throttle + cooldown)
+    throttle_factor: Mapped[float] = mapped_column(Float, default=1.0)
+    throttle_until: Mapped[datetime | None] = mapped_column(DateTime)
+    cooldown_until: Mapped[datetime | None] = mapped_column(DateTime)
+    incident_count_7d: Mapped[int] = mapped_column(Integer, default=0)
+    last_incident_at: Mapped[datetime | None] = mapped_column(DateTime)
     # V14 PART A — Partner-managed instances
     created_via_partner: Mapped[bool] = mapped_column(Boolean, default=False)
     partner_created_at: Mapped[datetime | None] = mapped_column(DateTime)
@@ -60,9 +66,9 @@ class Account(Base):
         """Daily send limit following Meta best practices (V8 Feature 39)."""
         days = self.days_active or 0
         absolute = self.max_daily_absolute or 200
-        # Week 1 (warm-up): hard-cap at 5 messages/day to keep a fresh account
-        # under the radar — this overrides the formula and the configured limit.
-        if days < 7:
+        # V14 F23.6 — Green API says the first 10 days are the highest-risk period.
+        # During warm-up hard-cap at 5 messages/day (overrides formula + configured limit).
+        if days < 10:
             return min(5, absolute)
         base = min(days, 10)
         incoming = min(int((self.received_yesterday or 0) * (self.incoming_ratio_multiplier or 0.5)), 20)

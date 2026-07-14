@@ -27,17 +27,19 @@ def test_computed_daily_limit_caps():
 
 
 def test_computed_daily_limit_mixed():
-    # Past the warm-up week (days_active >= 7) the full formula applies.
-    acc = _make_account(days_active=8, received_yesterday=8, quick_replies_yesterday=2)
-    # min(8,10)=8 + min(int(8*0.5),20)=4 + min(2*5,50)=10 => 22
-    assert acc.computed_daily_limit == 22
+    # V14 F23.6 — warm-up is 10 days; past it (days_active >= 10) the full formula applies.
+    acc = _make_account(days_active=12, received_yesterday=8, quick_replies_yesterday=2)
+    # min(12,10)=10 + min(int(8*0.5),20)=4 + min(2*5,50)=10 => 24
+    assert acc.computed_daily_limit == 24
 
 
 def test_computed_daily_limit_warmup_week_cap():
-    # During week 1 (days_active < 7) the limit is hard-capped at 5,
+    # V14 F23.6 — during warm-up (days_active < 10) the limit is hard-capped at 5,
     # even when the formula would allow far more.
     acc = _make_account(days_active=5, received_yesterday=20, quick_replies_yesterday=10)
     assert acc.computed_daily_limit == 5
+    # day 9 is still warm-up
+    assert _make_account(days_active=9, received_yesterday=20, quick_replies_yesterday=10).computed_daily_limit == 5
 
 
 def test_computed_daily_limit_respects_absolute_cap():
@@ -49,10 +51,11 @@ def test_computed_daily_limit_respects_absolute_cap():
 
 def test_computed_daily_limit_no_longer_uses_daily_limit_floor():
     # V8 F39 removed the daily_limit floor; only the formula + absolute cap apply.
-    acc = _make_account(days_active=7)
+    # (days_active=10 → past the V14 10-day warm-up so the formula, not the cap, applies.)
+    acc = _make_account(days_active=10)
     acc.daily_limit = 50  # no effect anymore
-    # base=7 + incoming=0 + replies=0 = 7
-    assert acc.computed_daily_limit == 7
+    # base=min(10,10)=10 + incoming=0 + replies=0 = 10
+    assert acc.computed_daily_limit == 10
 
 
 @pytest.mark.parametrize("raw,expected", [

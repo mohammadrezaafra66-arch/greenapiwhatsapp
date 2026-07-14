@@ -47,4 +47,10 @@ celery_app.conf.beat_schedule = {
     "night-report": {"task": "tasks.send_night_report", "schedule": crontab(hour=23, minute=0)},
     # V14 F3 — reconcile local accounts with the Green API Partner list every 6h.
     "sync-partner-instances": {"task": "tasks.sync_partner_instances", "schedule": 21600.0},
+    # V14 F23 — poll for yellowCard every 2 min (webhooks can be missed if the tunnel dies).
+    "detect-yellow-cards": {"task": "tasks.detect_yellow_cards", "schedule": 120.0},
+    # V14 F24 — pull call journals every 30 min.
+    "sync-call-logs": {"task": "tasks.sync_call_logs", "schedule": 1800.0},
+    # V14 F23.6 — reply-rate monitor hourly.
+    "reply-rate-monitor": {"task": "tasks.reply_rate_monitor", "schedule": 3600.0},
 }

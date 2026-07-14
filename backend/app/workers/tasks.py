@@ -98,6 +98,98 @@ def task_apply_profile_picture_all(image_path: str):
     run_async(_run())
 
 
+@celery_app.task(name="tasks.detect_yellow_cards")
+def task_detect_yellow_cards():
+    """V14 F23.1 — poll getStateInstance per active account every 2 min (webhooks can be
+    missed when the tunnel dies). A yellowCard triggers the automatic incident response."""
+    async def _run():
+        from sqlalchemy import select
+        from app.database import AsyncSessionLocal
+        from app.models.account import Account, AccountStatus
+        from app.services.green_api import GreenAPIClient
+        from app.services import governors
+        from app.services.incident_handler import handle_yellow_card
+        async with AsyncSessionLocal() as db:
+            accounts = (await db.execute(select(Account).where(Account.status == AccountStatus.active))).scalars().all()
+            for acc in accounts:
+                if governors.in_cooldown(acc):
+                    continue   # already handled/resting
+                try:
+                    state = await GreenAPIClient(acc.instance_id, acc.api_token).get_state()
+                except Exception:
+                    continue
+                if state == "yellowCard":
+                    await handle_yellow_card(acc, "poll", db)
+    run_async(_run())
+
+
+@celery_app.task(name="tasks.sync_call_logs")
+def task_sync_call_logs():
+    """V14 F24 — pull the call journals every 30 min (complements live webhooks)."""
+    async def _run():
+        from datetime import datetime
+        from sqlalchemy import select
+        from app.database import AsyncSessionLocal
+        from app.models.account import Account, AccountStatus
+        from app.models.incident import CallLog
+        from app.services.green_api import GreenAPIClient
+        async with AsyncSessionLocal() as db:
+            accounts = (await db.execute(select(Account).where(Account.status == AccountStatus.active))).scalars().all()
+            for acc in accounts:
+                client = GreenAPIClient(acc.instance_id, acc.api_token)
+                for direction, fetch in (("incoming", client.last_incoming_calls), ("outgoing", client.last_outgoing_calls)):
+                    try:
+                        calls = await fetch(60)
+                    except Exception:
+                        continue
+                    for c in (calls or []):
+                        ts = c.get("timestamp") or c.get("time") or 0
+                        try:
+                            called_at = datetime.fromtimestamp(int(ts)) if ts else None
+                        except Exception:
+                            called_at = None
+                        phone = str(c.get("from") or c.get("chatId") or c.get("sender") or "").split("@")[0]
+                        # best-effort dedup by (phone, called_at, direction)
+                        exists = (await db.execute(select(CallLog).where(
+                            CallLog.from_phone == phone, CallLog.called_at == called_at,
+                            CallLog.direction == direction,
+                        ).limit(1))).scalar_one_or_none()
+                        if exists:
+                            continue
+                        db.add(CallLog(account_id=acc.id, direction=direction, from_phone=phone,
+                                       status=c.get("status"), called_at=called_at))
+                    await db.commit()
+    run_async(_run())
+
+
+@celery_app.task(name="tasks.reply_rate_monitor")
+def task_reply_rate_monitor():
+    """V14 F23.6 — 7-day reply rate per account; <10% → auto-throttle 0.5 (warning)."""
+    async def _run():
+        from datetime import datetime, timedelta
+        from sqlalchemy import select, func
+        from app.database import AsyncSessionLocal
+        from app.models.account import Account, AccountStatus
+        from app.models.campaign import CampaignContact
+        from app.services import governors
+        from app.services.incident_handler import apply_warning_throttle
+        cutoff = datetime.utcnow() - timedelta(days=7)
+        async with AsyncSessionLocal() as db:
+            accounts = (await db.execute(select(Account).where(Account.status == AccountStatus.active))).scalars().all()
+            for acc in accounts:
+                total = (await db.execute(select(func.count()).select_from(CampaignContact).where(
+                    CampaignContact.account_id == acc.id, CampaignContact.sent_at >= cutoff))).scalar() or 0
+                if total < 20:
+                    continue   # not enough volume to judge
+                replied = (await db.execute(select(func.count()).select_from(CampaignContact).where(
+                    CampaignContact.account_id == acc.id, CampaignContact.sent_at >= cutoff,
+                    CampaignContact.replied.is_(True)))).scalar() or 0
+                rate = replied / total
+                if rate < 0.10 and not governors.is_throttled(acc):
+                    await apply_warning_throttle(acc, "lowReplyRate", "poll", db, factor=0.5, days=7)
+    run_async(_run())
+
+
 @celery_app.task(name="tasks.sync_partner_instances")
 def task_sync_partner_instances():
     """V14 F3 — reconcile local accounts with the Green API Partner list every 6h.

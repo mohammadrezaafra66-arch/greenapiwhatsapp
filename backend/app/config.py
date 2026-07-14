@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     green_partner_token: str = ""
     green_partner_api_url: str = "https://api.green-api.com"
     partner_daily_rate: float = 0
+    # V14 F23.4 — semi-automatic failover after yellowCard (default OFF: silently moving
+    # load to another number can card it too if the message content is the trigger).
+    auto_failover_on_yellow_card: bool = False
     # When true (Celery worker/beat), use NullPool — each task runs on a fresh
     # event loop via asyncio.run and pooled asyncpg conns can't cross loops.
     # When false (API), use a real connection pool for concurrency.

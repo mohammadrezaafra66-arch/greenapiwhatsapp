@@ -404,6 +404,22 @@ export const MessagesApi = {
   disappearing: (body) => http.post("/messages/disappearing", body).then((r) => r.data),
 };
 
+// ── Safety incidents + protection (V14 F23) ────────────────
+export const IncidentsApi = {
+  list: (unresolved = false) => http.get("/incidents/", { params: unresolved ? { unresolved: true } : {} }).then((r) => r.data),
+  protection: () => http.get("/incidents/protection").then((r) => r.data),
+  resolve: (id) => http.post(`/incidents/${id}/resolve`).then((r) => r.data),
+  reboot: (accountId) => http.post(`/incidents/account/${accountId}/reboot`).then((r) => r.data),
+  resume: (accountId) => http.post(`/incidents/account/${accountId}/resume`).then((r) => r.data),
+  reconnect: (accountId) => http.post(`/incidents/account/${accountId}/reconnect`).then((r) => r.data),
+};
+
+// ── Call logs (V14 F24) ────────────────────────────────────
+export const CallsApi = {
+  list: (params = {}) => http.get("/calls/", { params }).then((r) => r.data),
+  missedToday: () => http.get("/calls/missed-today").then((r) => r.data),
+};
+
 // ── Send queue (V14 F20) ───────────────────────────────────
 export const QueueApi = {
   summary: () => http.get("/queue/summary").then((r) => r.data),

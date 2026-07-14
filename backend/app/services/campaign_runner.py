@@ -268,6 +268,9 @@ async def _run_campaign_inner(campaign_id: str):
 
         accounts_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
         accounts = accounts_result.scalars().all()
+        # V14 F23 — never send from an account resting in a yellowCard cooldown.
+        from app.services import governors
+        accounts = [a for a in accounts if not governors.in_cooldown(a)]
         if not accounts:
             # No connected account to send with → auto-pause with a clear reason.
             campaign.status = CampaignStatus.paused
@@ -357,13 +360,22 @@ async def _run_campaign_inner(campaign_id: str):
                 account = accounts[acc_idx % len(accounts)]
                 acc_idx += 1
 
-            if account.sent_today >= account.computed_daily_limit:
+            if account.sent_today >= governors.effective_daily_cap(account):
                 continue
             if not await can_send(str(account.id)):
                 await asyncio.sleep(60)
                 continue
 
+            # V14 F23.6 — warm-up new-contact cap (≤20 new/day for accounts <10 days).
+            is_new_contact = getattr(contact, "first_messaged_at", None) is None
+            if is_new_contact and not await governors.warmup_new_contact_allowed(str(account.id), account.days_active):
+                continue
+
             products = await _deliver_message(db, campaign, cc, contact, account, products, poll_options, buttons)
+            if cc.status == MessageStatus.sent and is_new_contact:
+                contact.first_messaged_at = datetime.utcnow()
+                await governors.record_new_contact(str(account.id))
+                await db.commit()
 
             if drip_remaining is not None and cc.status == MessageStatus.sent:
                 drip_sent += 1
@@ -372,7 +384,8 @@ async def _run_campaign_inner(campaign_id: str):
 
             from app.services.delay_service import get_delay
             min_d, max_d = await get_delay(str(account.id))
-            delay = random.uniform(min_d, max_d)
+            # V14 F23.6 — enforce the 500ms absolute floor between chats.
+            delay = max(governors.MIN_DELAY_FLOOR_MS / 1000.0, random.uniform(min_d, max_d))
             await asyncio.sleep(delay)
 
         remaining = await db.execute(
@@ -478,7 +491,8 @@ async def _send_chunk(campaign_id: str, account_id: str, items: list):
                 cc.status = MessageStatus.skipped
                 await db.commit()
                 continue
-            if account.sent_today >= account.computed_daily_limit:
+            from app.services import governors as _gov
+            if account.sent_today >= _gov.effective_daily_cap(account):
                 break  # this account has hit its daily cap
             if not await can_send(str(account.id)):
                 await asyncio.sleep(60)
@@ -488,4 +502,4 @@ async def _send_chunk(campaign_id: str, account_id: str, items: list):
 
             from app.services.delay_service import get_delay
             min_d, max_d = await get_delay(str(account.id))
-            await asyncio.sleep(random.uniform(min_d, max_d))
+            await asyncio.sleep(max(_gov.MIN_DELAY_FLOOR_MS / 1000.0, random.uniform(min_d, max_d)))

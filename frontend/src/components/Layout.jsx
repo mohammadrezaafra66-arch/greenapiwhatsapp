@@ -1,5 +1,6 @@
 import React from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { IncidentsApi } from "../api.js";
 
 const NAV = [
   { label: "داشبورد", to: "/", icon: "📊", end: true },
@@ -21,12 +22,14 @@ const NAV = [
     label: "حساب‌ها", icon: "📱", children: [
       { to: "/accounts", label: "حساب‌های واتساپ" },
       { to: "/partner-instances", label: "مدیریت پارتنر" },
+      { to: "/protection", label: "محافظت و سلامت", badgeKey: "incidents" },
       { to: "/account-schedules", label: "زمان‌بندی حساب‌ها" },
     ],
   },
   {
     label: "ابزارها", icon: "🔧", children: [
       { to: "/inbox", label: "صندوق ورودی" },
+      { to: "/calls", label: "تماس‌ها" },
       { to: "/groups", label: "گروه‌های واتساپ" },
       { to: "/keyword-rules", label: "پاسخ خودکار" },
       { to: "/button-auto-replies", label: "پاسخ خودکار دکمه‌ها" },
@@ -54,7 +57,7 @@ const linkClass = ({ isActive }) =>
     isActive ? "bg-brand/20 text-brand" : "text-slate-300 hover:bg-slate-800"
   }`;
 
-function NavGroup({ item }) {
+function NavGroup({ item, badges }) {
   const location = useLocation();
   const childActive = item.children.some((c) => location.pathname === c.to || location.pathname.startsWith(c.to + "/"));
   const [open, setOpen] = React.useState(childActive);
@@ -79,12 +82,18 @@ function NavGroup({ item }) {
       </button>
       {open && (
         <div className="mr-4 mt-1 space-y-1 border-r border-slate-800 pr-2">
-          {item.children.map((c) => (
-            <NavLink key={c.to} to={c.to} className={linkClass}>
-              <span className="text-xs">•</span>
-              <span>{c.label}</span>
-            </NavLink>
-          ))}
+          {item.children.map((c) => {
+            const badge = c.badgeKey && badges ? badges[c.badgeKey] : 0;
+            return (
+              <NavLink key={c.to} to={c.to} className={linkClass}>
+                <span className="text-xs">•</span>
+                <span>{c.label}</span>
+                {badge > 0 && (
+                  <span className="mr-auto badge bg-red-500/30 text-red-300 border-red-500/50 text-xs">{badge}</span>
+                )}
+              </NavLink>
+            );
+          })}
         </div>
       )}
     </div>
@@ -93,6 +102,14 @@ function NavGroup({ item }) {
 
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [badges, setBadges] = React.useState({ incidents: 0 });
+
+  React.useEffect(() => {
+    const load = () => IncidentsApi.list(true).then((d) => setBadges({ incidents: (d || []).length })).catch(() => {});
+    load();
+    const t = setInterval(load, 30000);
+    return () => clearInterval(t);
+  }, []);
   return (
     <div className="flex h-full relative">
       {/* Mobile top bar (C5) */}
@@ -123,7 +140,7 @@ export default function Layout() {
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {NAV.map((n) =>
             n.children ? (
-              <NavGroup key={n.label} item={n} />
+              <NavGroup key={n.label} item={n} badges={badges} />
             ) : (
               <NavLink key={n.to} to={n.to} end={n.end} className={linkClass}>
                 <span>{n.icon}</span>

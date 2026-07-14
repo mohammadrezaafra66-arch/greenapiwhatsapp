@@ -20,7 +20,7 @@ from app.api.v1 import (
     journals, files as files_router,
     contact_groups, wa_collections, reporting as reporting_router,
     join_links, status_schedules, ai_keys,
-    partner, messages,
+    partner, messages, incidents, calls,
 )
 
 @asynccontextmanager
@@ -556,6 +556,48 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V14 partE] {e}")
+        # V14 PART F — safety (yellowCard incidents) & call logs.
+        ddl_v14_partf = [
+            """CREATE TABLE IF NOT EXISTS account_incidents (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                account_id uuid,
+                id_instance bigint,
+                incident_type varchar(30),
+                detected_via varchar(20),
+                severity varchar(10),
+                auto_actions jsonb,
+                campaigns_paused jsonb,
+                queue_snapshot jsonb,
+                resolved boolean DEFAULT false,
+                resolved_at timestamp,
+                resolved_by varchar(20),
+                notes text,
+                created_at timestamp DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_incidents_account ON account_incidents(account_id, created_at DESC)",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS throttle_factor double precision DEFAULT 1.0",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS throttle_until timestamp",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS cooldown_until timestamp",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS incident_count_7d integer DEFAULT 0",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS last_incident_at timestamp",
+            "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS first_messaged_at timestamp",
+            """CREATE TABLE IF NOT EXISTS call_logs (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                account_id uuid,
+                direction varchar(10),
+                from_phone varchar(20),
+                status varchar(20),
+                contact_name text,
+                called_at timestamp,
+                created_at timestamp DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_call_logs_time ON call_logs(called_at DESC)",
+        ]
+        for stmt in ddl_v14_partf:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V14 partF] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:
@@ -598,7 +640,7 @@ for router in [
     journals.router, files_router.router,
     contact_groups.router, wa_collections.router, reporting_router.router,
     join_links.router, status_schedules.router, ai_keys.router,
-    partner.router, messages.router,
+    partner.router, messages.router, incidents.router, calls.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

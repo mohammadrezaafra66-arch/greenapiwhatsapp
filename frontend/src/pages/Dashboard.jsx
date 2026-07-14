@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Dashboard as DashApi, Inbox as InboxApi, AiApi, QueueApi } from "../api.js";
+import { Dashboard as DashApi, Inbox as InboxApi, AiApi, QueueApi, IncidentsApi, CallsApi } from "../api.js";
 import { Spinner } from "../ui.jsx";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -143,6 +143,21 @@ export default function Dashboard() {
     return () => clearInterval(t);
   }, []);
 
+  // V14 F23/F24 — unresolved incidents + missed calls (poll every 20s)
+  const [incidents, setIncidents] = React.useState([]);
+  const [missedCalls, setMissedCalls] = React.useState(0);
+  React.useEffect(() => {
+    const load = () => {
+      IncidentsApi.list(true).then((d) => setIncidents(d || [])).catch(() => {});
+      CallsApi.missedToday().then((r) => setMissedCalls(r.missed_today || 0)).catch(() => {});
+    };
+    load();
+    const t = setInterval(load, 20000);
+    return () => clearInterval(t);
+  }, []);
+  const critical = incidents.filter((i) => i.severity === "critical");
+  const warnings = incidents.filter((i) => i.severity !== "critical");
+
   // AI usage polls on a slower 30s cadence
   const loadAi = React.useCallback(async () => {
     try {
@@ -250,6 +265,21 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {critical.length > 0 && (
+        <Link to="/protection" className="block card border-red-500/60 bg-red-500/15 text-red-200 text-sm hover:bg-red-500/25">
+          🔴 {critical.map((i) => i.account_name).join("، ")} کارت زرد گرفت — ارسال متوقف شد. مشاهده جزئیات
+        </Link>
+      )}
+      {warnings.length > 0 && (
+        <Link to="/protection" className="block card border-amber-500/50 bg-amber-500/10 text-amber-200 text-sm hover:bg-amber-500/20">
+          🟡 {fa(warnings.length)} هشدار سلامت شماره — مشاهده «محافظت و سلامت»
+        </Link>
+      )}
+      {missedCalls > 0 && (
+        <Link to="/calls" className="block card border-orange-500/40 bg-orange-500/10 text-orange-200 text-sm hover:bg-orange-500/20">
+          📞 تماس‌های بی‌پاسخ امروز: {fa(missedCalls)} — سرنخ‌های داغ، مشاهده تماس‌ها
+        </Link>
+      )}
       {queueTotal > 0 && (
         <Link to="/send-queue" className="block card border-amber-500/50 bg-amber-500/10 text-amber-200 text-sm hover:bg-amber-500/20">
           ⏳ {fa(queueTotal)} پیام در صف ارسال — مشاهده صف

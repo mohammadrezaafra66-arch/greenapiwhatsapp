@@ -32,6 +32,7 @@ from app.models.messaging import (
     ButtonReply, ButtonAutoReply, MessageReaction, SavedContactCard, SavedLocation,
     ContactInfoCache,
 )
+from app.models.incident import AccountIncident, CallLog
 
 __all__ = [
     "Account",
@@ -77,4 +78,6 @@ __all__ = [
     "SavedContactCard",
     "SavedLocation",
     "ContactInfoCache",
+    "AccountIncident",
+    "CallLog",
 ]

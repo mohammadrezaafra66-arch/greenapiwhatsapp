@@ -28,6 +28,8 @@ import PartnerInstances from "./pages/PartnerInstances.jsx";
 import Content from "./pages/Content.jsx";
 import ButtonAutoReplies from "./pages/ButtonAutoReplies.jsx";
 import SendQueue from "./pages/SendQueue.jsx";
+import Protection from "./pages/Protection.jsx";
+import Calls from "./pages/Calls.jsx";
 
 export default function App() {
   return (
@@ -61,6 +63,8 @@ export default function App() {
         <Route path="content" element={<Content />} />
         <Route path="button-auto-replies" element={<ButtonAutoReplies />} />
         <Route path="send-queue" element={<SendQueue />} />
+        <Route path="protection" element={<Protection />} />
+        <Route path="calls" element={<Calls />} />
         <Route path="*" element={<div className="text-slate-400">صفحه یافت نشد</div>} />
       </Route>
       </Routes>

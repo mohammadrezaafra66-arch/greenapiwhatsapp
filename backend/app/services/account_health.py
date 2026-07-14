@@ -40,6 +40,11 @@ def compute_score(cap_ratio: float, yellow_rate: float) -> float:
 
 
 async def account_health_score(account, db) -> float:
+    # V14 F23.3.7 — an account resting in cooldown scores 0 so smart rotation routes
+    # around it automatically.
+    from app.services.governors import in_cooldown
+    if in_cooldown(account):
+        return 0.0
     cap_ratio, _total, _yellow, yellow_rate = await _stats(account, db)
     return compute_score(cap_ratio, yellow_rate)
 

@@ -547,6 +547,16 @@ class GreenAPIClient:
         r = await self._get("lastOutgoingMessages", params={"minutes": minutes})
         return r if isinstance(r, list) else []
 
+    async def last_incoming_calls(self, minutes: int = 1440) -> list[dict]:
+        """FEATURE 24 — incoming WhatsApp calls in the last N minutes."""
+        r = await self._get("lastIncomingCalls", params={"minutes": minutes})
+        return r if isinstance(r, list) else []
+
+    async def last_outgoing_calls(self, minutes: int = 1440) -> list[dict]:
+        """FEATURE 24 — outgoing WhatsApp calls in the last N minutes."""
+        r = await self._get("lastOutgoingCalls", params={"minutes": minutes})
+        return r if isinstance(r, list) else []
+
     # ── SERVICE ──────────────────────────────────────────
     async def get_chats(self) -> list[dict]:
         """Get list of all active chats."""
