@@ -22,7 +22,7 @@ from app.api.v1 import (
     join_links, status_schedules, ai_keys,
     partner, messages, incidents, calls,
     capabilities as capabilities_router,
-    adlinks,
+    adlinks, warmup,
 )
 
 @asynccontextmanager
@@ -623,6 +623,13 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS append_links boolean DEFAULT false",
             "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS links_count integer DEFAULT 1",
             "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS links_mode varchar(20) DEFAULT 'weighted'",
+            # V16 PART 5 — editable warm-up phrase pool
+            """CREATE TABLE IF NOT EXISTS warmup_phrases (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                text text NOT NULL,
+                is_active boolean DEFAULT true,
+                created_at timestamp DEFAULT now()
+            )""",
         ]
         ddl_v15 += ddl_v16
         for stmt in ddl_v15:
@@ -630,6 +637,17 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V15] {e}")
+        # V16 PART 5 — seed the warm-up phrase pool once (only if empty).
+        try:
+            from app.services.warmup_auto import DEFAULT_PHRASES
+            existing = (await conn.execute(text("SELECT count(*) FROM warmup_phrases"))).scalar() or 0
+            if existing == 0:
+                for ph in DEFAULT_PHRASES:
+                    await conn.execute(text(
+                        "INSERT INTO warmup_phrases (id, text, is_active, created_at) "
+                        "VALUES (gen_random_uuid(), :t, true, now())"), {"t": ph})
+        except Exception as e:
+            print(f"[Seed warmup_phrases] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:
@@ -673,7 +691,7 @@ for router in [
     contact_groups.router, wa_collections.router, reporting_router.router,
     join_links.router, status_schedules.router, ai_keys.router,
     partner.router, messages.router, incidents.router, calls.router,
-    capabilities_router.router, adlinks.router,
+    capabilities_router.router, adlinks.router, warmup.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

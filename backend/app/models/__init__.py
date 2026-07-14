@@ -34,6 +34,7 @@ from app.models.messaging import (
 )
 from app.models.incident import AccountIncident, CallLog
 from app.models.advertising import AdvertisingLink
+from app.models.warmup import WarmupPhrase
 
 __all__ = [
     "Account",
@@ -82,4 +83,5 @@ __all__ = [
     "AccountIncident",
     "CallLog",
     "AdvertisingLink",
+    "WarmupPhrase",
 ]

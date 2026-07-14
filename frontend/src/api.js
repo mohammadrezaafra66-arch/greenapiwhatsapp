@@ -436,6 +436,17 @@ export const QueueApi = {
   clear: (accountId) => http.delete(`/queue/${accountId}`).then((r) => r.data),
 };
 
+// ── Warm-up (V16 PART 5) ───────────────────────────────────
+export const WarmupApi = {
+  dashboard: () => http.get("/warmup/dashboard").then((r) => r.data),
+  startAll: () => http.post("/warmup/start-all").then((r) => r.data),
+  stopAll: () => http.post("/warmup/stop-all").then((r) => r.data),
+  phrases: () => http.get("/warmup/phrases").then((r) => r.data),
+  createPhrase: (body) => http.post("/warmup/phrases", body).then((r) => r.data),
+  updatePhrase: (id, body) => http.put(`/warmup/phrases/${id}`, body).then((r) => r.data),
+  deletePhrase: (id) => http.delete(`/warmup/phrases/${id}`).then((r) => r.data),
+};
+
 // ── Advertising links (V16 PART 3) ─────────────────────────
 export const AdLinksApi = {
   list: () => http.get("/advertising-links/").then((r) => r.data),
