@@ -168,7 +168,8 @@ export default function Groups() {
         <h2 className="text-2xl font-bold">گروه‌های واتساپ</h2>
         <div className="flex gap-2 flex-wrap">
           <select className="input w-auto" value={selectedAccount} onChange={(e) => setSelectedAccount(e.target.value)}>
-            {activeAccounts.length === 0 && <option value="">— حساب فعالی نیست —</option>}
+            {/* V15 Item 19 — explicit "all accounts" option */}
+            <option value="all">همه اکانت‌ها</option>
             {activeAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.phone ? ` (${a.phone})` : ""}</option>)}
           </select>
           <button className="btn-secondary" disabled={syncing} onClick={syncGroups}>
@@ -256,7 +257,10 @@ export default function Groups() {
             <div key={g.id} className="card space-y-2">
               <div className="flex justify-between items-start gap-2">
                 <h3 className="font-bold text-sm leading-tight">
-                  {g.name}
+                  {/* V15 Item 20 — always show a name; fall back to the id + «(بدون نام)» */}
+                  {g.name && g.name.trim()
+                    ? g.name
+                    : <span className="text-slate-400 font-mono">{g.group_chat_id || "—"} <span className="text-xs">(بدون نام)</span></span>}
                   {g.is_admin && <span className="text-xs text-amber-400 font-bold mr-2">👑 ادمین</span>}
                 </h3>
                 <span className={`text-xs whitespace-nowrap ${t.cls}`}>{t.icon} {t.label}</span>
