@@ -47,10 +47,7 @@ async def run_group_campaign(campaign_id: str):
         variation = campaign.product_variation_mode or "same"
         per_group = campaign.products_per_group or campaign.product_count or 3
         weights = campaign.product_weights or {}
-        product_pool = []
-        if campaign.include_products:
-            pool_size = per_group if variation == "same" else max(per_group * 4, 15, campaign.product_count or 0)
-            product_pool = await get_products(pool_size)
+        pool_size = per_group if variation == "same" else max(per_group * 4, 15, campaign.product_count or 0)
 
         opening_mode = campaign.opening_mode or "ai"
 
@@ -72,6 +69,9 @@ async def run_group_campaign(campaign_id: str):
                 await asyncio.sleep(60)
                 continue
 
+            # V15 Item 24 — re-fetch the product pool per group so prices stay current
+            # mid-campaign (Redis-cached ≤5 min; the used-set dedup keys off names).
+            product_pool = await get_products(pool_size) if campaign.include_products else []
             # Per-group product subset (Phase 3/4) + opening line (Phase 2).
             group_products = (
                 select_group_products(product_pool, variation, per_group, weights, group_idx,

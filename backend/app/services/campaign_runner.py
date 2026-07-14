@@ -8,6 +8,16 @@ from app.services.green_api import GreenAPIClient
 from app.services.gpt_service import generate_message, _apply_opening, _apply_opt_out
 from app.services.price_service import get_products
 from app.services.rate_limiter import can_send, record_send
+
+
+async def fetch_campaign_products(campaign) -> list:
+    """CRITICAL: fetch prices PER-MESSAGE (not per-campaign) so mid-campaign price changes
+    are reflected immediately. get_products is Redis-cached (≤5 min) so this stays cheap.
+    See V15 Item 24."""
+    if getattr(campaign, "product_label_filter", None):
+        from app.services.price_service import get_products_by_label
+        return await get_products_by_label(campaign.product_label_filter, campaign.product_count)
+    return await get_products(campaign.product_count)
 from app.database import AsyncSessionLocal
 from app.config import settings
 
@@ -98,9 +108,10 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
         if getattr(campaign, "ab_test_enabled", False) and getattr(cc, "ab_variant", None) == "B":
             effective_gpt_prompt = campaign.variant_b_prompt or effective_gpt_prompt
             effective_template = campaign.variant_b_template or effective_template
-        # Lazily fetch products if this hour's slot wants them but the campaign didn't.
-        if effective_include_products and not products:
-            products = await get_products(campaign.product_count)
+        # V15 Item 24 — fetch prices PER-MESSAGE (not the campaign-start snapshot) so a
+        # price change mid-campaign is reflected on the very next message (cache ≤5 min).
+        if effective_include_products:
+            products = await fetch_campaign_products(campaign)
 
         # Build the message via the shared builder (same path the preview uses).
         message = await build_message_text(
