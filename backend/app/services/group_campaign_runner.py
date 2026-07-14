@@ -54,6 +54,11 @@ async def run_group_campaign(campaign_id: str):
 
         opening_mode = campaign.opening_mode or "ai"
 
+        # V15 Item 22 — track products used across groups so per_group_random / rotate
+        # don't hand the same products to different groups.
+        used_products: set = set()
+        last_group_picks: list = []
+
         acc_idx = 0
         for group_idx, group_id in enumerate(group_ids):
             await db.refresh(campaign)
@@ -69,9 +74,12 @@ async def run_group_campaign(campaign_id: str):
 
             # Per-group product subset (Phase 3/4) + opening line (Phase 2).
             group_products = (
-                select_group_products(product_pool, variation, per_group, weights, group_idx)
+                select_group_products(product_pool, variation, per_group, weights, group_idx,
+                                      used=used_products, last_picks=last_group_picks)
                 if campaign.include_products else None
             )
+            if group_products:
+                last_group_picks = group_products
             opening_line = campaign.opening_line
             if opening_mode == "random" and campaign.opening_variants:
                 opening_line = random.choice(campaign.opening_variants)

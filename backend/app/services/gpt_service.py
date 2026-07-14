@@ -41,6 +41,32 @@ SYSTEM_PROMPT = """
 # Default unsubscribe line (opt-out). Kept configurable per campaign.
 DEFAULT_OPT_OUT = "برای لغو عدد ۱۱ ارسال کنید"
 
+# V15 Item 12 — "call us instead of a price" phrases we must never emit when show_prices=True.
+_CALL_PHRASES = ["تماس بگیرید", "تماس با ما", "برای قیمت تماس", "جهت قیمت تماس",
+                 "قیمت را بپرسید", "برای اطلاع از قیمت"]
+# Strong mandatory-price rule injected into the system prompt when show_prices=True.
+_PRICE_RULE = ("- حتماً قیمت دقیق هر محصول را به تومان بنویس. هرگز «تماس بگیرید» یا «تماس با ما» ننویس. "
+               "قیمت باید عدد دقیق باشد مثلاً ۷۶,۹۰۰,۰۰۰ تومان.")
+
+
+def _products_have_prices(products) -> bool:
+    return bool(products) and any(p.get("price") for p in (products or []))
+
+
+def _has_call_phrase(text: str) -> bool:
+    return any(p in (text or "") for p in _CALL_PHRASES)
+
+
+def _strip_call_lines(text: str) -> str:
+    """Drop any line that tells the recipient to 'call us' (used before appending prices)."""
+    return "\n".join(l for l in (text or "").split("\n") if not _has_call_phrase(l)).strip()
+
+
+def _price_list_text(products) -> str:
+    """A plain fallback price list appended when the model refuses to write prices."""
+    parts = [f"{p['name']}: {p['price']:,} تومان" for p in (products or [])[:3] if p.get("price")]
+    return ("\n\nقیمت‌ها: " + " | ".join(parts)) if parts else ""
+
 
 def _is_optout_line(line: str) -> bool:
     """Heuristic: is this line an opt-out/unsubscribe instruction (to strip/dedupe)?"""
@@ -327,10 +353,33 @@ async def generate_message(first_name: str, last_name: str, gpt_prompt: str,
             "نکات مهم را برجسته کن (مثلاً _کج_). فقط از نشانه‌های *، _، ~ استفاده کن."
         )
 
+    # V15 Item 12 — when prices should be shown and we HAVE prices, make it mandatory.
+    enforce_prices = show_prices and _products_have_prices(products)
+    if enforce_prices:
+        extra_rules.append(_PRICE_RULE)
+
     emoji_rule = EMOJI_INSTRUCTION.get(emoji_level, EMOJI_INSTRUCTION["medium"])
     system_prompt = SYSTEM_PROMPT + "".join(f"\n{r}" for r in extra_rules) + f"\n- درباره ایموجی: {emoji_rule}"
 
     text = await _chat(system_prompt, user_msg, max_tokens=500, temperature=0.85)
+
+    # V15 Item 12 — if the model still wrote "تماس بگیرید" instead of a price, retry once
+    # with a stronger prompt; if it STILL refuses, append the prices as a plain list so the
+    # recipient always sees a number.
+    if text and enforce_prices and _has_call_phrase(text):
+        import logging
+        logging.getLogger("afrakala.gpt").warning(
+            "show_prices=True but output contained a 'call us' phrase — retrying with a stronger prompt")
+        stronger = system_prompt + ("\n- تأکید مجدد: نوشتن «تماس بگیرید» ممنوع است. "
+                                    "قیمت هر محصول را دقیقاً با عدد به تومان بنویس.")
+        retry = await _chat(stronger, user_msg, max_tokens=500, temperature=0.6)
+        if retry:
+            text = retry
+        if _has_call_phrase(text) or not any(ch.isdigit() for ch in text):
+            # Still refusing → strip the 'call us' lines and append real prices so the
+            # recipient always sees a number and never a 'call us' phrase.
+            text = _strip_call_lines(text) + _price_list_text(products)
+
     if not text:
         text = _fallback_message(first_name, products, show_prices, opening_mode, opening_line)
     # Deterministic post-processing so the settings hold even if the model drifts

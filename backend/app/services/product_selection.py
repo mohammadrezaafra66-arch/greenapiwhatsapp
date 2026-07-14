@@ -31,18 +31,44 @@ def weighted_sample(products: list, weights: dict, k: int) -> list:
 
 
 def select_group_products(pool: list, mode: str, per_group: int,
-                          weights: dict | None, group_index: int) -> list:
+                          weights: dict | None, group_index: int,
+                          used: set | None = None, last_picks: list | None = None) -> list:
     """Choose the products to advertise to one group.
 
     mode:
       - same             → first `per_group` from the pool (identical for every group)
       - per_group_random → weighted-random `per_group` subset (differs per group)
       - rotate           → a rotating slice so consecutive groups get different products
+
+    V15 Item 22 — cross-group dedup: pass a persistent `used` set (and the previous
+    group's `last_picks`). Each group draws from the products NOT already used this run;
+    when the pool is exhausted a new cycle starts, but the immediately-preceding group's
+    picks stay excluded so two consecutive groups never get the identical set.
     """
     if not pool:
         return []
     per_group = max(1, per_group)
     n = len(pool)
+
+    if mode in ("per_group_random", "rotate") and used is not None:
+        remaining = [p for p in pool if _weight_key(p) not in used]
+        if len(remaining) < per_group:
+            # Pool exhausted → start a fresh cycle, but keep ONE of the previous group's
+            # picks excluded so the next group can't repeat the exact same set.
+            used.clear()
+            if last_picks:
+                used.add(_weight_key(last_picks[0]))
+            remaining = [p for p in pool if _weight_key(p) not in used]
+            if len(remaining) < per_group:      # per_group ≈ pool size — unavoidable reuse
+                remaining = list(pool)
+        if mode == "rotate":
+            picks = remaining[:per_group]        # strict order, no repeats until cycled
+        else:
+            picks = weighted_sample(remaining, weights or {}, per_group)
+        used.update(_weight_key(p) for p in picks)
+        return picks
+
+    # ── legacy stateless behavior (mode 'same', or no `used` set supplied) ──
     if mode == "per_group_random":
         return weighted_sample(pool, weights or {}, per_group)
     if mode == "rotate":

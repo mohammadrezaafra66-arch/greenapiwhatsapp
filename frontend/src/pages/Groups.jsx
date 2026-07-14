@@ -103,6 +103,8 @@ export default function Groups() {
     setError(null);
     try {
       const params = {};
+      // V15 Item 2 — filter groups by the selected account. "all"/empty = every account.
+      if (selectedAccount && selectedAccount !== "all") params.account_id = selectedAccount;
       if (typeFilter !== "all") params.chat_type = typeFilter;
       if (isAdminFilter !== null) params.is_admin = isAdminFilter;
       if (minMembers > 0) params.min_members = minMembers;
@@ -112,7 +114,7 @@ export default function Groups() {
     } finally {
       setLoading(false);
     }
-  }, [typeFilter, isAdminFilter, minMembers]);
+  }, [selectedAccount, typeFilter, isAdminFilter, minMembers]);
 
   React.useEffect(() => {
     AccApi.list()
