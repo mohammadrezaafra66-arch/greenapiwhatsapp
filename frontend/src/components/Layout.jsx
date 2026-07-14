@@ -19,6 +19,7 @@ const NAV = [
   {
     label: "حساب‌ها", icon: "📱", children: [
       { to: "/accounts", label: "حساب‌های واتساپ" },
+      { to: "/partner-instances", label: "مدیریت پارتنر" },
       { to: "/account-schedules", label: "زمان‌بندی حساب‌ها" },
     ],
   },

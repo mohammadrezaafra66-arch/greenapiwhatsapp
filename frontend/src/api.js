@@ -325,6 +325,21 @@ export const LabelsApi = {
   list: () => http.get("/reporting/product-labels").then((r) => r.data),
 };
 
+// ── Green API Partner (V14 PART A) ─────────────────────────
+export const PartnerApi = {
+  status: () => http.get("/partner/status").then((r) => r.data),
+  instances: () => http.get("/partner/instances").then((r) => r.data),
+  create: (name, delay_ms = 15000) =>
+    http.post("/partner/instances", { name, delay_ms }, { timeout: 60000 }).then((r) => r.data),
+  remove: (idInstance) => http.delete(`/partner/instances/${idInstance}`).then((r) => r.data),
+  sync: () => http.post("/partner/sync", null, { timeout: 60000 }).then((r) => r.data),
+  qr: (accountId) => http.get(`/partner/instances/${accountId}/qr`).then((r) => r.data),
+  state: (accountId) => http.get(`/partner/instances/${accountId}/state`).then((r) => r.data),
+  authCode: (accountId, phone) =>
+    http.post(`/partner/instances/${accountId}/auth-code`, { phone }, { timeout: 30000 }).then((r) => r.data),
+  capabilities: () => http.get("/partner/capabilities").then((r) => r.data),
+};
+
 // ── Blacklist ──────────────────────────────────────────
 export const BlacklistApi = {
   list: () => http.get("/blacklist/").then((r) => r.data),

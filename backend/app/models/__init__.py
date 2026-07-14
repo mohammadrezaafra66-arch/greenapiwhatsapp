@@ -27,6 +27,7 @@ from app.models.status_schedule import StatusSchedule
 from app.models.join_links import GroupJoinLink, AccountJoinStatus
 from app.models.ai_key import AIKey
 from app.models.optout import OptOutLog
+from app.models.partner import PartnerInstanceLog, MethodSupport
 
 __all__ = [
     "Account",
@@ -64,4 +65,6 @@ __all__ = [
     "AccountJoinStatus",
     "AIKey",
     "OptOutLog",
+    "PartnerInstanceLog",
+    "MethodSupport",
 ]

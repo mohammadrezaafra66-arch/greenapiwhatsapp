@@ -24,6 +24,7 @@ import Products from "./pages/Products.jsx";
 import JoinLinks from "./pages/JoinLinks.jsx";
 import StatusScheduler from "./pages/StatusScheduler.jsx";
 import AiKeys from "./pages/AiKeys.jsx";
+import PartnerInstances from "./pages/PartnerInstances.jsx";
 
 export default function App() {
   return (
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="join-links" element={<JoinLinks />} />
         <Route path="status-scheduler" element={<StatusScheduler />} />
         <Route path="ai-keys" element={<AiKeys />} />
+        <Route path="partner-instances" element={<PartnerInstances />} />
         <Route path="*" element={<div className="text-slate-400">صفحه یافت نشد</div>} />
       </Route>
       </Routes>

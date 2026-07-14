@@ -40,6 +40,20 @@ def task_send_night_report():
     from app.services.night_report import send_night_report
     run_async(send_night_report())
 
+@celery_app.task(name="tasks.sync_partner_instances")
+def task_sync_partner_instances():
+    """V14 F3 — reconcile local accounts with the Green API Partner list every 6h.
+    No-op (logged) when no partner token is configured."""
+    async def _s():
+        from app.services import green_partner
+        if not green_partner.is_configured():
+            return
+        from app.database import AsyncSessionLocal
+        from app.services.partner_sync import sync_partner_instances
+        async with AsyncSessionLocal() as db:
+            await sync_partner_instances(db)
+    run_async(_s())
+
 @celery_app.task(name="tasks.backfill_group_member_counts")
 def task_backfill_group_member_counts():
     """Fill member_count/description for groups that have never been counted

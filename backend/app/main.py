@@ -20,6 +20,7 @@ from app.api.v1 import (
     journals, files as files_router,
     contact_groups, wa_collections, reporting as reporting_router,
     join_links, status_schedules, ai_keys,
+    partner,
 )
 
 @asynccontextmanager
@@ -428,6 +429,37 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V13.8] {e}")
+        # V14 PART A — Green API Partner (instances) + PART G capability registry.
+        ddl_v14_partner = [
+            """CREATE TABLE IF NOT EXISTS partner_instance_log (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                id_instance bigint,
+                action varchar(30),          -- created | deleted | synced
+                detail text,
+                created_at timestamp DEFAULT now()
+            )""",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS created_via_partner boolean DEFAULT false",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS partner_created_at timestamp",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS profile_picture_url text",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS tariff varchar(40)",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_orphaned boolean DEFAULT false",
+            # F2 — allow soft-deleting a partner-deleted instance (PG15 allows this in a tx;
+            # the new value is not used in this same transaction).
+            "ALTER TYPE accountstatus ADD VALUE IF NOT EXISTS 'deleted'",
+            # PART G — capability registry (seeded by the PHASE 0 probe, updated on every call).
+            """CREATE TABLE IF NOT EXISTS method_support (
+                method varchar(60) PRIMARY KEY,
+                supported boolean,                -- null = unknown/not probed
+                last_status_code integer,
+                last_checked timestamp DEFAULT now(),
+                note text
+            )""",
+        ]
+        for stmt in ddl_v14_partner:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V14 partner] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:
@@ -470,6 +502,7 @@ for router in [
     journals.router, files_router.router,
     contact_groups.router, wa_collections.router, reporting_router.router,
     join_links.router, status_schedules.router, ai_keys.router,
+    partner.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

@@ -10,6 +10,7 @@ class AccountStatus(str, enum.Enum):
     banned = "banned"
     disconnected = "disconnected"
     pending = "pending"
+    deleted = "deleted"   # V14 F2 — soft-delete after partner deleteInstanceAccount
 
 class Account(Base):
     __tablename__ = "accounts"
@@ -39,6 +40,12 @@ class Account(Base):
     proxy_password: Mapped[str | None] = mapped_column(String(200))
     proxy_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    # V14 PART A — Partner-managed instances
+    created_via_partner: Mapped[bool] = mapped_column(Boolean, default=False)
+    partner_created_at: Mapped[datetime | None] = mapped_column(DateTime)
+    profile_picture_url: Mapped[str | None] = mapped_column(Text)
+    tariff: Mapped[str | None] = mapped_column(String(40))
+    is_orphaned: Mapped[bool] = mapped_column(Boolean, default=False)
     warmup_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     polling_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     auto_reply_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

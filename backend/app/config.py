@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     default_min_delay: int = 45
     default_max_delay: int = 110
     debug: bool = True
+    # V14 — Green API Partner. Token is a SECRET (never logged/returned). When empty,
+    # every Partner UI element renders but is disabled (see api/v1/partner.py).
+    green_partner_token: str = ""
+    green_partner_api_url: str = "https://api.green-api.com"
+    partner_daily_rate: float = 0
     # When true (Celery worker/beat), use NullPool — each task runs on a fresh
     # event loop via asyncio.run and pooled asyncpg conns can't cross loops.
     # When false (API), use a real connection pool for concurrency.

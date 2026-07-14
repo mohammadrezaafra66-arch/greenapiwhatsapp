@@ -45,4 +45,6 @@ celery_app.conf.beat_schedule = {
     "resume-drip-campaigns": {"task": "tasks.resume_drip_campaigns", "schedule": crontab(hour=8, minute=1)},
     # 23:00 Tehran (celery timezone is Asia/Tehran, so crontab is interpreted there)
     "night-report": {"task": "tasks.send_night_report", "schedule": crontab(hour=23, minute=0)},
+    # V14 F3 — reconcile local accounts with the Green API Partner list every 6h.
+    "sync-partner-instances": {"task": "tasks.sync_partner_instances", "schedule": 21600.0},
 }
