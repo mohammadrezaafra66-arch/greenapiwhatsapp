@@ -267,10 +267,9 @@ async def supabase_status():
     return await check_supabase()
 
 
-@router.get("/products")
-async def get_products_by_brand():
-    """Products grouped by brand, sorted cheap→expensive within each brand (Feature 43).
-    Degrades gracefully (brand → 'سایر', empty list) if Supabase is unreachable."""
+async def _fetch_brand_groups() -> list:
+    """Fetch the live catalog from Supabase, grouped by brand and sorted cheap→expensive.
+    Shared by /products and /products-table. Returns [] if Supabase is unreachable."""
     import httpx
     from app.config import settings
 
@@ -278,10 +277,13 @@ async def get_products_by_brand():
         "apikey": settings.supabase_anon_key,
         "Authorization": f"Bearer {settings.supabase_anon_key}",
     }
+    # NOTE: `category` (and `sku`) are NOT granted to the anon role — selecting them
+    # makes the WHOLE query 401 (permission denied), which is what emptied the catalog.
+    # Select only anon-readable columns. (V16 PART 2 fix.)
     products_url = (
         f"{settings.supabase_url}/rest/v1/products"
         f"?is_active=eq.true&stock_status=neq.unavailable"
-        f"&select=id,name,model,capacity,brand_id,category"
+        f"&select=id,name,model,capacity,brand_id"
     )
     brands_url = f"{settings.supabase_url}/rest/v1/brands?select=id,name&is_active=eq.true"
 
@@ -330,6 +332,29 @@ async def get_products_by_brand():
         items = sorted(grouped[brand_name], key=lambda x: (x["price"] is None, x["price"] or 0))
         result.append({"brand": brand_name, "product_count": len(items), "products": items})
     return result
+
+
+@router.get("/products")
+async def get_products_by_brand():
+    """Products grouped by brand, sorted cheap→expensive within each brand (Feature 43).
+    Degrades gracefully (empty list) if Supabase is unreachable."""
+    return await _fetch_brand_groups()
+
+
+@router.get("/products-table")
+async def get_products_table(brands: str | None = None, search: str | None = None,
+                             skip: int = 0, limit: int = 20):
+    """V16 PART 2 — a flat, brand-filterable, paginated catalog table (cheapest first).
+    Mirrors the contacts-table pattern. `brands` is a comma-separated list of brand names."""
+    from app.services.catalog import flatten_catalog, filter_catalog, paginate, brand_names
+    groups = await _fetch_brand_groups()
+    all_brands = brand_names(groups)
+    items = flatten_catalog(groups)
+    brand_list = [b for b in (brands.split(",") if brands else []) if b.strip()]
+    items = filter_catalog(items, brand_list, search)
+    page = paginate(items, skip, limit)
+    page["brands"] = all_brands
+    return page
 
 
 # ── Product labels (self-hosted Supabase) ──────────────────
