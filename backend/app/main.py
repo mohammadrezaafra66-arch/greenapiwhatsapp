@@ -603,6 +603,10 @@ async def lifespan(app: FastAPI):
         ddl_v15 = [
             "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS product_detail_level varchar(20) DEFAULT 'medium'",
             "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS selected_account_id uuid",
+            # Item 26 — managed auto warm-up
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS auto_warmup boolean DEFAULT false",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS warmup_started_at timestamp",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS warmup_completed boolean DEFAULT false",
         ]
         for stmt in ddl_v15:
             try:

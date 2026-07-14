@@ -57,6 +57,8 @@ export const Accounts = {
     return http.post("/accounts/profile-picture/apply-all", fd, { headers: { "Content-Type": "multipart/form-data" }, timeout: 60000 }).then((r) => r.data);
   },
   pfpProgress: () => http.get("/accounts/profile-picture/apply-all/progress").then((r) => r.data),
+  // V15 Item 26 — managed auto warm-up
+  setWarmup: (id, enabled) => http.post(`/accounts/${id}/warmup`, { enabled }).then((r) => r.data),
 };
 
 // ── Campaigns ──────────────────────────────────────────

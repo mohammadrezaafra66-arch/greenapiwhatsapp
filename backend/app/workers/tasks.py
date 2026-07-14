@@ -190,6 +190,18 @@ def task_reply_rate_monitor():
     run_async(_run())
 
 
+@celery_app.task(name="tasks.process_warmup_accounts")
+def task_process_warmup_accounts():
+    """V15 Item 26 — daily managed warm-up: advance each auto-warming account and send its
+    small reply-first quota (0 on days 1–3, ≤3 on 4–7, ≤10 on 8–10, complete on day 11)."""
+    async def _run():
+        from app.database import AsyncSessionLocal
+        from app.services.warmup_auto import process_warmup_accounts
+        async with AsyncSessionLocal() as db:
+            await process_warmup_accounts(db)
+    run_async(_run())
+
+
 @celery_app.task(name="tasks.recheck_method_support")
 def task_recheck_method_support():
     """V14 PART G — weekly re-probe of ONLY the safe, read-only methods (never the

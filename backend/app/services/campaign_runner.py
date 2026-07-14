@@ -287,8 +287,10 @@ async def _run_campaign_inner(campaign_id: str):
         accounts_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
         accounts = accounts_result.scalars().all()
         # V14 F23 — never send from an account resting in a yellowCard cooldown.
+        # V15 Item 26 — nor from an account still in managed auto warm-up.
         from app.services import governors
-        accounts = [a for a in accounts if not governors.in_cooldown(a)]
+        from app.services.warmup_auto import in_active_warmup
+        accounts = [a for a in accounts if not governors.in_cooldown(a) and not in_active_warmup(a)]
         # V15 Item 11 — when parallel is OFF and a specific account was chosen, send only
         # from that account (fall back to all if it's currently unavailable, to never block).
         if not getattr(campaign, "parallel_accounts", False) and getattr(campaign, "selected_account_id", None):

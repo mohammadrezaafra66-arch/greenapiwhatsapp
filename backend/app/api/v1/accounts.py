@@ -6,6 +6,10 @@ from app.database import get_db
 from app.models.account import Account, AccountStatus
 from app.models.contact import Contact
 from app.services.green_api import GreenAPIClient
+from app.services.warmup_auto import (
+    warmup_day as _warmup_day, warmup_daily_limit as _warmup_daily_limit,
+    WARMUP_TOTAL_DAYS as _WARMUP_TOTAL,
+)
 from app.config import settings
 import os
 import uuid
@@ -54,6 +58,12 @@ async def list_accounts(db: AsyncSession = Depends(get_db)):
             "is_default": a.is_default,
             "proxy_enabled": a.proxy_enabled,
             "profile_picture_url": a.profile_picture_url,
+            # V15 Item 26 — auto warm-up status
+            "auto_warmup": a.auto_warmup,
+            "warmup_completed": a.warmup_completed,
+            "warmup_day": (_warmup_day(a) if a.auto_warmup and not a.warmup_completed else None),
+            "warmup_total_days": _WARMUP_TOTAL,
+            "warmup_daily_limit": (_warmup_daily_limit(_warmup_day(a)) if a.auto_warmup and not a.warmup_completed else None),
         }
         for a in accounts
     ]
@@ -493,6 +503,28 @@ async def set_profile_picture(account_id: str, file: UploadFile = File(...), db:
         account.profile_picture_url = url_avatar
         await db.commit()
     return {"ok": bool(res.get("setProfilePicture") if isinstance(res, dict) else res), "url_avatar": url_avatar}
+
+
+# ── V15 Item 26 — managed auto warm-up toggle ───────────────────────────────
+class WarmupToggle(BaseModel):
+    enabled: bool
+
+
+@router.post("/{account_id}/warmup")
+async def set_auto_warmup(account_id: str, body: WarmupToggle, db: AsyncSession = Depends(get_db)):
+    from datetime import datetime as _dt
+    account = await _get_account(account_id, db)
+    if body.enabled:
+        account.auto_warmup = True
+        account.warmup_completed = False
+        if not account.warmup_started_at:
+            account.warmup_started_at = _dt.utcnow()
+    else:
+        account.auto_warmup = False
+    await db.commit()
+    day = _warmup_day(account) if account.auto_warmup and not account.warmup_completed else None
+    return {"auto_warmup": account.auto_warmup, "warmup_completed": account.warmup_completed,
+            "warmup_day": day, "warmup_total_days": _WARMUP_TOTAL}
 
 
 @router.delete("/{account_id}")

@@ -55,4 +55,6 @@ celery_app.conf.beat_schedule = {
     "reply-rate-monitor": {"task": "tasks.reply_rate_monitor", "schedule": 3600.0},
     # V14 PART G — weekly re-probe of safe read-only methods (604800s = 7 days).
     "recheck-method-support": {"task": "tasks.recheck_method_support", "schedule": 604800.0},
+    # V15 Item 26 — managed auto warm-up, daily at 09:00 Tehran.
+    "process-warmup-accounts": {"task": "tasks.process_warmup_accounts", "schedule": crontab(hour=9, minute=0)},
 }

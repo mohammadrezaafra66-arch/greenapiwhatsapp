@@ -40,6 +40,10 @@ class Account(Base):
     proxy_password: Mapped[str | None] = mapped_column(String(200))
     proxy_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    # V15 Item 26 — managed auto warm-up for new accounts
+    auto_warmup: Mapped[bool] = mapped_column(Boolean, default=False)
+    warmup_started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    warmup_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     # V14 PART F — yellowCard safety (throttle + cooldown)
     throttle_factor: Mapped[float] = mapped_column(Float, default=1.0)
     throttle_until: Mapped[datetime | None] = mapped_column(DateTime)

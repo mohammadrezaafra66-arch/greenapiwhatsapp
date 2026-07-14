@@ -4,6 +4,8 @@ import { Badge, Spinner, Empty, Modal, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
 import HelpTip, { TIPS } from "../components/HelpTip.jsx";
 
+const faNum = (n) => (n == null ? "—" : String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]));
+
 const fa = (n) => Number(n || 0).toLocaleString("fa-IR");
 
 // V13.2 — per-account health bar (green/amber/red by score).
@@ -148,6 +150,37 @@ export default function Accounts() {
               <p>ارسال امروز: {a.sent_today} / {a.daily_limit}</p>
               <p>دریافت امروز: {a.received_today}</p>
               <p>روزهای فعال: {a.days_active}<HelpTip text={TIPS.daysActive} /></p>
+            </div>
+
+            {/* V15 Item 26 — managed auto warm-up */}
+            <div className="border-t border-slate-700 pt-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={!!a.auto_warmup}
+                  onChange={async (e) => {
+                    try { await Api.setWarmup(a.id, e.target.checked); await reload(); }
+                    catch (err) { toast.error(err?.response?.data?.detail || err.message); }
+                  }}
+                />
+                🔥 گرم‌سازی خودکار
+                {a.warmup_completed && (
+                  <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">آماده</span>
+                )}
+              </label>
+              {a.auto_warmup && !a.warmup_completed && a.warmup_day != null && (
+                <div className="mt-1">
+                  <p className="text-xs text-amber-300">
+                    گرم‌سازی: روز {faNum(a.warmup_day)} از {faNum(a.warmup_total_days)} — سقف امروز {faNum(a.warmup_daily_limit)} پیام
+                  </p>
+                  <div className="w-full bg-slate-700 rounded-full h-1.5 mt-1">
+                    <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: `${Math.round((a.warmup_day / (a.warmup_total_days || 10)) * 100)}%` }} />
+                  </div>
+                </div>
+              )}
+              <p className="text-[11px] text-slate-500 mt-1">
+                ۱۰ روز اول پس از اتصال، سامانه به‌آرامی با این شماره کار می‌کند تا واتساپ آن را بشناسد و مسدود نکند. پس از ۱۰ روز، شماره آماده ارسال انبوه می‌شود.
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button className="btn-secondary" disabled={busy === a.id} onClick={() => act(() => Api.status(a.id), a.id)}>بررسی وضعیت</button>
