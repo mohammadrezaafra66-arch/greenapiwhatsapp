@@ -108,6 +108,10 @@ async def run_group_campaign(campaign_id: str):
                     message = _apply_opening(message, opening_mode, opening_line)
                     message = _apply_opt_out(message, campaign.include_opt_out, campaign.opt_out_text)
 
+                # V16 PART 3 — append advertising links (additive; '' when the toggle is off).
+                from app.services.adlinks import links_for_campaign
+                message += await links_for_campaign(campaign, db)
+
                 client = GreenAPIClient(account.instance_id, account.api_token)
 
                 # Show "typing..." for 2-4 seconds before sending (more human-like)

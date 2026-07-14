@@ -31,6 +31,7 @@ import SendQueue from "./pages/SendQueue.jsx";
 import Protection from "./pages/Protection.jsx";
 import Calls from "./pages/Calls.jsx";
 import Capabilities from "./pages/Capabilities.jsx";
+import AdvertisingLinks from "./pages/AdvertisingLinks.jsx";
 
 export default function App() {
   return (
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="protection" element={<Protection />} />
         <Route path="calls" element={<Calls />} />
         <Route path="capabilities" element={<Capabilities />} />
+        <Route path="advertising-links" element={<AdvertisingLinks />} />
         <Route path="*" element={<div className="text-slate-400">صفحه یافت نشد</div>} />
       </Route>
       </Routes>

@@ -32,6 +32,7 @@ const NAV = [
       { to: "/status-scheduler", label: "برنامه استوری" },
       { to: "/files", label: "فایل‌ها" },
       { to: "/content", label: "کارت تماس و موقعیت" },
+      { to: "/advertising-links", label: "لینک‌های تبلیغاتی" },
     ],
   },
   {
@@ -86,6 +87,7 @@ const PAGES = [
   { to: "/status-scheduler", label: "برنامه استوری", syn: "schedule status" },
   { to: "/files", label: "فایل‌ها", syn: "files upload" },
   { to: "/content", label: "کارت تماس و موقعیت", syn: "contact card location موقعیت" },
+  { to: "/advertising-links", label: "لینک‌های تبلیغاتی", syn: "advertising links telegram instagram promo" },
   { to: "/inbox", label: "صندوق ورودی", syn: "inbox پیام‌های دریافتی" },
   { to: "/journals", label: "تاریخچه پیام‌ها", syn: "journals history" },
   { to: "/keyword-rules", label: "پاسخ خودکار", syn: "keyword auto reply" },

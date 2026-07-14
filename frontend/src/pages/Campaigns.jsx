@@ -460,6 +460,7 @@ const CAMPAIGN_DEFAULTS = {
   opening_mode: "ai", opening_line: "", opening_variants: "",
   product_variation_mode: "same", products_per_group: 3, product_weights: "",
   product_detail_level: "medium", selected_account_id: "",
+  append_links: false, links_count: 1, links_mode: "weighted",
   include_opt_out: true, opt_out_text: "",
   ab_test_enabled: false, variant_b_prompt: "", variant_b_template: "",
   use_rich_formatting: false, smart_rotation: false,
@@ -521,6 +522,9 @@ function seedCampaignForm(d) {
     products_per_group: d.products_per_group || 3,
     product_detail_level: d.product_detail_level || "medium",
     selected_account_id: d.selected_account_id || "",
+    append_links: d.append_links || false,
+    links_count: d.links_count || 1,
+    links_mode: d.links_mode || "weighted",
     product_weights: d.product_weights
       ? Object.entries(d.product_weights).map(([k, v]) => `${k}=${v}`).join("\n")
       : "",
@@ -729,6 +733,9 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         product_weights: f.campaign_scope === "group" ? parseWeights(f.product_weights) : null,
         product_detail_level: f.product_detail_level || "medium",
         selected_account_id: (!f.parallel_accounts && f.selected_account_id) ? f.selected_account_id : null,
+        append_links: f.append_links,
+        links_count: Number(f.links_count) || 1,
+        links_mode: f.links_mode || "weighted",
         include_opt_out: f.include_opt_out !== false,
         opt_out_text: f.include_opt_out && f.opt_out_text ? f.opt_out_text : null,
         ab_test_enabled: f.ab_test_enabled,
@@ -1057,6 +1064,30 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
                   {fa(Math.ceil(feasContactCount / Number(f.drip_per_day)))} روز تکمیل می‌شود.
                 </p>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* V16 PART 3 — append advertising links */}
+        <div className="border-t border-slate-700 pt-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={f.append_links} onChange={set("append_links")} />
+            افزودن لینک به انتهای پیام
+          </label>
+          {f.append_links && (
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <div>
+                <label className="label">تعداد لینک</label>
+                <input type="number" className="input" min={1} max={10} value={f.links_count} onChange={set("links_count")} />
+              </div>
+              <div>
+                <label className="label">حالت انتخاب</label>
+                <select className="input" value={f.links_mode} onChange={set("links_mode")}>
+                  <option value="fixed">ثابت (پرتکرارترین‌ها)</option>
+                  <option value="weighted">رندوم وزنی</option>
+                </select>
+              </div>
+              <p className="text-xs text-slate-500 col-span-2">لینک‌ها را در صفحه «لینک‌های تبلیغاتی» مدیریت کنید. فقط لینک‌های فعال استفاده می‌شوند.</p>
             </div>
           )}
         </div>

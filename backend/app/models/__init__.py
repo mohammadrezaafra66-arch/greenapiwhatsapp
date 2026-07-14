@@ -33,6 +33,7 @@ from app.models.messaging import (
     ContactInfoCache,
 )
 from app.models.incident import AccountIncident, CallLog
+from app.models.advertising import AdvertisingLink
 
 __all__ = [
     "Account",
@@ -80,4 +81,5 @@ __all__ = [
     "ContactInfoCache",
     "AccountIncident",
     "CallLog",
+    "AdvertisingLink",
 ]

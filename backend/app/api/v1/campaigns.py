@@ -79,6 +79,10 @@ class CampaignCreateBody(BaseModel):
     # V15 — product detail level (Item 8) + chosen account when parallel off (Item 11)
     product_detail_level: str = "medium"
     selected_account_id: str | None = None
+    # V16 PART 3 — append advertising links
+    append_links: bool = False
+    links_count: int = 1
+    links_mode: str = "weighted"
 
 
 class TestBody(BaseModel):
@@ -277,6 +281,9 @@ async def update_campaign(campaign_id: str, body: CampaignCreateBody, db: AsyncS
     c.button_footer = body.button_footer
     c.product_detail_level = body.product_detail_level or "medium"
     c.selected_account_id = uuid.UUID(body.selected_account_id) if body.selected_account_id else None
+    c.append_links = body.append_links
+    c.links_count = max(1, int(body.links_count or 1))
+    c.links_mode = body.links_mode or "weighted"
     await db.commit()
     return {"id": campaign_id, "updated": True}
 
@@ -401,6 +408,9 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         button_footer=body.button_footer,
         product_detail_level=body.product_detail_level or "medium",
         selected_account_id=uuid.UUID(body.selected_account_id) if body.selected_account_id else None,
+        append_links=body.append_links,
+        links_count=max(1, int(body.links_count or 1)),
+        links_mode=body.links_mode or "weighted",
     )
     db.add(campaign)
     await db.commit()

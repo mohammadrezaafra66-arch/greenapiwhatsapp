@@ -22,6 +22,7 @@ from app.api.v1 import (
     join_links, status_schedules, ai_keys,
     partner, messages, incidents, calls,
     capabilities as capabilities_router,
+    adlinks,
 )
 
 @asynccontextmanager
@@ -608,6 +609,22 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS warmup_started_at timestamp",
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS warmup_completed boolean DEFAULT false",
         ]
+        # V16 PART 3 — advertising links + campaign append settings.
+        ddl_v16 = [
+            """CREATE TABLE IF NOT EXISTS advertising_links (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                url text NOT NULL,
+                title varchar(200) NOT NULL,
+                link_type varchar(20) DEFAULT 'other',
+                weight integer DEFAULT 5,
+                is_active boolean DEFAULT true,
+                created_at timestamp DEFAULT now()
+            )""",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS append_links boolean DEFAULT false",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS links_count integer DEFAULT 1",
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS links_mode varchar(20) DEFAULT 'weighted'",
+        ]
+        ddl_v15 += ddl_v16
         for stmt in ddl_v15:
             try:
                 await conn.execute(text(stmt))
@@ -656,7 +673,7 @@ for router in [
     contact_groups.router, wa_collections.router, reporting_router.router,
     join_links.router, status_schedules.router, ai_keys.router,
     partner.router, messages.router, incidents.router, calls.router,
-    capabilities_router.router,
+    capabilities_router.router, adlinks.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

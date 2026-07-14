@@ -436,6 +436,15 @@ export const QueueApi = {
   clear: (accountId) => http.delete(`/queue/${accountId}`).then((r) => r.data),
 };
 
+// ── Advertising links (V16 PART 3) ─────────────────────────
+export const AdLinksApi = {
+  list: () => http.get("/advertising-links/").then((r) => r.data),
+  create: (body) => http.post("/advertising-links/", body).then((r) => r.data),
+  update: (id, body) => http.put(`/advertising-links/${id}`, body).then((r) => r.data),
+  toggle: (id) => http.post(`/advertising-links/${id}/toggle`).then((r) => r.data),
+  remove: (id) => http.delete(`/advertising-links/${id}`).then((r) => r.data),
+};
+
 // ── Blacklist ──────────────────────────────────────────
 export const BlacklistApi = {
   list: () => http.get("/blacklist/").then((r) => r.data),

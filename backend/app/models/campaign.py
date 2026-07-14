@@ -106,6 +106,10 @@ class Campaign(Base):
     # V15 — product detail level (Item 8) + chosen account when parallel is off (Item 11)
     product_detail_level: Mapped[str] = mapped_column(String(20), default="medium")  # minimal|medium|detailed
     selected_account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    # V16 PART 3 — append advertising links to the message
+    append_links: Mapped[bool] = mapped_column(Boolean, default=False)
+    links_count: Mapped[int] = mapped_column(Integer, default=1)
+    links_mode: Mapped[str] = mapped_column(String(20), default="weighted")  # fixed|weighted
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 

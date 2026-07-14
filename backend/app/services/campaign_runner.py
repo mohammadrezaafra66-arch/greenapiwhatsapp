@@ -117,6 +117,10 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
         message = await build_message_text(
             campaign, contact, products, effective_gpt_prompt, effective_template, effective_include_products
         )
+        # V16 PART 3 — append advertising links (purely additive; '' when the toggle is off,
+        # so a campaign with append_links=false produces byte-identical output to before).
+        from app.services.adlinks import links_for_campaign
+        message += await links_for_campaign(campaign, db)
         cc.generated_message = message
         client = GreenAPIClient(account.instance_id, account.api_token)
 
