@@ -584,6 +584,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
 
   // V13.6 — live preview
   const [preview, setPreview] = React.useState(null);
+  const [previewWarning, setPreviewWarning] = React.useState(null);
   const [previewing, setPreviewing] = React.useState(false);
   const buildPreviewBody = () => ({
     use_gpt: f.use_gpt,
@@ -615,6 +616,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
     try {
       const r = await Api.preview(buildPreviewBody());
       setPreview(r?.preview || "");
+      setPreviewWarning(r?.price_warning || null);
     } catch (e) {
       toast.error(e?.response?.data?.detail || e.message);
     } finally {
@@ -1309,6 +1311,11 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
                 {preview ? <WhatsAppText text={preview} /> : <span className="text-white/70">—</span>}
                 <div className="text-[10px] text-white/60 text-left mt-1">پیش‌نمایش ✓✓</div>
               </div>
+            </div>
+          )}
+          {previewWarning && (
+            <div className="mt-2 card bg-amber-500/10 border-amber-500/40 text-amber-200 text-xs">
+              ⚠️ {previewWarning}
             </div>
           )}
           <p className="text-xs text-slate-500 mt-1">پیش‌نمایش دقیقاً از همان مسیر ساخت پیام واقعی تولید می‌شود (نمونه مخاطب: اولین مخاطب یا «دوست»).</p>

@@ -181,6 +181,29 @@ def _campaign_detail(c: Campaign) -> dict:
     }
 
 
+@router.get("/price-status")
+async def price_status():
+    """V15 — diagnostic: can the app read product prices from Supabase right now?
+    Fetches a small sample (bypassing cache) and reports how many have a price.
+    Registered BEFORE /{campaign_id} so it isn't captured as a campaign id."""
+    from app.services.price_service import get_products, price_source_status, redis_client, CACHE_KEY
+    try:
+        await redis_client.delete(CACHE_KEY)  # force a live fetch
+    except Exception:
+        pass
+    products = await get_products(5)
+    with_price = [p for p in products if p.get("price")]
+    st = price_source_status()
+    return {
+        "products_found": len(products),
+        "with_price": len(with_price),
+        "ok": st.get("ok"),
+        "reason": st.get("reason"),
+        "http": st.get("http"),
+        "sample": [{"name": p["name"][:40], "price": p.get("price")} for p in products[:3]],
+    }
+
+
 @router.get("/{campaign_id}")
 async def get_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
     c = await db.get(Campaign, uuid.UUID(campaign_id))
@@ -427,7 +450,17 @@ async def preview_message(body: CampaignPreviewBody, db: AsyncSession = Depends(
 
     text = await build_message_text(campaign, contact, products, campaign.gpt_prompt,
                                     campaign.message_template, campaign.include_products)
-    return {"preview": text}
+
+    # V15 — if prices were requested but none resolved, tell the user WHY (usually a
+    # Supabase permission issue), instead of silently showing «تماس بگیرید».
+    price_warning = None
+    if body.show_product_prices and body.include_products and products:
+        from app.services.price_service import price_source_status
+        if not any(p.get("price") for p in products):
+            st = price_source_status()
+            price_warning = ("قیمت‌ها از Supabase دریافت نشدند، بنابراین «تماس بگیرید» نمایش داده می‌شود. علت: "
+                             + (st.get("reason") or "منبع قیمت در دسترس نیست"))
+    return {"preview": text, "price_warning": price_warning}
 
 
 @router.post("/{campaign_id}/contacts")

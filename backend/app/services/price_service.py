@@ -16,16 +16,27 @@ Notes:
   (downstream renders "تماس بگیرید" in that case).
 """
 import json
+import logging
 import httpx
 import redis.asyncio as aioredis
 from app.config import settings
 
+logger = logging.getLogger("afrakala.pricing")
 redis_client = aioredis.from_url(settings.redis_url)
 
 CACHE_KEY = "afrakala:products:cache"
 
 # Columns the anon role is allowed to read on `products`.
 _PRODUCT_SELECT = "id,name,model,capacity,brand_id"
+
+# V15 — last outcome of the price-view fetch, so the UI can explain a missing price
+# instead of silently rendering «تماس بگیرید» (which looks like an AI bug).
+_LAST_PRICE_STATUS: dict = {"ok": None, "reason": "not fetched yet", "http": None, "count": 0}
+
+
+def price_source_status() -> dict:
+    """Diagnostic: the result of the most recent attempt to read the prices view."""
+    return dict(_LAST_PRICE_STATUS)
 
 
 def _headers() -> dict:
@@ -49,14 +60,37 @@ async def _fetch_price_map(client: httpx.AsyncClient) -> dict:
         )
         resp.raise_for_status()
         rows = resp.json()
+    except httpx.HTTPStatusError as e:
+        code = e.response.status_code
+        # 401/403 with Postgres 42501 = the anon role lacks SELECT on the prices view.
+        pg = ""
+        try:
+            pg = (e.response.json() or {}).get("code", "")
+        except Exception:
+            pass
+        if code in (401, 403) or pg == "42501":
+            reason = ("دسترسی anon به view «product_computed_prices_public» در Supabase وجود ندارد "
+                      "(permission denied / 42501). برای نمایش قیمت، این دسترسی را در Supabase فعال کنید.")
+        else:
+            reason = f"prices view returned HTTP {code}"
+        _LAST_PRICE_STATUS.update({"ok": False, "reason": reason, "http": code, "count": 0})
+        logger.warning("PRICE FETCH FAILED — %s (HTTP %s, pg=%s)", reason, code, pg)
+        return {}
     except Exception as e:
-        print(f"[PriceService] Prices unavailable, continuing without them: {e}")
+        _LAST_PRICE_STATUS.update({"ok": False, "reason": f"connection error: {e}", "http": None, "count": 0})
+        logger.warning("PRICE FETCH FAILED (connection): %s", e)
         return {}
     price_map = {}
     if isinstance(rows, list):
         for row in rows:
             if isinstance(row, dict) and row.get("product_id") is not None:
                 price_map[str(row["product_id"])] = row.get("rounded_sale_price")
+    non_null = sum(1 for v in price_map.values() if v)
+    _LAST_PRICE_STATUS.update({
+        "ok": non_null > 0,
+        "reason": "ok" if non_null > 0 else "prices view readable but returned no non-zero prices",
+        "http": 200, "count": non_null,
+    })
     return price_map
 
 
