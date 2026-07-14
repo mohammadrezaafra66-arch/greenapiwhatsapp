@@ -66,6 +66,19 @@ async def create_account(
     api_token: str,
     db: AsyncSession = Depends(get_db)
 ):
+    # V15 Item 13 — harden the root cause of stray/phantom accounts: trim input and
+    # require a real instance id + token (a blank/whitespace entry created the 9048249558
+    # phantom that pointed at a non-existent Green API instance).
+    name = (name or "").strip()
+    instance_id = (instance_id or "").strip()
+    api_token = (api_token or "").strip()
+    if not instance_id or not api_token:
+        raise HTTPException(400, "شناسه instance و توکن اتصال هر دو لازم است")
+    if not name:
+        name = instance_id
+    existing = (await db.execute(select(Account).where(Account.instance_id == instance_id))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(400, "این شناسه instance قبلاً ثبت شده است")
     account = Account(name=name, instance_id=instance_id, api_token=api_token)
     db.add(account)
     await db.commit()
