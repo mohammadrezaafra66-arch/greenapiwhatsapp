@@ -622,16 +622,28 @@ class GreenAPIClient:
         r = await self._get("getContactsBlock")
         return r if isinstance(r, list) else []
 
-    async def add_contact(self, phone: str, first_name: str, last_name: str = "", company: str = "افراکالا") -> bool:
+    async def add_contact(self, phone: str, first_name: str, last_name: str = "", company: str = "") -> bool:
         """Add a contact to the WhatsApp phone book of this account.
-        addContact can be slow on Green API, so use a longer 60s timeout."""
-        r = await self._post("addContact", {
-            "phoneContact": int(self._normalize(phone)),
+        Green API's addContact takes chatId/firstName/lastName. The old phoneContact/company
+        schema now returns 400 ("Validation failed: 'chatId' is required" / "'company' is not
+        allowed"), which silently broke the mesh handshake — hence chatId-only here. company is
+        accepted for backward compatibility but no longer sent. Slow call → 60s timeout.
+        Idempotent: Green API returns 400 "Contact ... already exists" when the contact is
+        already saved — that is a SUCCESS for the mesh handshake (the contact IS in the book),
+        so treat it as True rather than letting the edge stay stuck at handshake=none."""
+        payload = {
+            "chatId": self._chat_id(phone),
             "firstName": first_name,
             "lastName": last_name,
-            "company": company
-        }, timeout=60)
-        return r.get("saveContact", False) or "contactId" in r
+        }
+        try:
+            r = await self._post("addContact", payload, timeout=60)
+        except httpx.HTTPStatusError as e:
+            resp = e.response
+            if resp is not None and resp.status_code == 400 and "already exists" in (resp.text or "").lower():
+                return True
+            raise
+        return r.get("addContact", False) or r.get("saveContact", False) or "contactId" in r
 
     async def edit_contact(self, phone: str, first_name: str, last_name: str = "", company: str = "") -> bool:
         """Edit an existing contact in the phonebook."""

@@ -93,6 +93,50 @@ def cooldown_elapsed(enrollment, cfg=DEFAULT_WARMUP_CONFIG, now: datetime | None
     return cooldown_remaining_hours(enrollment, cfg, now) <= 0.0
 
 
+# ── phone resolution (getWaSettings fallback) ────────────────────────────────
+async def _resolve_account_phone(account: Account, client) -> str | None:
+    """Return account.phone, falling back to getWaSettings (wid/phone) when it is null and
+    PERSISTING it back onto the account. The partner/QR flow leaves accounts.phone null (the
+    number lives only in the account name), which used to make the mutual-contact handshake
+    silently no-op. Mirrors the admin-groups reader's getWaSettings fallback so a null phone
+    can never again quietly break the mesh."""
+    if account.phone:
+        return account.phone
+    try:
+        wa = await client.get_wa_settings()
+        phone = str(wa.get("phone") or wa.get("wid") or "").split("@")[0].strip()
+        if phone:
+            account.phone = phone   # persisted by the caller's commit
+            logger.info("filled accounts.phone for %s from getWaSettings: %s",
+                        account.instance_id, phone)
+            return phone
+    except Exception as e:
+        logger.warning("getWaSettings phone fallback failed for %s: %s", account.instance_id, e)
+    return None
+
+
+async def backfill_account_phones(db, *, client_factory=None) -> list[dict]:
+    """Fill accounts.phone from getWaSettings for every instance whose phone is null. The
+    partner/QR flow leaves phone null. Idempotent — accounts that already have a phone (or are
+    deleted) are skipped. Returns per-instance results. Run standalone or on demand."""
+    client_factory = client_factory or _default_client_factory
+    accounts = (await db.execute(select(Account))).scalars().all()
+    results: list[dict] = []
+    for a in accounts:
+        if a.phone:
+            results.append({"instance_id": a.instance_id, "phone": a.phone, "action": "kept"})
+            continue
+        if a.status == AccountStatus.deleted:
+            results.append({"instance_id": a.instance_id, "phone": None, "action": "skipped_deleted"})
+            continue
+        client = client_factory(a.instance_id, a.api_token)
+        phone = await _resolve_account_phone(a, client)
+        results.append({"instance_id": a.instance_id, "phone": phone,
+                        "action": "filled" if phone else "no_phone"})
+    await db.commit()
+    return results
+
+
 # ── mutual-contact handshake ─────────────────────────────────────────────────
 async def _handshake_edge(db, new_acc: Account, peer_acc: Account, client_factory) -> WarmupMeshEdge:
     """Create/refresh the edge between new_acc and peer_acc and save each other as
@@ -115,17 +159,22 @@ async def _handshake_edge(db, new_acc: Account, peer_acc: Account, client_factor
     new_client = client_factory(new_acc.instance_id, new_acc.api_token)
     peer_client = client_factory(peer_acc.instance_id, peer_acc.api_token)
 
+    # Resolve both phones (getWaSettings fallback + persist) so a null accounts.phone from the
+    # partner/QR flow can never again silently skip the mutual-contact step.
+    new_phone = await _resolve_account_phone(new_acc, new_client)
+    peer_phone = await _resolve_account_phone(peer_acc, peer_client)
+
     # New number saves the peer.
-    if not edge.saved_as_contact_new and peer_acc.phone:
+    if not edge.saved_as_contact_new and peer_phone:
         try:
-            ok = await new_client.add_contact(peer_acc.phone, peer_acc.name or "Peer")
+            ok = await new_client.add_contact(peer_phone, peer_acc.name or "Peer")
             edge.saved_as_contact_new = bool(ok)
         except Exception as e:
             logger.warning("handshake add_contact (new→peer) failed: %s", e)
     # Peer saves the new number.
-    if not edge.saved_as_contact_peer and new_acc.phone:
+    if not edge.saved_as_contact_peer and new_phone:
         try:
-            ok = await peer_client.add_contact(new_acc.phone, new_acc.name or "New")
+            ok = await peer_client.add_contact(new_phone, new_acc.name or "New")
             edge.saved_as_contact_peer = bool(ok)
         except Exception as e:
             logger.warning("handshake add_contact (peer→new) failed: %s", e)
@@ -313,8 +362,14 @@ async def ensure_mesh_edges(db, account: Account, *, client_factory=None,
                             cfg=None) -> int:
     """V20 PART 2 — self-heal: build mutual-contact mesh edges from an enrolled cold number
     to eligible warm peers (GRADUATED or is_warm_peer) when it has fewer than the target.
-    Fixes the "0 edges / no peer" case for numbers enrolled before any peer existed. Returns
-    how many new edges were built. No-op (0) when no fresh eligible peer is available."""
+    Fixes the "0 edges / no peer" case for numbers enrolled before any peer existed.
+
+    DURABLE FIX — also RETRY incomplete handshakes: any existing edge that is not yet ACTIVE
+    (handshake=none/contact_saved) is re-run through _handshake_edge every tick, so a null
+    accounts.phone or a transient addContact failure can never leave an edge stuck at `none`
+    forever. Once phones are present (getWaSettings fallback fills them), the retry completes
+    the mutual-contact save and the edge flips to ACTIVE. Returns how many NEW edges were built.
+    """
     client_factory = client_factory or _default_client_factory
     cfg = cfg or DEFAULT_WARMUP_CONFIG
     now = now or datetime.utcnow()
@@ -323,19 +378,32 @@ async def ensure_mesh_edges(db, account: Account, *, client_factory=None,
         select(WarmupMeshEdge).where(WarmupMeshEdge.new_instance_id == account.instance_id)
     )).scalars().all()
     have = {e.peer_instance_id for e in existing}
-    slots = cfg.peers_per_new_number_max - len(have)
-    if slots <= 0:
-        return 0
-    eligible = await eligible_peer_accounts(db, account.instance_id)
-    fresh = [p for p in eligible if p.instance_id not in have]
-    if not fresh:
-        return 0
-    r = rng or random
-    r.shuffle(fresh)
+
+    # Retry incomplete handshakes on existing edges (the durable no-silent-no-op guarantee).
+    retried = 0
+    for edge in existing:
+        if getattr(edge, "handshake_state", None) == HandshakeState.ACTIVE.value:
+            continue
+        peer_acc = (await db.execute(
+            select(Account).where(Account.instance_id == edge.peer_instance_id)
+        )).scalar_one_or_none()
+        if peer_acc is None or peer_acc.status != AccountStatus.active:
+            continue
+        await _handshake_edge(db, account, peer_acc, client_factory)
+        retried += 1
+
+    # Build new edges to fresh eligible peers up to the target.
     built = 0
-    for peer in fresh[:slots]:
-        await _handshake_edge(db, account, peer, client_factory)
-        built += 1
-    if built:
+    slots = cfg.peers_per_new_number_max - len(have)
+    if slots > 0:
+        eligible = await eligible_peer_accounts(db, account.instance_id)
+        fresh = [p for p in eligible if p.instance_id not in have]
+        r = rng or random
+        r.shuffle(fresh)
+        for peer in fresh[:slots]:
+            await _handshake_edge(db, account, peer, client_factory)
+            built += 1
+
+    if built or retried:
         await db.commit()
     return built
