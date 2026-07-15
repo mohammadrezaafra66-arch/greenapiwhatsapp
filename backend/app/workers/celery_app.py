@@ -59,4 +59,8 @@ celery_app.conf.beat_schedule = {
     # human-like across the day; the Redis daily counter enforces the per-stage cap.
     "process-warmup-accounts": {"task": "tasks.process_warmup_accounts",
                                 "schedule": crontab(hour="9,11,13,16,19", minute=0)},
+    # V17 PART 4 — automatic jittered AI mesh warm-up engine. A frequent tick lets each
+    # number run its OWN randomized schedule; the tick itself does nothing outside a
+    # number's jittered next_action_at / active hours.
+    "process-mesh-warmup": {"task": "tasks.process_mesh_warmup", "schedule": 180.0},
 }

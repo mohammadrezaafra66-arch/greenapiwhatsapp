@@ -202,6 +202,18 @@ def task_process_warmup_accounts():
     run_async(_run())
 
 
+@celery_app.task(name="tasks.process_mesh_warmup")
+def task_process_mesh_warmup():
+    """V17 PART 4 — automatic jittered AI mesh warm-up tick. Advances each enabled
+    enrollment's state and runs one due, jittered action (webhook-only; never polling)."""
+    async def _run():
+        from app.database import AsyncSessionLocal
+        from app.services.warmup_engine import run_warmup_tick
+        async with AsyncSessionLocal() as db:
+            await run_warmup_tick(db)
+    run_async(_run())
+
+
 @celery_app.task(name="tasks.recheck_method_support")
 def task_recheck_method_support():
     """V14 PART G — weekly re-probe of ONLY the safe, read-only methods (never the
