@@ -66,9 +66,48 @@ class WarmupEventLog(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     enrollment_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
     edge_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
-    # send | receive | read | typing | delivered | state_change | block | kill
+    # send | receive | read | typing | delivered | state_change | block | kill | group_add
     event_type: Mapped[str] = mapped_column(String(20), nullable=False)
     content_hash: Mapped[str | None] = mapped_column(String(64))
     delivery_status: Mapped[str | None] = mapped_column(String(30))
     payload_json: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+# ── V19 — group-based warm-up (ADD to the mesh, don't replace it) ─────────────
+class WarmupGroupTarget(Base):
+    """An admin-owned group the user selected as a destination for placing cold numbers."""
+    __tablename__ = "warmup_group_target"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    warm_instance_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    group_id: Mapped[str] = mapped_column(String(80), nullable=False)     # ...@g.us
+    group_subject: Mapped[str | None] = mapped_column(String(300))
+    is_selected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class WarmupGroupMembership(Base):
+    """Tracks placing one cold number into one admin group (status/attempts/errors)."""
+    __tablename__ = "warmup_group_membership"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    cold_instance_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    warm_instance_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    group_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    # pending | added | failed | skipped
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime)
+    added_at: Mapped[datetime | None] = mapped_column(DateTime)
+    error_reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class WarmupLinkVault(Base):
+    """MANUAL vault for public-group invite links. Data only — Green API cannot auto-join,
+    so staff join these by hand on the phone."""
+    __tablename__ = "warmup_link_vault"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    group_name: Mapped[str | None] = mapped_column(String(300))
+    invite_link: Mapped[str] = mapped_column(Text, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

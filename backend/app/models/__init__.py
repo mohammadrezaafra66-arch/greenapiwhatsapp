@@ -35,7 +35,10 @@ from app.models.messaging import (
 from app.models.incident import AccountIncident, CallLog
 from app.models.advertising import AdvertisingLink
 from app.models.warmup import WarmupPhrase
-from app.models.warmup_mesh import WarmupEnrollment, WarmupMeshEdge, WarmupEventLog
+from app.models.warmup_mesh import (
+    WarmupEnrollment, WarmupMeshEdge, WarmupEventLog,
+    WarmupGroupTarget, WarmupGroupMembership, WarmupLinkVault,
+)
 
 __all__ = [
     "Account",
@@ -88,4 +91,7 @@ __all__ = [
     "WarmupEnrollment",
     "WarmupMeshEdge",
     "WarmupEventLog",
+    "WarmupGroupTarget",
+    "WarmupGroupMembership",
+    "WarmupLinkVault",
 ]

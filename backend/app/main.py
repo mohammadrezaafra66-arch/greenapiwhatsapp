@@ -703,7 +703,39 @@ async def lifespan(app: FastAPI):
         ddl_v17_part3 = [
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_warm_peer boolean DEFAULT false",
         ]
-        for stmt in ddl_v17_part1 + ddl_v17_part2 + ddl_v17_part3:
+        # ── V19 — group-based warm-up schema + manual link vault ───────────
+        ddl_v19 = [
+            """CREATE TABLE IF NOT EXISTS warmup_group_target (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                warm_instance_id varchar(50) NOT NULL,
+                group_id varchar(80) NOT NULL,
+                group_subject varchar(300),
+                is_selected boolean NOT NULL DEFAULT true,
+                created_at timestamp DEFAULT now(),
+                UNIQUE (warm_instance_id, group_id)
+            )""",
+            """CREATE TABLE IF NOT EXISTS warmup_group_membership (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                cold_instance_id varchar(50) NOT NULL,
+                warm_instance_id varchar(50) NOT NULL,
+                group_id varchar(80) NOT NULL,
+                status varchar(20) NOT NULL DEFAULT 'pending',
+                attempts integer NOT NULL DEFAULT 0,
+                last_attempt_at timestamp,
+                added_at timestamp,
+                error_reason text,
+                created_at timestamp DEFAULT now(),
+                UNIQUE (cold_instance_id, group_id)
+            )""",
+            """CREATE TABLE IF NOT EXISTS warmup_link_vault (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                group_name varchar(300),
+                invite_link text NOT NULL,
+                notes text,
+                created_at timestamp DEFAULT now()
+            )""",
+        ]
+        for stmt in ddl_v17_part1 + ddl_v17_part2 + ddl_v17_part3 + ddl_v19:
             try:
                 await conn.execute(text(stmt))
             except Exception as e:
