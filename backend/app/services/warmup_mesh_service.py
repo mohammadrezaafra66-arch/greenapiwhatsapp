@@ -281,6 +281,10 @@ async def disable_warmup(db, account: Account, now: datetime | None = None) -> d
         select(WarmupEnrollment).where(WarmupEnrollment.instance_id == account.instance_id)
     )).scalar_one_or_none()
     if enrollment is None:
+        # V20 PART 1 — even with no enrollment, COMMIT so the endpoint's auto_warmup=False
+        # persists. get_db() does not commit on close, so without this the toggle-OFF is
+        # rolled back and the checkbox appears stuck ON.
+        await db.commit()
         return {"instance_id": account.instance_id, "state": None, "disabled": True}
     enrollment.is_enabled = False
     if enrollment.state not in (WarmupState.BLOCKED_RESET.value,):

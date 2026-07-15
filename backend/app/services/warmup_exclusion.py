@@ -66,3 +66,23 @@ async def enrolled_instance_ids(db) -> set:
     warm-up engine defers to V17 and never double-warms an enrolled number."""
     m = await enrollment_states_by_instance(db)
     return set(m.keys())
+
+
+async def reconcile_stale_auto_warmup(db) -> int:
+    """V20 PART 1 — one-time/idempotent reconcile: clear the legacy `auto_warmup=true` flag
+    on any account that has NO active (is_enabled) warm-up enrollment. Never touches an
+    account with a real active enrollment. Returns how many flags were cleared."""
+    from app.models.account import Account
+    m = await enrollment_states_by_instance(db)
+    active = {iid for iid, (state, enabled) in m.items() if enabled}
+    accounts = (await db.execute(
+        select(Account).where(Account.auto_warmup.is_(True))
+    )).scalars().all()
+    cleared = 0
+    for a in accounts:
+        if a.instance_id not in active:
+            a.auto_warmup = False
+            cleared += 1
+    if cleared:
+        await db.commit()
+    return cleared

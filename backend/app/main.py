@@ -762,6 +762,18 @@ async def lifespan(app: FastAPI):
                 logger.info("Startup: re-queued %d running campaign(s)", len(running))
     except Exception as e:
         logger.warning("Startup campaign resume failed (non-fatal): %s", e)
+
+    # V20 PART 1 — idempotent reconcile: clear stale legacy auto_warmup flags on accounts
+    # that have no ACTIVE warm-up enrollment (leaves real enrollments untouched).
+    try:
+        from app.database import AsyncSessionLocal
+        from app.services.warmup_exclusion import reconcile_stale_auto_warmup
+        async with AsyncSessionLocal() as db:
+            cleared = await reconcile_stale_auto_warmup(db)
+            if cleared:
+                logger.info("Startup: reconciled %d stale auto_warmup flag(s)", cleared)
+    except Exception as e:
+        logger.warning("Startup auto_warmup reconcile failed (non-fatal): %s", e)
     yield
 
 app = FastAPI(title="Afrakala WhatsApp Sender", version="2.0.0", lifespan=lifespan)

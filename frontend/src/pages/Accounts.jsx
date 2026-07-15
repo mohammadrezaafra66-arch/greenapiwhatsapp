@@ -171,7 +171,7 @@ export default function Accounts() {
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  checked={!!a.warmup_enrolled || !!a.auto_warmup}
+                  checked={!!a.warmup_enrolled}
                   onChange={async (e) => {
                     try {
                       const r = await Api.setWarmup(a.id, e.target.checked);
