@@ -445,6 +445,19 @@ export const WarmupApi = {
   createPhrase: (body) => http.post("/warmup/phrases", body).then((r) => r.data),
   updatePhrase: (id, body) => http.put(`/warmup/phrases/${id}`, body).then((r) => r.data),
   deletePhrase: (id) => http.delete(`/warmup/phrases/${id}`).then((r) => r.data),
+  // V17 — mesh warm-up dashboard + controls
+  meshDashboard: () => http.get("/warmup/mesh-dashboard").then((r) => r.data),
+  enroll: (accountId) => http.post(`/warmup/enroll/${accountId}`, null, { timeout: 60000 }).then((r) => r.data),
+  disable: (accountId) => http.post(`/warmup/disable/${accountId}`).then((r) => r.data),
+  pause: (accountId) => http.post(`/warmup/pause/${accountId}`).then((r) => r.data),
+  resume: (accountId) => http.post(`/warmup/resume/${accountId}`).then((r) => r.data),
+  restart: (accountId) => http.post(`/warmup/restart/${accountId}`).then((r) => r.data),
+  events: (accountId) => http.get(`/warmup/events/${accountId}`).then((r) => r.data),
+  setWarmPeer: (accountId, is_warm_peer) => http.post(`/warmup/warm-peer/${accountId}`, { is_warm_peer }).then((r) => r.data),
+  meshStartAll: () => http.post("/warmup/mesh-start-all", null, { timeout: 120000 }).then((r) => r.data),
+  meshStopAll: () => http.post("/warmup/mesh-stop-all").then((r) => r.data),
+  breaker: () => http.get("/warmup/breaker").then((r) => r.data),
+  resetBreaker: () => http.post("/warmup/breaker/reset").then((r) => r.data),
 };
 
 // ── Advertising links (V16 PART 3) ─────────────────────────

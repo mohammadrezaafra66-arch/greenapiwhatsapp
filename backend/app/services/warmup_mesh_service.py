@@ -230,6 +230,50 @@ async def enroll_and_preflight(db, account: Account, *, client_factory=None,
     return result
 
 
+async def resume_warmup(db, account: Account, now: datetime | None = None) -> dict:
+    """Resume a paused number: re-enable and move it back to the stage matching its day."""
+    from app.services.warmup_scheduler import day_index, target_state_for_day
+    now = now or datetime.utcnow()
+    enrollment = (await db.execute(
+        select(WarmupEnrollment).where(WarmupEnrollment.instance_id == account.instance_id)
+    )).scalar_one_or_none()
+    if enrollment is None:
+        return {"instance_id": account.instance_id, "state": None, "resumed": False}
+    enrollment.is_enabled = True
+    if enrollment.state == WarmupState.PAUSED.value:
+        day = day_index(enrollment, now)
+        target = target_state_for_day(day, WarmupState.COOLDOWN.value, DEFAULT_WARMUP_CONFIG)
+        # PAUSED may resume to any live stage; fall back to COOLDOWN if the jump is illegal.
+        from app.services.warmup_state import can_transition
+        enrollment.state = target if can_transition(WarmupState.PAUSED.value, target) else WarmupState.COOLDOWN.value
+    await _log(db, enrollment.id, "state_change", to=enrollment.state, reason="user_resumed")
+    await db.commit()
+    return {"instance_id": account.instance_id, "state": enrollment.state, "resumed": True}
+
+
+async def force_restart(db, account: Account, now: datetime | None = None) -> dict:
+    """Operator force-restart: wipe progress and begin the full schedule from Day 1."""
+    now = now or datetime.utcnow()
+    enrollment = (await db.execute(
+        select(WarmupEnrollment).where(WarmupEnrollment.instance_id == account.instance_id)
+    )).scalar_one_or_none()
+    if enrollment is None:
+        return {"instance_id": account.instance_id, "state": None, "restarted": False}
+    enrollment.is_enabled = True
+    enrollment.state = WarmupState.COOLDOWN.value
+    enrollment.day_index = 0
+    enrollment.started_at = now
+    enrollment.authorized_at = now
+    enrollment.sent_today = 0
+    enrollment.received_today = 0
+    enrollment.reply_ratio = 0.0
+    enrollment.rest_until = None
+    enrollment.next_action_at = now + timedelta(hours=DEFAULT_WARMUP_CONFIG.cooldown_hours)
+    await _log(db, enrollment.id, "state_change", to=enrollment.state, reason="force_restart")
+    await db.commit()
+    return {"instance_id": account.instance_id, "state": enrollment.state, "restarted": True}
+
+
 async def disable_warmup(db, account: Account, now: datetime | None = None) -> dict:
     """Turn the toggle OFF: pause everything for this number immediately (no more sends)."""
     now = now or datetime.utcnow()

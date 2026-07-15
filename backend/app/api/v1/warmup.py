@@ -53,6 +53,119 @@ async def set_warm_peer(account_id: str, body: WarmPeerBody, db: AsyncSession = 
     return {"account_id": account_id, "is_warm_peer": acc.is_warm_peer}
 
 
+# ── V17 PART 6 — mesh warm-up dashboard + per-number controls ────────────────
+@router.get("/mesh-dashboard")
+async def mesh_dashboard(db: AsyncSession = Depends(get_db)):
+    """Full mesh warm-up dashboard: one card per enrolled number (state/day/progress,
+    counts vs target, reply ratio, peers + per-edge activity, next action, banners)."""
+    from app.models.warmup_mesh import WarmupEnrollment, WarmupMeshEdge
+    from app.services.warmup_dashboard import build_dashboard
+    from app.services.warmup_killswitch import is_breaker_tripped
+    enrollments = (await db.execute(select(WarmupEnrollment))).scalars().all()
+    edges = (await db.execute(select(WarmupMeshEdge))).scalars().all()
+    edges_by_instance: dict = {}
+    for e in edges:
+        edges_by_instance.setdefault(e.new_instance_id, []).append(e)
+    tripped = await is_breaker_tripped(db)
+    return build_dashboard(enrollments, edges_by_instance, breaker_tripped=tripped)
+
+
+async def _account_or_404(account_id: str, db) -> Account:
+    acc = await db.get(Account, uuid.UUID(account_id))
+    if not acc:
+        raise HTTPException(404, "اکانت یافت نشد")
+    return acc
+
+
+@router.post("/pause/{account_id}")
+async def pause_number(account_id: str, db: AsyncSession = Depends(get_db)):
+    from app.services.warmup_mesh_service import disable_warmup
+    return await disable_warmup(db, await _account_or_404(account_id, db))
+
+
+@router.post("/resume/{account_id}")
+async def resume_number(account_id: str, db: AsyncSession = Depends(get_db)):
+    from app.services.warmup_mesh_service import resume_warmup
+    return await resume_warmup(db, await _account_or_404(account_id, db))
+
+
+@router.post("/restart/{account_id}")
+async def restart_number(account_id: str, db: AsyncSession = Depends(get_db)):
+    from app.services.warmup_mesh_service import force_restart
+    return await force_restart(db, await _account_or_404(account_id, db))
+
+
+@router.get("/events/{account_id}")
+async def number_events(account_id: str, limit: int = 50, db: AsyncSession = Depends(get_db)):
+    """Recent warmup_event_log rows for a number (audit trail shown in the dashboard)."""
+    from app.models.warmup_mesh import WarmupEnrollment, WarmupEventLog
+    acc = await _account_or_404(account_id, db)
+    enr = (await db.execute(
+        select(WarmupEnrollment).where(WarmupEnrollment.instance_id == acc.instance_id)
+    )).scalar_one_or_none()
+    if not enr:
+        return {"events": []}
+    rows = (await db.execute(
+        select(WarmupEventLog).where(WarmupEventLog.enrollment_id == enr.id)
+        .order_by(WarmupEventLog.created_at.desc()).limit(limit)
+    )).scalars().all()
+    return {"events": [{
+        "event_type": r.event_type, "delivery_status": r.delivery_status,
+        "payload": r.payload_json, "created_at": r.created_at.isoformat() if r.created_at else None,
+    } for r in rows]}
+
+
+@router.post("/mesh-start-all")
+async def mesh_start_all(db: AsyncSession = Depends(get_db)):
+    """Batch «شروع گرم‌سازی همه» — enroll every active account not already enrolled."""
+    from app.models.warmup_mesh import WarmupEnrollment
+    from app.services.warmup_mesh_service import enroll_and_preflight
+    accounts = (await db.execute(
+        select(Account).where(Account.status == AccountStatus.active)
+    )).scalars().all()
+    enrolled_ids = set((await db.execute(select(WarmupEnrollment.instance_id))).scalars().all())
+    started = 0
+    for a in accounts:
+        if a.instance_id in enrolled_ids:
+            continue
+        try:
+            await enroll_and_preflight(db, a)
+            started += 1
+        except Exception:
+            pass
+    return {"started": started}
+
+
+@router.post("/mesh-stop-all")
+async def mesh_stop_all(db: AsyncSession = Depends(get_db)):
+    """Global stop: pause every enrolled number immediately."""
+    from app.models.warmup_mesh import WarmupEnrollment
+    from app.services.warmup_state import WarmupState
+    rows = (await db.execute(
+        select(WarmupEnrollment).where(WarmupEnrollment.is_enabled.is_(True))
+    )).scalars().all()
+    for enr in rows:
+        enr.is_enabled = False
+        if enr.state not in (WarmupState.BLOCKED_RESET.value,):
+            enr.state = WarmupState.PAUSED.value
+    await db.commit()
+    return {"stopped": len(rows)}
+
+
+@router.get("/breaker")
+async def breaker_status(db: AsyncSession = Depends(get_db)):
+    from app.services.warmup_killswitch import is_breaker_tripped
+    return {"tripped": await is_breaker_tripped(db)}
+
+
+@router.post("/breaker/reset")
+async def breaker_reset(db: AsyncSession = Depends(get_db)):
+    from app.services.warmup_killswitch import reset_breaker
+    res = await reset_breaker(db)
+    await db.commit()
+    return res
+
+
 @router.get("/dashboard")
 async def warmup_dashboard(db: AsyncSession = Depends(get_db)):
     """Every account currently in warm-up: stage/day, progress, replies today vs cap, ready."""

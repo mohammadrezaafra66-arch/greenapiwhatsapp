@@ -1,9 +1,159 @@
 import React from "react";
-import { WarmupApi } from "../api.js";
+import { WarmupApi, Accounts } from "../api.js";
 import { useAsync, Spinner, Empty, Progress } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
 
 const fa = (n) => (n == null ? "—" : String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]));
+const timeFa = (iso) => {
+  if (!iso) return "—";
+  try { return fa(new Date(iso).toLocaleString("fa-IR", { hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" })); }
+  catch { return "—"; }
+};
+
+const BADGE_CLASS = {
+  COOLDOWN: "bg-slate-500/20 text-slate-300 border-slate-500/40",
+  RECEIVING: "bg-sky-500/20 text-sky-300 border-sky-500/40",
+  REPLYING: "bg-indigo-500/20 text-indigo-300 border-indigo-500/40",
+  RAMPING: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+  MATURING: "bg-violet-500/20 text-violet-300 border-violet-500/40",
+  GRADUATED: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+  PAUSED: "bg-slate-600/30 text-slate-400 border-slate-600",
+  YELLOWCARD: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40",
+  BLOCKED_RESET: "bg-rose-500/20 text-rose-300 border-rose-500/40",
+  ENROLLED: "bg-slate-500/20 text-slate-300 border-slate-500/40",
+};
+const BANNER_CLASS = {
+  paused: "bg-slate-600/20 border-slate-600/40 text-slate-300",
+  yellowcard: "bg-yellow-500/10 border-yellow-500/30 text-yellow-200",
+  blocked: "bg-rose-500/10 border-rose-500/30 text-rose-200",
+  insufficient_peers: "bg-amber-500/10 border-amber-500/30 text-amber-200",
+  breaker: "bg-rose-600/15 border-rose-600/40 text-rose-200",
+};
+
+// ── V17 — mesh warm-up dashboard (automatic, AI-driven, mesh-based) ──────────
+function MeshDashboard() {
+  const dash = useAsync(() => WarmupApi.meshDashboard(), []);
+  const accs = useAsync(() => Accounts.list(), []);
+  const [eventsFor, setEventsFor] = React.useState(null);
+  const ev = useAsync(() => (eventsFor ? WarmupApi.events(eventsFor) : Promise.resolve({ events: [] })), [eventsFor]);
+
+  const byInstance = React.useMemo(() => {
+    const m = {};
+    (accs.data || []).forEach((a) => { m[a.instance_id] = a; });
+    return m;
+  }, [accs.data]);
+
+  const numbers = dash.data?.numbers || [];
+  const gday = dash.data?.graduate_day || 25;
+
+  async function ctl(fnName, instanceId, confirmMsg) {
+    const acc = byInstance[instanceId];
+    if (!acc) return toast.error("اکانت متناظر یافت نشد");
+    if (confirmMsg && !(await confirmDialog(confirmMsg))) return;
+    try { await WarmupApi[fnName](acc.id); toast.success("انجام شد"); dash.reload(); }
+    catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+  }
+  async function startAllMesh() {
+    if (!(await confirmDialog("گرم‌سازی مش برای همهٔ اکانت‌های فعال ثبت‌نشده آغاز شود؟"))) return;
+    try { const r = await WarmupApi.meshStartAll(); toast.success(`${fa(r.started)} شماره وارد گرم‌سازی شد`); dash.reload(); }
+    catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+  }
+  async function stopAllMesh() {
+    if (!(await confirmDialog("گرم‌سازی مش برای همهٔ شماره‌ها متوقف شود؟"))) return;
+    try { const r = await WarmupApi.meshStopAll(); toast.success(`${fa(r.stopped)} شماره متوقف شد`); dash.reload(); }
+    catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+  }
+  async function resetBreaker() {
+    try { await WarmupApi.resetBreaker(); toast.success("بریکر بازنشانی شد"); dash.reload(); }
+    catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-2xl font-bold">🔥 گرم‌سازی خودکار (مش)</h2>
+        <div className="flex gap-2">
+          <button className="btn-secondary" onClick={startAllMesh}>شروع گرم‌سازی همه</button>
+          <button className="btn-secondary" onClick={stopAllMesh}>⏹ توقف همه</button>
+        </div>
+      </div>
+
+      {dash.data?.global_banner && (
+        <div className={`card text-sm ${BANNER_CLASS.breaker}`}>
+          <div className="flex items-center justify-between gap-2">
+            <span>⛔ {dash.data.global_banner.message}</span>
+            <button className="btn-danger text-xs" onClick={resetBreaker}>بازنشانی بریکر</button>
+          </div>
+        </div>
+      )}
+
+      <div className="card bg-sky-500/10 border-sky-500/30 text-sky-200 text-xs">
+        هر شمارهٔ جدید به‌صورت خودکار و انسانی گرم می‌شود: ۲۴ساعت آماده‌سازی، سپس دریافت پیام از اکانت‌های گرم شما، سپس پاسخ‌دهی و افزایش تدریجی تا فارغ‌التحصیلی (حدود روز {fa(gday)}). فقط با اکانت‌های خودتان که مخاطب دوطرفه شده‌اند پیام رد و بدل می‌شود — هرگز با غریبه.
+      </div>
+
+      {dash.loading ? <Spinner /> : numbers.length === 0 ? (
+        <Empty label="هیچ شماره‌ای در گرم‌سازی مش نیست. در صفحهٔ حساب‌ها گرم‌سازی خودکار را روشن کنید یا «شروع گرم‌سازی همه» را بزنید." />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {numbers.map((n) => (
+            <div key={n.instance_id} className="card space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold">{byInstance[n.instance_id]?.name || n.phone || n.instance_id}</span>
+                <span className={`badge ${BADGE_CLASS[n.state] || ""}`}>{n.badge}</span>
+              </div>
+
+              {n.banner && (
+                <div className={`rounded-lg border px-2 py-1 text-xs ${BANNER_CLASS[n.banner.type] || ""}`}>
+                  {n.banner.message}
+                </div>
+              )}
+
+              <p className="text-xs text-slate-400">روز {fa(n.day_index)} — پیشرفت تا فارغ‌التحصیلی</p>
+              <Progress value={n.progress_pct} max={100} color="bg-emerald-500" />
+
+              <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
+                <span>ارسال امروز: {fa(n.sent_today)}{n.day_target ? ` / ${fa(n.day_target)}` : ""}</span>
+                <span>دریافت امروز: {fa(n.received_today)}</span>
+                <span className={n.reply_ratio_ok ? "text-emerald-300" : "text-amber-300"}>
+                  نسبت پاسخ: {fa(Math.round((n.reply_ratio || 0) * 100))}٪
+                </span>
+                <span>اقدام بعدی: {timeFa(n.next_action_at)}</span>
+              </div>
+
+              <p className="text-xs text-slate-400">
+                همتاهای مش: {fa(n.messageable_peer_count)} فعال از {fa(n.peer_count)}
+              </p>
+
+              <div className="flex flex-wrap gap-1 pt-1">
+                {n.is_enabled && n.state !== "PAUSED"
+                  ? <button className="btn-secondary text-xs" onClick={() => ctl("pause", n.instance_id, "این شماره موقتاً متوقف شود؟")}>توقف</button>
+                  : <button className="btn-secondary text-xs" onClick={() => ctl("resume", n.instance_id)}>ادامه</button>}
+                <button className="btn-secondary text-xs" onClick={() => ctl("restart", n.instance_id, "گرم‌سازی این شماره از روز اول شروع شود؟")}>شروع مجدد</button>
+                <button className="btn-secondary text-xs" onClick={() => {
+                  const accId = byInstance[n.instance_id]?.id;
+                  setEventsFor(eventsFor === accId ? null : accId);
+                }}>رویدادها</button>
+              </div>
+
+              {eventsFor && byInstance[n.instance_id]?.id === eventsFor && (
+                <div className="mt-2 max-h-40 overflow-auto text-xs bg-slate-900/50 rounded p-2 space-y-1">
+                  {ev.loading ? <Spinner /> : (ev.data?.events || []).length === 0
+                    ? <span className="text-slate-500">رویدادی ثبت نشده</span>
+                    : ev.data.events.map((e, i) => (
+                      <div key={i} className="flex justify-between gap-2 border-b border-slate-800 pb-1">
+                        <span className="text-slate-300">{e.event_type}</span>
+                        <span className="text-slate-500">{timeFa(e.created_at)}</span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // V16 PART 5 — smart warm-up dashboard + phrase pool + batch controls.
 export default function Warmup() {
@@ -30,49 +180,14 @@ export default function Warmup() {
   const accounts = dash.data?.accounts || [];
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-2xl font-bold">گرم‌سازی هوشمند</h2>
-        <div className="flex gap-2">
-          <button className="btn-secondary" onClick={startAll}>🔥 شروع گرم‌سازی همه</button>
-          <button className="btn-secondary" onClick={stopAll}>⏹ توقف همه</button>
-        </div>
-      </div>
-      <div className="card bg-sky-500/10 border-sky-500/30 text-sky-200 text-xs">
-        ۱۰ روز اول پس از اتصال، سامانه به‌آرامی و انسانی با شماره کار می‌کند: روز ۱ تا ۳ فقط دریافت، روز ۴ تا ۷ حداکثر ۳ پاسخ در روز، روز ۸ تا ۱۰ حداکثر ۱۰ پاسخ. ارسال‌ها در طول روز پخش می‌شوند و فقط به کسانی که قبلاً پیام داده‌اند فرستاده می‌شود.
-      </div>
+    <div className="space-y-6">
+      {/* V17 — automatic AI-driven mesh warm-up */}
+      <MeshDashboard />
 
-      {/* Accounts in warm-up */}
-      {dash.loading ? <Spinner /> : accounts.length === 0 ? (
-        <Empty label="هیچ شماره‌ای در حال گرم‌سازی نیست. با «شروع گرم‌سازی همه» یا تیک «گرم‌سازی خودکار» در صفحه حساب‌ها فعال کنید." />
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {accounts.map((a) => (
-            <div key={a.account_id} className="card space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold">{a.name}</span>
-                {a.completed
-                  ? <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">آماده ✅</span>
-                  : <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40">{a.phase}</span>}
-              </div>
-              {!a.completed && (
-                <>
-                  <p className="text-xs text-slate-400">روز {fa(a.day)} از {fa(a.total_days)}</p>
-                  <Progress value={Math.min(a.day, a.total_days)} max={a.total_days} color="bg-amber-500" />
-                  <p className="text-xs text-slate-400">
-                    پاسخ‌های امروز: {fa(a.sent_today)} از {a.daily_cap ? fa(a.daily_cap) : "۰ (فقط دریافت)"}
-                  </p>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Phrase pool editor */}
+      {/* Phrase pool editor (shared by both warm-up engines) */}
       <div>
         <h3 className="text-lg font-bold mb-2">عبارت‌های گرم‌سازی</h3>
-        <p className="text-sm text-slate-400 mb-2">پیام‌های کوتاه و طبیعی که به‌صورت تصادفی هنگام گرم‌سازی فرستاده می‌شوند.</p>
+        <p className="text-sm text-slate-400 mb-2">پیام‌های کوتاه و طبیعی که هنگام گرم‌سازی به‌صورت تصادفی استفاده می‌شوند (علاوه بر تولید هوش مصنوعی و مخزن آمادهٔ داخلی).</p>
         <div className="flex gap-2 mb-3">
           <input className="input flex-1" placeholder="عبارت جدید…" value={newPhrase} onChange={(e) => setNewPhrase(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addPhrase()} />
