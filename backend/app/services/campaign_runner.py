@@ -22,7 +22,10 @@ from app.database import AsyncSessionLocal
 from app.config import settings
 
 # Auto-pause reasons surfaced in the campaign progress panel.
-NO_ACCOUNT_REASON = "هیچ اکانت فعالی متصل نیست — کمپین به‌طور خودکار متوقف شد"
+# V18 PART 1 — NO_ACCOUNT_REASON + fail-closed selection live in account_selection.
+from app.services.account_selection import (
+    NO_ACCOUNT_REASON, SELECTED_ACCOUNT_UNAVAILABLE_REASON, resolve_sending_accounts,
+)
 WINDOW_WAIT_REASON = "خارج از بازه مجاز ارسال این اکانت — ادامه خودکار در بازه بعدی"
 
 
@@ -290,22 +293,18 @@ async def _run_campaign_inner(campaign_id: str):
             return
 
         accounts_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
-        accounts = accounts_result.scalars().all()
+        all_active = accounts_result.scalars().all()
         # V14 F23 — never send from an account resting in a yellowCard cooldown.
         # V15 Item 26 — nor from an account still in managed auto warm-up.
         from app.services import governors
         from app.services.warmup_auto import in_active_warmup
-        accounts = [a for a in accounts if not governors.in_cooldown(a) and not in_active_warmup(a)]
-        # V15 Item 11 — when parallel is OFF and a specific account was chosen, send only
-        # from that account (fall back to all if it's currently unavailable, to never block).
-        if not getattr(campaign, "parallel_accounts", False) and getattr(campaign, "selected_account_id", None):
-            chosen = [a for a in accounts if a.id == campaign.selected_account_id]
-            if chosen:
-                accounts = chosen
-        if not accounts:
-            # No connected account to send with → auto-pause with a clear reason.
+        eligible = [a for a in all_active if not governors.in_cooldown(a) and not in_active_warmup(a)]
+        # V18 PART 1 — FAIL-CLOSED selection. Selecting one account never expands to many;
+        # if the chosen account is not eligible, ABORT (never fall back to all accounts).
+        accounts, abort_reason = resolve_sending_accounts(eligible, campaign)
+        if abort_reason:
             campaign.status = CampaignStatus.paused
-            campaign.pause_reason = NO_ACCOUNT_REASON
+            campaign.pause_reason = abort_reason
             await db.commit()
             return
 

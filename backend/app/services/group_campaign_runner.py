@@ -38,8 +38,19 @@ async def run_group_campaign(campaign_id: str):
         accounts_result = await db.execute(
             select(Account).where(Account.status == AccountStatus.active)
         )
-        accounts = accounts_result.scalars().all()
-        if not accounts:
+        all_active = accounts_result.scalars().all()
+        # V18 PART 1 — same fail-closed selection as PV campaigns: exclude cooldown/warming
+        # accounts, then honor the user's explicit selection; never fan out to all accounts
+        # when a chosen account is unavailable.
+        from app.services import governors
+        from app.services.warmup_auto import in_active_warmup
+        from app.services.account_selection import resolve_sending_accounts
+        eligible = [a for a in all_active if not governors.in_cooldown(a) and not in_active_warmup(a)]
+        accounts, abort_reason = resolve_sending_accounts(eligible, campaign)
+        if abort_reason:
+            campaign.status = CampaignStatus.paused
+            campaign.pause_reason = abort_reason
+            await db.commit()
             return
 
         # Product POOL. For per-group variation we need more products than we show
