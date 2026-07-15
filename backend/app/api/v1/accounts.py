@@ -41,6 +41,9 @@ async def list_accounts(db: AsyncSession = Depends(get_db)):
         select(Account).where(Account.status != AccountStatus.deleted).order_by(Account.created_at.desc())
     )
     accounts = result.scalars().all()
+    # V18 PART 2 — the warm-up toggle now reflects the V17 enrollment, not the legacy flag.
+    from app.services.warmup_exclusion import enrollment_states_by_instance
+    enr_map = await enrollment_states_by_instance(db)
     return [
         {
             "id": str(a.id),
@@ -58,12 +61,15 @@ async def list_accounts(db: AsyncSession = Depends(get_db)):
             "is_default": a.is_default,
             "proxy_enabled": a.proxy_enabled,
             "profile_picture_url": a.profile_picture_url,
-            # V15 Item 26 — auto warm-up status
+            # V15 Item 26 — legacy auto warm-up status (kept for backward compat)
             "auto_warmup": a.auto_warmup,
             "warmup_completed": a.warmup_completed,
             "warmup_day": (_warmup_day(a) if a.auto_warmup and not a.warmup_completed else None),
             "warmup_total_days": _WARMUP_TOTAL,
             "warmup_daily_limit": (_warmup_daily_limit(_warmup_day(a)) if a.auto_warmup and not a.warmup_completed else None),
+            # V18 PART 2 — V17 mesh enrollment (source of truth for the toggle)
+            "warmup_enrolled": bool(enr_map.get(a.instance_id, (None, False))[1]),
+            "warmup_state": (enr_map.get(a.instance_id) or (None, None))[0],
         }
         for a in accounts
     ]
@@ -512,19 +518,33 @@ class WarmupToggle(BaseModel):
 
 @router.post("/{account_id}/warmup")
 async def set_auto_warmup(account_id: str, body: WarmupToggle, db: AsyncSession = Depends(get_db)):
-    from datetime import datetime as _dt
+    """V18 PART 2 — the «گرم‌سازی هوشمند» toggle now drives the V17 mesh.
+
+    ON  → migrate off the legacy flag and create/activate a real `warmup_enrollment`
+          (pre-flight: warming SetSettings, 24h cooldown, mutual-contact mesh handshake).
+          If there aren't enough warm peers, the enrollment still holds and a Persian
+          insufficient-peers notice is returned (nothing is sent to strangers).
+    OFF → pause/disable the enrollment, stopping all mesh activity for the number.
+    """
     account = await _get_account(account_id, db)
+    # Enrollment is now the single source of truth — retire the legacy auto_warmup flag so
+    # the old warm-up engine never double-warms an enrolled number.
+    account.auto_warmup = False
     if body.enabled:
-        account.auto_warmup = True
-        account.warmup_completed = False
-        if not account.warmup_started_at:
-            account.warmup_started_at = _dt.utcnow()
+        from app.services.warmup_mesh_service import enroll_and_preflight
+        result = await enroll_and_preflight(db, account)   # commits internally
+        return {
+            "warmup_enrolled": True,
+            "state": result.get("state"),
+            "notice": result.get("notice"),
+            "peers": result.get("peers", []),
+            "cooldown_hours": result.get("cooldown_hours"),
+            "settings_applied": result.get("settings_applied"),
+        }
     else:
-        account.auto_warmup = False
-    await db.commit()
-    day = _warmup_day(account) if account.auto_warmup and not account.warmup_completed else None
-    return {"auto_warmup": account.auto_warmup, "warmup_completed": account.warmup_completed,
-            "warmup_day": day, "warmup_total_days": _WARMUP_TOTAL}
+        from app.services.warmup_mesh_service import disable_warmup
+        result = await disable_warmup(db, account)          # commits internally
+        return {"warmup_enrolled": False, "state": result.get("state")}
 
 
 @router.delete("/{account_id}")

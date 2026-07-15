@@ -295,10 +295,13 @@ async def _run_campaign_inner(campaign_id: str):
         accounts_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
         all_active = accounts_result.scalars().all()
         # V14 F23 — never send from an account resting in a yellowCard cooldown.
-        # V15 Item 26 — nor from an account still in managed auto warm-up.
+        # V18 PART 2 — nor from a number being mesh-warmed (active, not-yet-GRADUATED
+        # warmup_enrollment); graduated numbers become eligible again.
         from app.services import governors
-        from app.services.warmup_auto import in_active_warmup
-        eligible = [a for a in all_active if not governors.in_cooldown(a) and not in_active_warmup(a)]
+        from app.services.warmup_exclusion import enrollment_states_by_instance, warmup_campaign_excluded
+        enr_map = await enrollment_states_by_instance(db)
+        eligible = [a for a in all_active
+                    if not governors.in_cooldown(a) and not warmup_campaign_excluded(a, enr_map)]
         # V18 PART 1 — FAIL-CLOSED selection. Selecting one account never expands to many;
         # if the chosen account is not eligible, ABORT (never fall back to all accounts).
         accounts, abort_reason = resolve_sending_accounts(eligible, campaign)

@@ -152,6 +152,16 @@ async def process_warmup_accounts(db, now: datetime | None = None, jitter: bool 
     accounts = (await db.execute(
         select(Account).where(Account.auto_warmup.is_(True), Account.warmup_completed.is_(False))
     )).scalars().all()
+    # V18 PART 2 — defer to the V17 mesh: never legacy-warm a number that has a
+    # warmup_enrollment (the toggle now creates one and clears auto_warmup, but guard
+    # anyway so the two engines can never double-warm the same number).
+    try:
+        from app.services.warmup_exclusion import enrolled_instance_ids
+        enrolled = await enrolled_instance_ids(db)
+        if enrolled:
+            accounts = [a for a in accounts if a.instance_id not in enrolled]
+    except Exception:
+        pass
     phrases = await get_active_phrases(db)
 
     completed = warmed = sent_total = 0

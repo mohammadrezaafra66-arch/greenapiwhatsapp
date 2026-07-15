@@ -564,8 +564,14 @@ async def start_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
         task_run_group_campaign.delay(campaign_id)
     elif campaign.parallel_accounts:
         # Feature 37 — split contacts across all active accounts, sent concurrently.
+        # V18 PART 2 — exclude cooldown + mesh-warming (non-graduated) numbers so a warming
+        # account is never pulled into a real campaign even in parallel/all mode.
+        from app.services import governors
+        from app.services.warmup_exclusion import enrollment_states_by_instance, warmup_campaign_excluded
         acc_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
-        active_accounts = [str(a.id) for a in acc_result.scalars().all()]
+        enr_map = await enrollment_states_by_instance(db)
+        active_accounts = [str(a.id) for a in acc_result.scalars().all()
+                           if not governors.in_cooldown(a) and not warmup_campaign_excluded(a, enr_map)]
         task_run_campaign.delay(campaign_id, active_accounts)
     else:
         task_run_campaign.delay(campaign_id)
