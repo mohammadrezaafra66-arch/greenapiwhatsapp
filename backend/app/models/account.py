@@ -44,6 +44,9 @@ class Account(Base):
     auto_warmup: Mapped[bool] = mapped_column(Boolean, default=False)
     warmup_started_at: Mapped[datetime | None] = mapped_column(DateTime)
     warmup_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    # V17 PART 3 — manually mark a known-good number as an eligible warm mesh peer
+    # (e.g. 989122270261), so it can warm new numbers even before it "GRADUATED".
+    is_warm_peer: Mapped[bool] = mapped_column(Boolean, default=False)
     # V14 PART F — yellowCard safety (throttle + cooldown)
     throttle_factor: Mapped[float] = mapped_column(Float, default=1.0)
     throttle_until: Mapped[datetime | None] = mapped_column(DateTime)

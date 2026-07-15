@@ -699,7 +699,11 @@ async def lifespan(app: FastAPI):
                 created_at timestamp DEFAULT now()
             )""",
         ]
-        for stmt in ddl_v17_part1 + ddl_v17_part2:
+        # ── V17 PART 3 — manual warm-peer flag on accounts ─────────────────
+        ddl_v17_part3 = [
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_warm_peer boolean DEFAULT false",
+        ]
+        for stmt in ddl_v17_part1 + ddl_v17_part2 + ddl_v17_part3:
             try:
                 await conn.execute(text(stmt))
             except Exception as e:

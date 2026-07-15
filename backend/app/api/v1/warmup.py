@@ -1,4 +1,5 @@
-"""V16 PART 5 — warm-up dashboard, phrase-pool CRUD, and batch start/stop."""
+"""V16 PART 5 — warm-up dashboard, phrase-pool CRUD, and batch start/stop.
+V17 — mesh warm-up enrollment: the one toggle + pre-flight + warm-peer marking."""
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -13,6 +14,43 @@ from app.services.warmup_auto import (
 )
 
 router = APIRouter(prefix="/warmup", tags=["warmup"])
+
+
+# ── V17 — the one toggle: enroll / disable a number for automatic mesh warm-up ──
+@router.post("/enroll/{account_id}")
+async def enroll_account(account_id: str, db: AsyncSession = Depends(get_db)):
+    """Flip warm-up ON for an account: create the enrollment and run pre-flight
+    (apply warming settings, clear queue, 24h cooldown, mutual-contact mesh handshake)."""
+    acc = await db.get(Account, uuid.UUID(account_id))
+    if not acc:
+        raise HTTPException(404, "اکانت یافت نشد")
+    from app.services.warmup_mesh_service import enroll_and_preflight
+    return await enroll_and_preflight(db, acc)
+
+
+@router.post("/disable/{account_id}")
+async def disable_account(account_id: str, db: AsyncSession = Depends(get_db)):
+    """Flip warm-up OFF: pause everything for this number immediately."""
+    acc = await db.get(Account, uuid.UUID(account_id))
+    if not acc:
+        raise HTTPException(404, "اکانت یافت نشد")
+    from app.services.warmup_mesh_service import disable_warmup
+    return await disable_warmup(db, acc)
+
+
+class WarmPeerBody(BaseModel):
+    is_warm_peer: bool = True
+
+
+@router.post("/warm-peer/{account_id}")
+async def set_warm_peer(account_id: str, body: WarmPeerBody, db: AsyncSession = Depends(get_db)):
+    """Manually mark a known-good number (e.g. 989122270261) as an eligible warm mesh peer."""
+    acc = await db.get(Account, uuid.UUID(account_id))
+    if not acc:
+        raise HTTPException(404, "اکانت یافت نشد")
+    acc.is_warm_peer = body.is_warm_peer
+    await db.commit()
+    return {"account_id": account_id, "is_warm_peer": acc.is_warm_peer}
 
 
 @router.get("/dashboard")
