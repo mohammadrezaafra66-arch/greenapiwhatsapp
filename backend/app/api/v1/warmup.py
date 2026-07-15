@@ -152,6 +152,23 @@ async def mesh_stop_all(db: AsyncSession = Depends(get_db)):
     return {"stopped": len(rows)}
 
 
+# ── V19 PART 1 — read a warm account's ADMIN-owned groups (add targets) ──────
+@router.get("/admin-groups/{account_id}")
+async def admin_groups(account_id: str, refresh: bool = False, db: AsyncSession = Depends(get_db)):
+    """List the groups where this (warm) account is admin/superadmin — the only groups it
+    can place cold numbers into. Cached/throttled to protect getGroupData."""
+    acc = await db.get(Account, uuid.UUID(account_id))
+    if not acc:
+        raise HTTPException(404, "اکانت یافت نشد")
+    if acc.status != AccountStatus.active:
+        raise HTTPException(400, "این اکانت متصل/فعال نیست")
+    from app.services.green_api import GreenAPIClient
+    from app.services.warmup_groups import list_admin_groups
+    client = GreenAPIClient(acc.instance_id, acc.api_token)
+    groups = await list_admin_groups(client, own_number=acc.phone, use_cache=not refresh)
+    return {"account_id": account_id, "instance_id": acc.instance_id, "groups": groups}
+
+
 @router.get("/breaker")
 async def breaker_status(db: AsyncSession = Depends(get_db)):
     from app.services.warmup_killswitch import is_breaker_tripped

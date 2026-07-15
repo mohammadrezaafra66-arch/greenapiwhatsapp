@@ -429,6 +429,12 @@ class GreenAPIClient:
     async def get_contacts(self) -> list[dict]:
         return await self._get("getContacts")
 
+    async def get_group_contacts(self) -> list[dict]:
+        """V19 — getContacts filtered to GROUPS (type=='group', id ends '@g.us').
+        Green API doc: if the data array is empty, retry the call (caller handles retry)."""
+        r = await self._get("getContacts", params={"group": "true"})
+        return r if isinstance(r, list) else []
+
     async def get_contact_info(self, phone: str) -> dict:
         return await self._post("getContactInfo", {"chatId": self._chat_id(phone)})
 
