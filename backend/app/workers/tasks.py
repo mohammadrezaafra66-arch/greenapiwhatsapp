@@ -214,6 +214,19 @@ def task_process_mesh_warmup():
     run_async(_run())
 
 
+@celery_app.task(name="tasks.process_group_warmup")
+def task_process_group_warmup():
+    """V19 PART 4 — automatic group-placement tick (ADDITIVE to the message mesh; the mesh
+    scheduler is untouched). Places cold numbers into selected admin groups on the fixed
+    anti-ban schedule. Webhook-only; never polling."""
+    async def _run():
+        from app.database import AsyncSessionLocal
+        from app.services.warmup_group_engine import run_group_warmup_tick
+        async with AsyncSessionLocal() as db:
+            await run_group_warmup_tick(db)
+    run_async(_run())
+
+
 @celery_app.task(name="tasks.warmup_safety_scan")
 def task_warmup_safety_scan():
     """V17 PART 5 — reset/erosion detection. Restart warm-up (from Day 1) + alert for any

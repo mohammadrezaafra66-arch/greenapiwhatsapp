@@ -65,4 +65,7 @@ celery_app.conf.beat_schedule = {
     "process-mesh-warmup": {"task": "tasks.process_mesh_warmup", "schedule": 180.0},
     # V17 PART 5 — reset/erosion detection: restart warm-up for numbers idle past 14/30 days.
     "warmup-safety-scan": {"task": "tasks.warmup_safety_scan", "schedule": 21600.0},  # every 6h
+    # V19 PART 4 — automatic group placement (ADDITIVE to the mesh). Frequent tick; the fixed
+    # schedule itself caps this to ≤1 group action per cold number per day.
+    "process-group-warmup": {"task": "tasks.process_group_warmup", "schedule": 600.0},  # every 10 min
 }
