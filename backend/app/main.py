@@ -652,11 +652,58 @@ async def lifespan(app: FastAPI):
         ddl_v17_part1 = [
             "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS typing_simulation boolean DEFAULT false",
         ]
-        for stmt in ddl_v17_part1:
+        # ── V17 PART 2 — mesh warm-up schema (enrollment state machine + edges + log) ──
+        ddl_v17_part2 = [
+            """CREATE TABLE IF NOT EXISTS warmup_enrollment (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                instance_id varchar(50) NOT NULL,
+                phone varchar(20),
+                state varchar(20) NOT NULL DEFAULT 'ENROLLED',
+                day_index integer NOT NULL DEFAULT 0,
+                started_at timestamp,
+                authorized_at timestamp,
+                last_activity_at timestamp,
+                sent_today integer NOT NULL DEFAULT 0,
+                received_today integer NOT NULL DEFAULT 0,
+                reply_ratio double precision NOT NULL DEFAULT 0,
+                next_action_at timestamp,
+                is_enabled boolean NOT NULL DEFAULT false,
+                rest_until timestamp,
+                counters_date date,
+                config_json text,
+                created_at timestamp DEFAULT now(),
+                updated_at timestamp DEFAULT now(),
+                UNIQUE (instance_id)
+            )""",
+            """CREATE TABLE IF NOT EXISTS warmup_mesh_edge (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                new_instance_id varchar(50) NOT NULL,
+                peer_instance_id varchar(50) NOT NULL,
+                direction varchar(20) NOT NULL DEFAULT 'bidirectional',
+                handshake_state varchar(20) NOT NULL DEFAULT 'none',
+                saved_as_contact_new boolean NOT NULL DEFAULT false,
+                saved_as_contact_peer boolean NOT NULL DEFAULT false,
+                last_msg_at timestamp,
+                msg_count integer NOT NULL DEFAULT 0,
+                created_at timestamp DEFAULT now(),
+                UNIQUE (new_instance_id, peer_instance_id)
+            )""",
+            """CREATE TABLE IF NOT EXISTS warmup_event_log (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                enrollment_id uuid,
+                edge_id uuid,
+                event_type varchar(20) NOT NULL,
+                content_hash varchar(64),
+                delivery_status varchar(30),
+                payload_json text,
+                created_at timestamp DEFAULT now()
+            )""",
+        ]
+        for stmt in ddl_v17_part1 + ddl_v17_part2:
             try:
                 await conn.execute(text(stmt))
             except Exception as e:
-                print(f"[DDL V17 PART1] {e}")
+                print(f"[DDL V17] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:
