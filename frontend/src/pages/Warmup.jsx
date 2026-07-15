@@ -27,7 +27,15 @@ const BANNER_CLASS = {
   yellowcard: "bg-yellow-500/10 border-yellow-500/30 text-yellow-200",
   blocked: "bg-rose-500/10 border-rose-500/30 text-rose-200",
   insufficient_peers: "bg-amber-500/10 border-amber-500/30 text-amber-200",
+  no_peer: "bg-amber-500/10 border-amber-500/30 text-amber-200",
   breaker: "bg-rose-600/15 border-rose-600/40 text-rose-200",
+};
+// V20 PART 3 — Persian labels for account roles.
+const ROLE_LABELS = {
+  being_warmed: "در حال گرم‌سازی",
+  peer_sender: "فرستندهٔ گرم",
+  graduated_peer: "فارغ‌التحصیل (فرستنده)",
+  none: "—",
 };
 
 // ── V17 — mesh warm-up dashboard (automatic, AI-driven, mesh-based) ──────────
@@ -87,6 +95,23 @@ function MeshDashboard() {
         </div>
       )}
 
+      {/* V20 PART 3 — no-peer notice + warm-sender roster */}
+      {!dash.loading && dash.data?.has_eligible_peer === false && numbers.length > 0 && (
+        <div className={`card text-sm ${BANNER_CLASS.no_peer}`}>
+          ⚠️ {dash.data.no_peer_notice}
+        </div>
+      )}
+      {(dash.data?.roles || []).some((r) => r.role === "peer_sender" || r.role === "graduated_peer") && (
+        <div className="card text-xs">
+          <span className="text-slate-400">فرستنده‌های گرم: </span>
+          {dash.data.roles.filter((r) => r.role === "peer_sender" || r.role === "graduated_peer").map((r) => (
+            <span key={r.instance_id} className="badge bg-sky-500/20 text-sky-300 border-sky-500/40 mx-1">
+              📤 {r.name}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="card bg-sky-500/10 border-sky-500/30 text-sky-200 text-xs">
         هر شمارهٔ جدید به‌صورت خودکار و انسانی گرم می‌شود: ۲۴ساعت آماده‌سازی، سپس دریافت پیام از اکانت‌های گرم شما، سپس پاسخ‌دهی و افزایش تدریجی تا فارغ‌التحصیلی (حدود روز {fa(gday)}). فقط با اکانت‌های خودتان که مخاطب دوطرفه شده‌اند پیام رد و بدل می‌شود — هرگز با غریبه.
       </div>
@@ -98,7 +123,12 @@ function MeshDashboard() {
           {numbers.map((n) => (
             <div key={n.instance_id} className="card space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-bold">{byInstance[n.instance_id]?.name || n.phone || n.instance_id}</span>
+                <span className="font-bold">
+                  {byInstance[n.instance_id]?.name || n.phone || n.instance_id}
+                  <span className="badge bg-slate-500/20 text-slate-300 border-slate-500/40 mx-1 text-[10px]">
+                    {n.role === "graduated_peer" ? ROLE_LABELS.graduated_peer : ROLE_LABELS.being_warmed}
+                  </span>
+                </span>
                 <span className={`badge ${BADGE_CLASS[n.state] || ""}`}>{n.badge}</span>
               </div>
 

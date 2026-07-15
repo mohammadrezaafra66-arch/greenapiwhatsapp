@@ -17,6 +17,17 @@ from app.services.warmup_mesh_service import edge_is_messageable, INSUFFICIENT_P
 # Numbers are considered fully graduated (green light) around day 25.
 GRADUATE_DAY = 25
 
+# V20 PART 3 — shown when an enrolled cold number has NO eligible warm sender at all.
+NO_PEER_NOTICE = "هیچ اکانت گرم مرجعی انتخاب نشده — یک اکانت گرم را به‌عنوان فرستنده علامت بزنید."
+
+# Persian labels for the account ROLE in the warm-up system.
+ROLE_LABELS_FA = {
+    "being_warmed": "در حال گرم‌سازی",
+    "peer_sender": "اکانت گرم مرجع / فرستنده",
+    "graduated_peer": "فارغ‌التحصیل (فرستنده)",
+    "none": "بدون نقش",
+}
+
 # Persian labels for each state badge.
 STATE_LABELS_FA = {
     "ENROLLED": "ثبت‌شده",
@@ -85,7 +96,8 @@ def _build_group_warmup(enrollment, memberships, now, cfg) -> dict:
 
 
 def build_number_card(enrollment, edges, now: datetime | None = None,
-                      cfg=DEFAULT_WARMUP_CONFIG, group_memberships=None) -> dict:
+                      cfg=DEFAULT_WARMUP_CONFIG, group_memberships=None,
+                      has_eligible_peer: bool = True) -> dict:
     """One dashboard card for an enrolled number (mesh info + V19 group placements)."""
     now = now or datetime.utcnow()
     state = getattr(enrollment, "state", WarmupState.ENROLLED.value)
@@ -118,12 +130,21 @@ def build_number_card(enrollment, edges, now: datetime | None = None,
         banner = {"type": "blocked", "message": "شماره مسدود/خارج شده؛ گرم‌سازی بازنشانی می‌شود."}
     elif state in (WarmupState.RECEIVING.value, WarmupState.REPLYING.value,
                    WarmupState.RAMPING.value, WarmupState.MATURING.value) and messageable_count == 0:
-        banner = {"type": "insufficient_peers", "message": INSUFFICIENT_PEERS_NOTICE}
+        # V20 PART 3 — distinguish "no warm sender marked at all" from "peers exist, edges
+        # still building", so the 0-peer situation is visible instead of silent.
+        if not has_eligible_peer:
+            banner = {"type": "no_peer", "message": NO_PEER_NOTICE}
+        else:
+            banner = {"type": "insufficient_peers", "message": INSUFFICIENT_PEERS_NOTICE}
+
+    # V20 PART 3 — role: a GRADUATED enrollment is now a sender/peer, not being warmed.
+    role = "graduated_peer" if state == WarmupState.GRADUATED.value else "being_warmed"
 
     return {
         "instance_id": getattr(enrollment, "instance_id", None),
         "phone": getattr(enrollment, "phone", None),
         "state": state,
+        "role": role,
         "badge": STATE_LABELS_FA.get(state, state),
         "day_index": day,
         "graduate_day": GRADUATE_DAY,
@@ -147,15 +168,18 @@ def build_number_card(enrollment, edges, now: datetime | None = None,
 
 def build_dashboard(enrollments, edges_by_instance: dict, breaker_tripped: bool = False,
                     now: datetime | None = None, cfg=DEFAULT_WARMUP_CONFIG,
-                    memberships_by_instance: dict | None = None) -> dict:
+                    memberships_by_instance: dict | None = None,
+                    has_eligible_peer: bool = True, roles: list | None = None) -> dict:
     """The full dashboard payload: one card per enrolled number (mesh + group placements),
-    plus a global banner when the chain-ban breaker is tripped."""
+    an account ROLE overview (being-warmed vs peer/sender vs none), a no-peer notice when no
+    warm sender is marked, plus a global banner when the chain-ban breaker is tripped."""
     now = now or datetime.utcnow()
     memberships_by_instance = memberships_by_instance or {}
     cards = [
         build_number_card(
             enr, edges_by_instance.get(getattr(enr, "instance_id", None), []), now, cfg,
             group_memberships=memberships_by_instance.get(getattr(enr, "instance_id", None), []),
+            has_eligible_peer=has_eligible_peer,
         )
         for enr in enrollments
     ]
@@ -165,10 +189,19 @@ def build_dashboard(enrollments, edges_by_instance: dict, breaker_tripped: bool 
             "type": "breaker",
             "message": "بریکر زنجیره‌بن فعال است: کل شبکهٔ گرم‌سازی متوقف شده. لطفاً وضعیت شماره‌ها را بررسی کنید.",
         }
+    roles = roles or []
+    for r in roles:
+        r.setdefault("role_label", ROLE_LABELS_FA.get(r.get("role"), r.get("role")))
+    warm_peer_count = sum(1 for r in roles if r.get("role") in ("peer_sender", "graduated_peer"))
     return {
         "breaker_tripped": bool(breaker_tripped),
         "global_banner": global_banner,
         "graduate_day": GRADUATE_DAY,
         "numbers": cards,
         "total": len(cards),
+        # V20 PART 3 — role overview + peer availability
+        "roles": roles,
+        "warm_peer_count": warm_peer_count,
+        "has_eligible_peer": bool(has_eligible_peer),
+        "no_peer_notice": (None if has_eligible_peer else NO_PEER_NOTICE),
     }

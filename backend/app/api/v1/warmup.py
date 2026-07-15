@@ -61,6 +61,7 @@ async def mesh_dashboard(db: AsyncSession = Depends(get_db)):
     from app.models.warmup_mesh import WarmupEnrollment, WarmupMeshEdge, WarmupGroupMembership
     from app.services.warmup_dashboard import build_dashboard
     from app.services.warmup_killswitch import is_breaker_tripped
+    from app.services.warmup_exclusion import GRADUATED
     enrollments = (await db.execute(select(WarmupEnrollment))).scalars().all()
     edges = (await db.execute(select(WarmupMeshEdge))).scalars().all()
     edges_by_instance: dict = {}
@@ -71,9 +72,33 @@ async def mesh_dashboard(db: AsyncSession = Depends(get_db)):
     memberships_by_instance: dict = {}
     for m in memberships:
         memberships_by_instance.setdefault(m.cold_instance_id, []).append(m)
+
+    # V20 PART 3 — per-account ROLE overview + whether any eligible warm sender exists.
+    enr_state = {e.instance_id: (e.state, bool(e.is_enabled)) for e in enrollments}
+    accounts = (await db.execute(
+        select(Account).where(Account.status == AccountStatus.active)
+    )).scalars().all()
+    roles = []
+    warm_peers = 0
+    for a in accounts:
+        st = enr_state.get(a.instance_id)
+        if st and st[1] and st[0] != GRADUATED:
+            role = "being_warmed"
+        elif a.is_warm_peer:
+            role = "peer_sender"
+        elif st and st[0] == GRADUATED:
+            role = "graduated_peer"
+        else:
+            role = "none"
+        if role in ("peer_sender", "graduated_peer"):
+            warm_peers += 1
+        roles.append({"instance_id": a.instance_id, "name": a.name, "role": role})
+    has_eligible_peer = warm_peers > 0
+
     tripped = await is_breaker_tripped(db)
     return build_dashboard(enrollments, edges_by_instance, breaker_tripped=tripped,
-                           memberships_by_instance=memberships_by_instance)
+                           memberships_by_instance=memberships_by_instance,
+                           has_eligible_peer=has_eligible_peer, roles=roles)
 
 
 async def _account_or_404(account_id: str, db) -> Account:
