@@ -648,6 +648,15 @@ async def lifespan(app: FastAPI):
                         "VALUES (gen_random_uuid(), :t, true, now())"), {"t": ph})
         except Exception as e:
             print(f"[Seed warmup_phrases] {e}")
+        # ── V17 PART 1 — per-campaign typing simulation (OFF by default) ────
+        ddl_v17_part1 = [
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS typing_simulation boolean DEFAULT false",
+        ]
+        for stmt in ddl_v17_part1:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V17 PART1] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:

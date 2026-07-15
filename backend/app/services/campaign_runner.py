@@ -124,13 +124,14 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
         cc.generated_message = message
         client = GreenAPIClient(account.instance_id, account.api_token)
 
-        # Show "typing..." for 2-4 seconds before sending (more human-like)
-        try:
-            typing_secs = random.randint(2, 4)
-            await client.send_typing(contact.phone, typing_secs)
-            await asyncio.sleep(typing_secs)
-        except Exception:
-            pass  # Non-fatal — never block sending
+        # V17 PART 1 — typing indicator before sending. When the campaign's typing
+        # simulation is OFF (default) this runs the EXACT V16 path (2–4s), so behavior
+        # is byte-identical. When ON, it uses the length-scaled, jittered simulation.
+        from app.services.typing_sim import show_typing_for_send
+        await show_typing_for_send(
+            client, contact.phone, message,
+            enabled=getattr(campaign, "typing_simulation", False),
+        )
 
         msg_id = None
         # V14 F7 — interactive buttons (opt-in, text campaigns only). Body = the built

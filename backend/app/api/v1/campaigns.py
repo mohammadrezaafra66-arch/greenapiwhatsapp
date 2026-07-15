@@ -83,6 +83,8 @@ class CampaignCreateBody(BaseModel):
     append_links: bool = False
     links_count: int = 1
     links_mode: str = "weighted"
+    # V17 PART 1 — human-like typing simulation (OFF by default; V16 behavior unchanged)
+    typing_simulation: bool = False
 
 
 class TestBody(BaseModel):
@@ -284,6 +286,7 @@ async def update_campaign(campaign_id: str, body: CampaignCreateBody, db: AsyncS
     c.append_links = body.append_links
     c.links_count = max(1, int(body.links_count or 1))
     c.links_mode = body.links_mode or "weighted"
+    c.typing_simulation = body.typing_simulation
     await db.commit()
     return {"id": campaign_id, "updated": True}
 
@@ -411,6 +414,7 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         append_links=body.append_links,
         links_count=max(1, int(body.links_count or 1)),
         links_mode=body.links_mode or "weighted",
+        typing_simulation=body.typing_simulation,
     )
     db.add(campaign)
     await db.commit()

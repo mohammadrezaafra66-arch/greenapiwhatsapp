@@ -484,6 +484,38 @@ class GreenAPIClient:
         })
         return r.get("chatId") is not None or r.get("waId") is not None or True
 
+    # ── V17 PART 1 — spec-correct typing simulation ──────────────────────────
+    async def send_typing_ms(self, phone: str, typing_time_ms: int,
+                             typing_type: str | None = None) -> bool:
+        """SendTyping with the spec-correct `typingTime` field (1000–20000 ms), plus an
+        optional `typingType` ("recording" for the voice indicator). Distinct from the
+        legacy send_typing (seconds-based) which the OFF path keeps using unchanged."""
+        tt = int(max(1000, min(20000, typing_time_ms)))
+        body = {"chatId": self._chat_id(phone), "typingTime": tt}
+        if typing_type:
+            body["typingType"] = typing_type
+        r = await self._post("sendTyping", body)
+        return bool(r)
+
+    async def set_warming_instance_settings(self, webhook_url: str | None = None) -> bool:
+        """V17 — apply the EXACT Green API anti-ban warming block via SetSettings.
+        Webhook-only (polling is NEVER enabled): 15s queue delay, autoTyping:2,
+        keepOnlineStatus off, read-on-reply. Optionally (re)binds the webhook URL."""
+        s = {
+            "incomingWebhook": "yes",
+            "outgoingAPIMessageWebhook": "yes",
+            "stateWebhook": "yes",
+            "incomingBlockWebhook": "yes",
+            "delaySendMessagesMilliseconds": 15000,
+            "autoTyping": "2",
+            "keepOnlineStatus": "no",
+            "markIncomingMessagesReadedOnReply": "yes",
+            "markIncomingMessagesReaded": "no",
+        }
+        if webhook_url:
+            s["webhookUrl"] = webhook_url
+        return await self.set_settings(s)
+
     async def edit_message(self, phone: str, message_id: str, new_text: str) -> bool:
         """Edit a previously sent text message."""
         r = await self._post("editMessage", {

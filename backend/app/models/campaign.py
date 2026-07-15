@@ -110,6 +110,9 @@ class Campaign(Base):
     append_links: Mapped[bool] = mapped_column(Boolean, default=False)
     links_count: Mapped[int] = mapped_column(Integer, default=1)
     links_mode: Mapped[str] = mapped_column(String(20), default="weighted")  # fixed|weighted
+    # V17 PART 1 — human-like typing simulation (length-scaled, jittered typingTime).
+    # OFF by default → send flow stays byte-identical to V16.
+    typing_simulation: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
