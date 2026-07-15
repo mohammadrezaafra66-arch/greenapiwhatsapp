@@ -31,6 +31,10 @@ logger = logging.getLogger("afrakala.warmup.mesh")
 INSUFFICIENT_PEERS_NOTICE = (
     "برای گرم‌کردن به اکانت گرم کافی نیاز است — حداقل یک اکانت گرم اضافه کنید."
 )
+# V20 PART 2 — a warm PEER (sender) is never itself warmed.
+WARM_PEER_NOT_WARMED_NOTICE = (
+    "این اکانت به‌عنوان «اکانت گرم مرجع / فرستنده» علامت خورده است و خودش گرم‌سازی نمی‌شود."
+)
 
 
 def _default_client_factory(instance_id: str, api_token: str) -> GreenAPIClient:
@@ -159,6 +163,13 @@ async def enroll_and_preflight(db, account: Account, *, client_factory=None,
     client_factory = client_factory or _default_client_factory
     cfg = cfg or DEFAULT_WARMUP_CONFIG
     now = now or datetime.utcnow()
+
+    # V20 PART 2 — a warm PEER is a SENDER only; it must NEVER be enrolled/warmed. Guard
+    # against any path (toggle, batch) putting a peer on the "being warmed" side.
+    if getattr(account, "is_warm_peer", False):
+        return {"instance_id": account.instance_id, "state": None, "is_warm_peer": True,
+                "notice": WARM_PEER_NOT_WARMED_NOTICE, "peers": [], "settings_applied": False,
+                "queue_cleared": False, "cooldown_hours": None}
 
     enrollment = (await db.execute(
         select(WarmupEnrollment).where(WarmupEnrollment.instance_id == account.instance_id)
@@ -295,3 +306,36 @@ async def disable_warmup(db, account: Account, now: datetime | None = None) -> d
     await _log(db, enrollment.id, "state_change", to=enrollment.state, reason="user_disabled")
     await db.commit()
     return {"instance_id": account.instance_id, "state": enrollment.state, "disabled": True}
+
+
+async def ensure_mesh_edges(db, account: Account, *, client_factory=None,
+                            now: datetime | None = None, rng: random.Random | None = None,
+                            cfg=None) -> int:
+    """V20 PART 2 — self-heal: build mutual-contact mesh edges from an enrolled cold number
+    to eligible warm peers (GRADUATED or is_warm_peer) when it has fewer than the target.
+    Fixes the "0 edges / no peer" case for numbers enrolled before any peer existed. Returns
+    how many new edges were built. No-op (0) when no fresh eligible peer is available."""
+    client_factory = client_factory or _default_client_factory
+    cfg = cfg or DEFAULT_WARMUP_CONFIG
+    now = now or datetime.utcnow()
+
+    existing = (await db.execute(
+        select(WarmupMeshEdge).where(WarmupMeshEdge.new_instance_id == account.instance_id)
+    )).scalars().all()
+    have = {e.peer_instance_id for e in existing}
+    slots = cfg.peers_per_new_number_max - len(have)
+    if slots <= 0:
+        return 0
+    eligible = await eligible_peer_accounts(db, account.instance_id)
+    fresh = [p for p in eligible if p.instance_id not in have]
+    if not fresh:
+        return 0
+    r = rng or random
+    r.shuffle(fresh)
+    built = 0
+    for peer in fresh[:slots]:
+        await _handshake_edge(db, account, peer, client_factory)
+        built += 1
+    if built:
+        await db.commit()
+    return built

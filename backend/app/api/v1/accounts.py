@@ -70,6 +70,8 @@ async def list_accounts(db: AsyncSession = Depends(get_db)):
             # V18 PART 2 — V17 mesh enrollment (source of truth for the toggle)
             "warmup_enrolled": bool(enr_map.get(a.instance_id, (None, False))[1]),
             "warmup_state": (enr_map.get(a.instance_id) or (None, None))[0],
+            # V20 PART 2 — warm PEER (sender) role: independent of being warmed
+            "is_warm_peer": bool(a.is_warm_peer),
         }
         for a in accounts
     ]

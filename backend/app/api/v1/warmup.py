@@ -134,6 +134,9 @@ async def mesh_start_all(db: AsyncSession = Depends(get_db)):
     for a in accounts:
         if a.instance_id in enrolled_ids:
             continue
+        # V20 PART 2 — never enroll a warm PEER (sender). Peers are never warmed.
+        if getattr(a, "is_warm_peer", False):
+            continue
         try:
             await enroll_and_preflight(db, a)
             started += 1

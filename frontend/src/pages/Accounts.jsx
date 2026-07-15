@@ -1,5 +1,5 @@
 import React from "react";
-import { Accounts as Api, ProxyApi } from "../api.js";
+import { Accounts as Api, ProxyApi, WarmupApi } from "../api.js";
 import { Badge, Spinner, Empty, Modal, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
 import HelpTip, { TIPS } from "../components/HelpTip.jsx";
@@ -200,6 +200,33 @@ export default function Accounts() {
                 با روشن‌کردن این گزینه، شمارهٔ جدید به‌صورت خودکار توسط شبکهٔ گرم‌سازی (مش) گرم می‌شود:
                 ۲۴ساعت آماده‌سازی، سپس تبادل پیام فقط با اکانت‌های گرم خودتان. برای مشاهدهٔ وضعیت کامل به «گرم‌سازی» بروید.
               </p>
+
+              {/* V20 PART 2 — warm PEER (sender) role: a SEPARATE control from being warmed */}
+              <div className="mt-2 pt-2 border-t border-slate-800">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={!!a.is_warm_peer}
+                    onChange={async (e) => {
+                      try {
+                        await WarmupApi.setWarmPeer(a.id, e.target.checked);
+                        toast.success(e.target.checked
+                          ? "به‌عنوان «اکانت گرم مرجع / فرستنده» علامت خورد (خودش گرم نمی‌شود)"
+                          : "علامت فرستندهٔ گرم برداشته شد");
+                        await reload();
+                      } catch (err) { toast.error(err?.response?.data?.detail || err.message); }
+                    }}
+                  />
+                  📤 اکانت گرم مرجع (فرستندهٔ گرم‌سازی)
+                  {a.is_warm_peer && (
+                    <span className="badge bg-sky-500/20 text-sky-300 border-sky-500/40">فرستنده</span>
+                  )}
+                </label>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  این اکانتِ از قبل گرم، برای «فرستادن» پیام‌های گرم‌سازی به شماره‌های جدید استفاده می‌شود.
+                  خودش گرم‌سازی نمی‌شود و در معرض ریسک قرار نمی‌گیرد — نقش آن با «گرم‌سازی هوشمند» (که شماره را گرم می‌کند) متفاوت است.
+                </p>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <button className="btn-secondary" disabled={busy === a.id} onClick={() => act(() => Api.status(a.id), a.id)}>بررسی وضعیت</button>
