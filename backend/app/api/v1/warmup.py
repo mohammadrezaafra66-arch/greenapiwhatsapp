@@ -169,6 +169,131 @@ async def admin_groups(account_id: str, refresh: bool = False, db: AsyncSession 
     return {"account_id": account_id, "instance_id": acc.instance_id, "groups": groups}
 
 
+# ── V19 PART 3 — warm-account dropdown + group-target selection ──────────────
+@router.get("/warm-accounts")
+async def warm_accounts(db: AsyncSession = Depends(get_db)):
+    """Active accounts usable as WARM group sources, warm/graduated ones flagged first."""
+    from app.services.warmup_exclusion import enrollment_states_by_instance, GRADUATED
+    accounts = (await db.execute(
+        select(Account).where(Account.status == AccountStatus.active)
+    )).scalars().all()
+    enr = await enrollment_states_by_instance(db)
+    out = []
+    for a in accounts:
+        st = enr.get(a.instance_id)
+        is_warm = bool(a.is_warm_peer) or (st is not None and st[0] == GRADUATED)
+        out.append({"id": str(a.id), "name": a.name, "instance_id": a.instance_id, "is_warm": is_warm})
+    out.sort(key=lambda x: (not x["is_warm"], x["name"] or ""))
+    return {"accounts": out}
+
+
+@router.get("/group-targets/{account_id}")
+async def list_group_targets(account_id: str, db: AsyncSession = Depends(get_db)):
+    """Selected admin-group targets for a warm account."""
+    from app.models.warmup_mesh import WarmupGroupTarget
+    acc = await db.get(Account, uuid.UUID(account_id))
+    if not acc:
+        raise HTTPException(404, "اکانت یافت نشد")
+    rows = (await db.execute(
+        select(WarmupGroupTarget).where(WarmupGroupTarget.warm_instance_id == acc.instance_id)
+    )).scalars().all()
+    return {"targets": [{"group_id": r.group_id, "group_subject": r.group_subject,
+                         "is_selected": r.is_selected} for r in rows]}
+
+
+class GroupTargetBody(BaseModel):
+    group_id: str
+    group_subject: str | None = None
+    is_selected: bool = True
+
+
+@router.post("/group-targets/{account_id}")
+async def set_group_target(account_id: str, body: GroupTargetBody, db: AsyncSession = Depends(get_db)):
+    """Select/deselect one admin group as a placement destination (upsert)."""
+    from app.models.warmup_mesh import WarmupGroupTarget
+    acc = await db.get(Account, uuid.UUID(account_id))
+    if not acc:
+        raise HTTPException(404, "اکانت یافت نشد")
+    existing = (await db.execute(
+        select(WarmupGroupTarget).where(
+            WarmupGroupTarget.warm_instance_id == acc.instance_id,
+            WarmupGroupTarget.group_id == body.group_id,
+        )
+    )).scalar_one_or_none()
+    if existing:
+        existing.is_selected = body.is_selected
+        if body.group_subject:
+            existing.group_subject = body.group_subject
+    else:
+        db.add(WarmupGroupTarget(warm_instance_id=acc.instance_id, group_id=body.group_id,
+                                 group_subject=body.group_subject, is_selected=body.is_selected))
+    await db.commit()
+    return {"ok": True, "group_id": body.group_id, "is_selected": body.is_selected}
+
+
+# ── V19 PART 3 — manual link vault (Green API cannot auto-join by link) ───────
+LINK_VAULT_MANUAL_NOTICE = (
+    "توجه: عضویت در این گروه‌ها فقط به‌صورت دستی روی گوشی ممکن است — "
+    "Green API اجازه‌ی عضویت خودکار با لینک را نمی‌دهد. این لینک‌ها اینجا ذخیره می‌شوند تا پرسنل دستی عضو شوند."
+)
+
+
+class LinkVaultBody(BaseModel):
+    group_name: str | None = None
+    invite_link: str
+    notes: str | None = None
+
+
+@router.get("/link-vault")
+async def list_link_vault(db: AsyncSession = Depends(get_db)):
+    from app.models.warmup_mesh import WarmupLinkVault
+    rows = (await db.execute(
+        select(WarmupLinkVault).order_by(WarmupLinkVault.created_at.desc())
+    )).scalars().all()
+    return {
+        "notice": LINK_VAULT_MANUAL_NOTICE,
+        "links": [{"id": str(r.id), "group_name": r.group_name, "invite_link": r.invite_link,
+                   "notes": r.notes} for r in rows],
+    }
+
+
+@router.post("/link-vault")
+async def add_link_vault(body: LinkVaultBody, db: AsyncSession = Depends(get_db)):
+    from app.models.warmup_mesh import WarmupLinkVault
+    if not (body.invite_link or "").strip():
+        raise HTTPException(400, "لینک دعوت لازم است")
+    row = WarmupLinkVault(group_name=(body.group_name or "").strip() or None,
+                          invite_link=body.invite_link.strip(),
+                          notes=(body.notes or "").strip() or None)
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return {"id": str(row.id), "group_name": row.group_name, "invite_link": row.invite_link, "notes": row.notes}
+
+
+@router.put("/link-vault/{link_id}")
+async def update_link_vault(link_id: str, body: LinkVaultBody, db: AsyncSession = Depends(get_db)):
+    from app.models.warmup_mesh import WarmupLinkVault
+    row = await db.get(WarmupLinkVault, uuid.UUID(link_id))
+    if not row:
+        raise HTTPException(404, "لینک یافت نشد")
+    row.group_name = (body.group_name or "").strip() or None
+    row.invite_link = body.invite_link.strip()
+    row.notes = (body.notes or "").strip() or None
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete("/link-vault/{link_id}")
+async def delete_link_vault(link_id: str, db: AsyncSession = Depends(get_db)):
+    from app.models.warmup_mesh import WarmupLinkVault
+    row = await db.get(WarmupLinkVault, uuid.UUID(link_id))
+    if row:
+        await db.delete(row)
+        await db.commit()
+    return {"ok": True}
+
+
 @router.get("/breaker")
 async def breaker_status(db: AsyncSession = Depends(get_db)):
     from app.services.warmup_killswitch import is_breaker_tripped

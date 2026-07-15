@@ -458,6 +458,16 @@ export const WarmupApi = {
   meshStopAll: () => http.post("/warmup/mesh-stop-all").then((r) => r.data),
   breaker: () => http.get("/warmup/breaker").then((r) => r.data),
   resetBreaker: () => http.post("/warmup/breaker/reset").then((r) => r.data),
+  // V19 — group-based warm-up (admin groups) + manual link vault
+  warmAccounts: () => http.get("/warmup/warm-accounts").then((r) => r.data),
+  adminGroups: (accountId, refresh = false) =>
+    http.get(`/warmup/admin-groups/${accountId}`, { params: refresh ? { refresh: true } : {}, timeout: 60000 }).then((r) => r.data),
+  groupTargets: (accountId) => http.get(`/warmup/group-targets/${accountId}`).then((r) => r.data),
+  setGroupTarget: (accountId, body) => http.post(`/warmup/group-targets/${accountId}`, body).then((r) => r.data),
+  linkVault: () => http.get("/warmup/link-vault").then((r) => r.data),
+  addLink: (body) => http.post("/warmup/link-vault", body).then((r) => r.data),
+  updateLink: (id, body) => http.put(`/warmup/link-vault/${id}`, body).then((r) => r.data),
+  deleteLink: (id) => http.delete(`/warmup/link-vault/${id}`).then((r) => r.data),
 };
 
 // ── Advertising links (V16 PART 3) ─────────────────────────

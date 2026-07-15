@@ -155,6 +155,109 @@ function MeshDashboard() {
   );
 }
 
+// ── V19 — group-based warm-up: pick a warm account's admin groups as targets ──
+function GroupTargets() {
+  const wa = useAsync(() => WarmupApi.warmAccounts(), []);
+  const [acctId, setAcctId] = React.useState("");
+  const groups = useAsync(() => (acctId ? WarmupApi.adminGroups(acctId) : Promise.resolve({ groups: [] })), [acctId]);
+  const targets = useAsync(() => (acctId ? WarmupApi.groupTargets(acctId) : Promise.resolve({ targets: [] })), [acctId]);
+
+  const selected = React.useMemo(() => {
+    const m = {};
+    (targets.data?.targets || []).forEach((t) => { m[t.group_id] = t.is_selected; });
+    return m;
+  }, [targets.data]);
+
+  async function toggle(g, checked) {
+    try {
+      await WarmupApi.setGroupTarget(acctId, { group_id: g.group_id, group_subject: g.subject, is_selected: checked });
+      targets.reload();
+      toast.success(checked ? "گروه به مقصدها اضافه شد" : "گروه حذف شد");
+    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+  }
+
+  const accts = wa.data?.accounts || [];
+  return (
+    <div className="space-y-3">
+      <h3 className="text-lg font-bold">افزودن به گروه‌های اکانت گرم</h3>
+      <p className="text-xs text-slate-400">
+        یک اکانت گرم را انتخاب کنید تا گروه‌هایی که در آن‌ها ادمین است نمایش داده شود. گروه‌های انتخاب‌شده به‌صورت خودکار و آهسته
+        (طبق زمان‌بندی ضدبن) برای قراردادن شماره‌های جدید در آن‌ها استفاده می‌شوند — فقط پس از روشن‌بودن «گرم‌سازی هوشمند».
+      </p>
+      <select className="input" value={acctId} onChange={(e) => setAcctId(e.target.value)}>
+        <option value="">— انتخاب اکانت گرم —</option>
+        {accts.map((a) => (
+          <option key={a.id} value={a.id}>{a.name}{a.is_warm ? " ✅" : ""}</option>
+        ))}
+      </select>
+      {acctId && (groups.loading ? <Spinner /> : (groups.data?.groups || []).length === 0 ? (
+        <Empty label="این اکانت در هیچ گروهی ادمین نیست" />
+      ) : (
+        <div className="card divide-y divide-slate-800">
+          {groups.data.groups.map((g) => (
+            <label key={g.group_id} className="flex items-center justify-between gap-2 py-2 text-sm cursor-pointer">
+              <span className="flex items-center gap-2">
+                <input type="checkbox" checked={!!selected[g.group_id]} onChange={(e) => toggle(g, e.target.checked)} />
+                {g.subject || g.group_id}
+              </span>
+              <span className="text-xs text-slate-400">{fa(g.size)} عضو</span>
+            </label>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── V19 — manual link vault (Green API cannot auto-join by invite link) ──────
+function LinkVault() {
+  const v = useAsync(() => WarmupApi.linkVault(), []);
+  const [form, setForm] = React.useState({ group_name: "", invite_link: "", notes: "" });
+
+  async function add() {
+    if (!form.invite_link.trim()) return toast.error("لینک دعوت لازم است");
+    try { await WarmupApi.addLink(form); setForm({ group_name: "", invite_link: "", notes: "" }); v.reload(); }
+    catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+  }
+  async function del(id) {
+    if (!(await confirmDialog("این لینک حذف شود؟"))) return;
+    try { await WarmupApi.deleteLink(id); v.reload(); } catch (e) { toast.error(e.message); }
+  }
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-lg font-bold">مخزن لینک گروه‌ها (عضویت دستی)</h3>
+      <div className="card bg-amber-500/10 border-amber-500/30 text-amber-200 text-xs">
+        {v.data?.notice || "توجه: عضویت در این گروه‌ها فقط به‌صورت دستی روی گوشی ممکن است — Green API اجازه‌ی عضویت خودکار با لینک را نمی‌دهد. این لینک‌ها اینجا ذخیره می‌شوند تا پرسنل دستی عضو شوند."}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        <input className="input" placeholder="نام گروه" value={form.group_name} onChange={(e) => setForm({ ...form, group_name: e.target.value })} />
+        <input className="input" placeholder="لینک دعوت (chat.whatsapp.com/…)" value={form.invite_link} onChange={(e) => setForm({ ...form, invite_link: e.target.value })} />
+        <div className="flex gap-2">
+          <input className="input flex-1" placeholder="یادداشت" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          <button className="btn-primary" onClick={add}>افزودن</button>
+        </div>
+      </div>
+      {v.loading ? <Spinner /> : (v.data?.links || []).length === 0 ? (
+        <Empty label="هنوز لینکی ذخیره نشده است." />
+      ) : (
+        <div className="card divide-y divide-slate-800">
+          {v.data.links.map((l) => (
+            <div key={l.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+              <div className="min-w-0">
+                <div className="font-bold truncate">{l.group_name || "—"}</div>
+                <a href={l.invite_link} target="_blank" rel="noreferrer" className="text-sky-400 text-xs break-all">{l.invite_link}</a>
+                {l.notes && <div className="text-xs text-slate-500">{l.notes}</div>}
+              </div>
+              <button className="btn-danger text-xs shrink-0" onClick={() => del(l.id)}>حذف</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // V16 PART 5 — smart warm-up dashboard + phrase pool + batch controls.
 export default function Warmup() {
   const dash = useAsync(() => WarmupApi.dashboard(), []);
@@ -183,6 +286,10 @@ export default function Warmup() {
     <div className="space-y-6">
       {/* V17 — automatic AI-driven mesh warm-up */}
       <MeshDashboard />
+
+      {/* V19 — group-based warm-up (additive to the mesh) */}
+      <GroupTargets />
+      <LinkVault />
 
       {/* Phrase pool editor (shared by both warm-up engines) */}
       <div>
