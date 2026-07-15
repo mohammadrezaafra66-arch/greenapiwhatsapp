@@ -58,7 +58,7 @@ async def set_warm_peer(account_id: str, body: WarmPeerBody, db: AsyncSession = 
 async def mesh_dashboard(db: AsyncSession = Depends(get_db)):
     """Full mesh warm-up dashboard: one card per enrolled number (state/day/progress,
     counts vs target, reply ratio, peers + per-edge activity, next action, banners)."""
-    from app.models.warmup_mesh import WarmupEnrollment, WarmupMeshEdge
+    from app.models.warmup_mesh import WarmupEnrollment, WarmupMeshEdge, WarmupGroupMembership
     from app.services.warmup_dashboard import build_dashboard
     from app.services.warmup_killswitch import is_breaker_tripped
     enrollments = (await db.execute(select(WarmupEnrollment))).scalars().all()
@@ -66,8 +66,14 @@ async def mesh_dashboard(db: AsyncSession = Depends(get_db)):
     edges_by_instance: dict = {}
     for e in edges:
         edges_by_instance.setdefault(e.new_instance_id, []).append(e)
+    # V19 — group placements per cold number (additive track under the same enrollment)
+    memberships = (await db.execute(select(WarmupGroupMembership))).scalars().all()
+    memberships_by_instance: dict = {}
+    for m in memberships:
+        memberships_by_instance.setdefault(m.cold_instance_id, []).append(m)
     tripped = await is_breaker_tripped(db)
-    return build_dashboard(enrollments, edges_by_instance, breaker_tripped=tripped)
+    return build_dashboard(enrollments, edges_by_instance, breaker_tripped=tripped,
+                           memberships_by_instance=memberships_by_instance)
 
 
 async def _account_or_404(account_id: str, db) -> Account:

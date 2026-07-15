@@ -49,9 +49,44 @@ def _iso(dt):
     return dt.isoformat() if isinstance(dt, datetime) else None
 
 
+def _build_group_warmup(enrollment, memberships, now, cfg) -> dict:
+    """V19 — group-placement summary for a cold number's dashboard card."""
+    from datetime import timedelta
+    from app.services.warmup_group_scheduler import (
+        last_action_at, GROUP_MIN_SPACING_HOURS, GROUP_MATURING_MIN_DAYS,
+    )
+    from app.services.warmup_scheduler import day_index
+    memberships = memberships or []
+    placements = [{
+        "group_id": getattr(m, "group_id", None),
+        "warm_instance_id": getattr(m, "warm_instance_id", None),
+        "status": getattr(m, "status", None),
+        "added_at": _iso(getattr(m, "added_at", None)),
+        "last_attempt_at": _iso(getattr(m, "last_attempt_at", None)),
+        "error_reason": getattr(m, "error_reason", None),
+    } for m in memberships]
+    counts = {"added": 0, "pending": 0, "failed": 0}
+    for m in memberships:
+        st = getattr(m, "status", None)
+        if st in counts:
+            counts[st] += 1
+    last = last_action_at(memberships)
+    next_at = None
+    if last is not None:
+        day = day_index(enrollment, now)
+        gap = timedelta(days=GROUP_MATURING_MIN_DAYS) if day > 10 else timedelta(hours=GROUP_MIN_SPACING_HOURS)
+        next_at = last + gap
+    return {
+        "placements": placements,
+        "counts": counts,
+        "last_action_at": _iso(last),
+        "next_action_at": _iso(next_at),
+    }
+
+
 def build_number_card(enrollment, edges, now: datetime | None = None,
-                      cfg=DEFAULT_WARMUP_CONFIG) -> dict:
-    """One dashboard card for an enrolled number."""
+                      cfg=DEFAULT_WARMUP_CONFIG, group_memberships=None) -> dict:
+    """One dashboard card for an enrolled number (mesh info + V19 group placements)."""
     now = now or datetime.utcnow()
     state = getattr(enrollment, "state", WarmupState.ENROLLED.value)
     day = day_index(enrollment, now)
@@ -105,16 +140,23 @@ def build_number_card(enrollment, edges, now: datetime | None = None,
         "peer_count": len(peers),
         "messageable_peer_count": messageable_count,
         "banner": banner,
+        # V19 — group-based warm-up placements (additive track under the same enrollment)
+        "group_warmup": _build_group_warmup(enrollment, group_memberships, now, cfg),
     }
 
 
 def build_dashboard(enrollments, edges_by_instance: dict, breaker_tripped: bool = False,
-                    now: datetime | None = None, cfg=DEFAULT_WARMUP_CONFIG) -> dict:
-    """The full dashboard payload: one card per enrolled number, plus a global banner when
-    the chain-ban breaker is tripped."""
+                    now: datetime | None = None, cfg=DEFAULT_WARMUP_CONFIG,
+                    memberships_by_instance: dict | None = None) -> dict:
+    """The full dashboard payload: one card per enrolled number (mesh + group placements),
+    plus a global banner when the chain-ban breaker is tripped."""
     now = now or datetime.utcnow()
+    memberships_by_instance = memberships_by_instance or {}
     cards = [
-        build_number_card(enr, edges_by_instance.get(getattr(enr, "instance_id", None), []), now, cfg)
+        build_number_card(
+            enr, edges_by_instance.get(getattr(enr, "instance_id", None), []), now, cfg,
+            group_memberships=memberships_by_instance.get(getattr(enr, "instance_id", None), []),
+        )
         for enr in enrollments
     ]
     global_banner = None

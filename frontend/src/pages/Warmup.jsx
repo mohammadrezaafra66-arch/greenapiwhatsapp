@@ -124,6 +124,26 @@ function MeshDashboard() {
                 همتاهای مش: {fa(n.messageable_peer_count)} فعال از {fa(n.peer_count)}
               </p>
 
+              {/* V19 — group-based warm-up placements (additive track) */}
+              {n.group_warmup && (n.group_warmup.placements?.length > 0 || n.group_warmup.counts) && (
+                <div className="text-xs text-slate-400 border-t border-slate-800 pt-1">
+                  <div className="flex items-center justify-between">
+                    <span>گروه‌ها:
+                      {" "}<span className="text-emerald-300">{fa(n.group_warmup.counts?.added || 0)} افزوده</span>
+                      {(n.group_warmup.counts?.pending || 0) > 0 && <span className="text-amber-300"> · {fa(n.group_warmup.counts.pending)} در انتظار</span>}
+                      {(n.group_warmup.counts?.failed || 0) > 0 && <span className="text-rose-300"> · {fa(n.group_warmup.counts.failed)} ناموفق</span>}
+                    </span>
+                    {n.group_warmup.next_action_at && <span>گروه بعدی: {timeFa(n.group_warmup.next_action_at)}</span>}
+                  </div>
+                  {(n.group_warmup.placements || []).slice(0, 4).map((p, i) => (
+                    <div key={i} className="flex justify-between gap-2 text-[11px] text-slate-500">
+                      <span className="truncate">{p.group_id}</span>
+                      <span className={p.status === "added" ? "text-emerald-400" : p.status === "failed" ? "text-rose-400" : "text-amber-400"}>{p.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-1 pt-1">
                 {n.is_enabled && n.state !== "PAUSED"
                   ? <button className="btn-secondary text-xs" onClick={() => ctl("pause", n.instance_id, "این شماره موقتاً متوقف شود؟")}>توقف</button>
