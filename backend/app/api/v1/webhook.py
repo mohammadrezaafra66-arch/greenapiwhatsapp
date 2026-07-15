@@ -276,6 +276,16 @@ async def handle_state_change(instance_id: str, payload: dict):
                 await handle_yellow_card(account, "webhook", db)
             else:
                 await db.commit()
+    # V17 PART 5 — route the state signal into the mesh warm-up kill-switch (pause/rest on
+    # yellowCard, reset on block/logout, restart on re-auth, chain-ban breaker). Guarded &
+    # best-effort so it can never disrupt the fragile webhook path. No-op if not enrolled.
+    try:
+        from app.services.warmup_killswitch import handle_warmup_state_signal
+        async with AsyncSessionLocal() as wdb:
+            if await handle_warmup_state_signal(wdb, instance_id, state) is not None:
+                await wdb.commit()
+    except Exception as e:
+        logger.warning("warmup state signal failed (non-fatal): %s", e)
 
 async def handle_outgoing_status(instance_id: str, payload: dict):
     msg_id = payload.get("idMessage", "")
@@ -564,6 +574,21 @@ async def handle_incoming_block(instance_id: str, payload: dict):
                     await apply_warning_throttle(acc, "blockSpike", "webhook", db, factor=0.5, days=10)
         except Exception as e:
             logger.warning("block-spike check failed: %s", e)
+
+        # V17 PART 5 — if this number is in mesh warm-up, log a block incident and let the
+        # chain-ban breaker decide whether to halt the whole mesh. Guarded & best-effort.
+        try:
+            from app.models.warmup_mesh import WarmupEnrollment
+            from app.services.warmup_killswitch import record_incident, check_and_maybe_trip_breaker
+            enr = (await db.execute(
+                select(WarmupEnrollment).where(WarmupEnrollment.instance_id == instance_id)
+            )).scalar_one_or_none()
+            if enr:
+                await record_incident(db, instance_id, "block")
+                await check_and_maybe_trip_breaker(db)
+                await db.commit()
+        except Exception as e:
+            logger.warning("warmup block incident failed (non-fatal): %s", e)
 
 
 async def handle_outgoing_call(instance_id: str, payload: dict):

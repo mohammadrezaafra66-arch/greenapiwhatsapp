@@ -202,12 +202,19 @@ async def run_warmup_tick(db, now: datetime | None = None, *, client_factory=Non
     now = now or datetime.utcnow()
     r = rng or random
 
+    # V17 PART 5 — if the chain-ban breaker is tripped, the whole mesh stays halted.
+    from app.services.warmup_killswitch import is_breaker_tripped, maybe_resume_after_rest
+    if await is_breaker_tripped(db, now):
+        return {"acted": 0, "deferred": 0, "idle": 0, "total": 0, "halted": True}
+
     enrollments = (await db.execute(
         select(WarmupEnrollment).where(WarmupEnrollment.is_enabled.is_(True))
     )).scalars().all()
 
     acted = deferred = waited = 0
     for enr in enrollments:
+        # Resume a rested (yellowCard) number once its >=48h rest window has elapsed.
+        await maybe_resume_after_rest(db, enr, now)
         await _advance_state(db, enr, now, cfg=DEFAULT_WARMUP_CONFIG)
         new_acc = (await db.execute(
             select(Account).where(Account.instance_id == enr.instance_id)

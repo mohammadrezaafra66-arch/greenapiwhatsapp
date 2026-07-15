@@ -214,6 +214,36 @@ def task_process_mesh_warmup():
     run_async(_run())
 
 
+@celery_app.task(name="tasks.warmup_safety_scan")
+def task_warmup_safety_scan():
+    """V17 PART 5 — reset/erosion detection. Restart warm-up (from Day 1) + alert for any
+    enrolled number idle past the erosion (14d) / auto-logout (30d) thresholds."""
+    async def _run():
+        from datetime import datetime
+        from sqlalchemy import select
+        from app.database import AsyncSessionLocal
+        from app.models.warmup_mesh import WarmupEnrollment
+        from app.services.warmup_state import WarmupState
+        from app.services.warmup_killswitch import idle_reset_reason, on_block_or_logout, _alert
+        now = datetime.utcnow()
+        async with AsyncSessionLocal() as db:
+            rows = (await db.execute(
+                select(WarmupEnrollment).where(WarmupEnrollment.is_enabled.is_(True))
+            )).scalars().all()
+            for enr in rows:
+                anchor = enr.last_activity_at or enr.started_at
+                if not anchor:
+                    continue
+                idle_days = (now - anchor).days
+                reason = idle_reset_reason(idle_days)
+                if reason and enr.state != WarmupState.BLOCKED_RESET.value:
+                    await on_block_or_logout(db, enr, reason, now)
+                    await _alert(db, f"بی‌فعالیتی {idle_days} روزه ({reason})؛ گرم‌سازی بازنشانی شد.",
+                                 scope="number", instance_id=enr.instance_id, enrollment_id=enr.id)
+            await db.commit()
+    run_async(_run())
+
+
 @celery_app.task(name="tasks.recheck_method_support")
 def task_recheck_method_support():
     """V14 PART G — weekly re-probe of ONLY the safe, read-only methods (never the

@@ -63,4 +63,6 @@ celery_app.conf.beat_schedule = {
     # number run its OWN randomized schedule; the tick itself does nothing outside a
     # number's jittered next_action_at / active hours.
     "process-mesh-warmup": {"task": "tasks.process_mesh_warmup", "schedule": 180.0},
+    # V17 PART 5 — reset/erosion detection: restart warm-up for numbers idle past 14/30 days.
+    "warmup-safety-scan": {"task": "tasks.warmup_safety_scan", "schedule": 21600.0},  # every 6h
 }
