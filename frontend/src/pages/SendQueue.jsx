@@ -5,6 +5,29 @@ import { toast } from "../ui/toast.jsx";
 
 const fa = (n) => (n == null ? "" : String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]));
 
+// Green API showMessagesQueue items nest the payload under a `body` OBJECT (the text is
+// NOT at q.body / q.text). Extract safely across message types so a populated queue renders
+// instead of crashing on `.slice` of an object or blanking out.
+function queueItemType(q) {
+  const b = q?.body && typeof q.body === "object" ? q.body : {};
+  return q?.typeMessage || b.typeMessage || q?.type || b.type || "—";
+}
+function queueItemText(q) {
+  const b = q?.body && typeof q.body === "object" ? q.body : null;
+  const cand =
+    (b && (b.textMessage ||
+           b.extendedTextMessage?.text ||
+           b.caption ||
+           b.fileName ||
+           b.message)) ||
+    q?.textMessage ||
+    q?.text ||
+    q?.caption ||
+    (typeof q?.body === "string" ? q.body : "") ||
+    (typeof q?.message === "string" ? q.message : "");
+  return typeof cand === "string" ? cand : "";
+}
+
 // FEATURE 20 — send-queue management (⭐ emergency stop).
 export default function SendQueue() {
   const { data, loading, reload } = useAsync(() => QueueApi.summary(), []);
@@ -33,15 +56,27 @@ export default function SendQueue() {
 function QueueCard({ acc, onChange }) {
   const [expanded, setExpanded] = React.useState(false);
   const [detail, setDetail] = React.useState(null);
+  const [detailLoading, setDetailLoading] = React.useState(false);
+  const [detailError, setDetailError] = React.useState("");
   const [confirmText, setConfirmText] = React.useState("");
   const [clearing, setClearing] = React.useState(false);
   const hasQueue = (acc.count || 0) > 0;
 
   async function loadDetail() {
-    if (!expanded) {
-      try { setDetail(await QueueApi.get(acc.account_id)); } catch { /* ignore */ }
+    if (expanded) { setExpanded(false); return; }
+    // Fix B — show a loading state and SURFACE errors, so a real Green API failure is
+    // never indistinguishable from a genuinely empty queue.
+    setExpanded(true);
+    setDetailError("");
+    setDetailLoading(true);
+    try {
+      setDetail(await QueueApi.get(acc.account_id));
+    } catch (e) {
+      setDetail(null);
+      setDetailError(e?.response?.data?.detail || e.message || "دریافت پیام‌های صف ناموفق بود");
+    } finally {
+      setDetailLoading(false);
     }
-    setExpanded((e) => !e);
   }
 
   async function clearQueue() {
@@ -75,7 +110,18 @@ function QueueCard({ acc, onChange }) {
 
       {expanded && (
         <div className="mt-3 overflow-x-auto">
-          {(!detail?.queue || detail.queue.length === 0) ? (
+          {detailLoading ? (
+            <div className="flex items-center gap-2 text-sm text-slate-400 p-2">
+              <Spinner /> در حال دریافت پیام‌های صف…
+            </div>
+          ) : detailError ? (
+            <div className="card text-sm border-red-500/50 bg-red-500/10 text-red-200 p-2">
+              ⚠️ {detailError}
+              <button className="btn-secondary text-xs mr-2" onClick={() => { setExpanded(false); loadDetail(); }}>
+                تلاش مجدد
+              </button>
+            </div>
+          ) : (!detail?.queue || detail.queue.length === 0) ? (
             <Empty label="صف خالی است." />
           ) : (
             <table className="w-full text-xs">
@@ -83,8 +129,8 @@ function QueueCard({ acc, onChange }) {
               <tbody>
                 {detail.queue.slice(0, 100).map((q, i) => (
                   <tr key={i} className="border-t border-slate-800">
-                    <td className="p-1">{q.type || q.typeMessage || "—"}</td>
-                    <td className="p-1 text-slate-300">{(q.body || q.text || "").slice(0, 80) || "—"}</td>
+                    <td className="p-1">{queueItemType(q)}</td>
+                    <td className="p-1 text-slate-300">{queueItemText(q).slice(0, 80) || "—"}</td>
                   </tr>
                 ))}
               </tbody>

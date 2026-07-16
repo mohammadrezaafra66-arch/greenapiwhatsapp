@@ -453,6 +453,8 @@ export const WarmupApi = {
   resume: (accountId) => http.post(`/warmup/resume/${accountId}`).then((r) => r.data),
   restart: (accountId) => http.post(`/warmup/restart/${accountId}`).then((r) => r.data),
   events: (accountId) => http.get(`/warmup/events/${accountId}`).then((r) => r.data),
+  // V23 — actual warm-up message texts sent across the mesh (from warmup_event_log)
+  messages: (limit = 30) => http.get("/warmup/messages", { params: { limit } }).then((r) => r.data),
   setWarmPeer: (accountId, is_warm_peer) => http.post(`/warmup/warm-peer/${accountId}`, { is_warm_peer }).then((r) => r.data),
   meshStartAll: () => http.post("/warmup/mesh-start-all", null, { timeout: 120000 }).then((r) => r.data),
   meshStopAll: () => http.post("/warmup/mesh-stop-all").then((r) => r.data),

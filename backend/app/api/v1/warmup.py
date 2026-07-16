@@ -160,6 +160,59 @@ async def number_events(account_id: str, limit: int = 50, db: AsyncSession = Dep
     } for r in rows]}
 
 
+@router.get("/messages")
+async def warmup_messages(limit: int = 30, instance_id: str | None = None,
+                          db: AsyncSession = Depends(get_db)):
+    """V23 — the actual warm-up message TEXTS sent across the mesh (read from
+    warmup_event_log). This is the right place to review content — the send-queue page
+    shows Green API's transient queue, which warm-up never uses (messages deliver
+    immediately). Optionally filter to one number via ?instance_id=. Newest first."""
+    import json
+    from app.models.warmup_mesh import WarmupEnrollment, WarmupEventLog
+    # Map enrollment_id → (instance_id, phone) and instance_id → account name for labels.
+    enrollments = (await db.execute(select(WarmupEnrollment))).scalars().all()
+    enr_by_id = {e.id: e for e in enrollments}
+    accounts = (await db.execute(select(Account))).scalars().all()
+    name_by_instance = {a.instance_id: a.name for a in accounts}
+
+    q = select(WarmupEventLog).where(WarmupEventLog.event_type.in_(("send", "receive")))
+    if instance_id:
+        enr = next((e for e in enrollments if e.instance_id == instance_id), None)
+        if not enr:
+            return {"messages": []}
+        q = q.where(WarmupEventLog.enrollment_id == enr.id)
+    rows = (await db.execute(
+        q.order_by(WarmupEventLog.created_at.desc()).limit(min(limit, 200))
+    )).scalars().all()
+
+    out = []
+    for r in rows:
+        try:
+            p = json.loads(r.payload_json or "{}")
+        except Exception:
+            p = {}
+        enr = enr_by_id.get(r.enrollment_id)
+        cold_instance = enr.instance_id if enr else None
+        peer_instance = p.get("peer")
+        # direction inbound → peer SENT to the cold number; outbound → cold sent to peer.
+        if p.get("direction") == "inbound":
+            frm, to = peer_instance, cold_instance
+        else:
+            frm, to = cold_instance, peer_instance
+        out.append({
+            "at": r.created_at.isoformat() if r.created_at else None,
+            "text": p.get("text"),
+            "source": p.get("source"),          # "ai" | "fallback"
+            "direction": p.get("direction"),
+            "from_instance": frm,
+            "from_name": name_by_instance.get(frm, frm),
+            "to_instance": to,
+            "to_name": name_by_instance.get(to, to),
+            "delivery_status": r.delivery_status,
+        })
+    return {"messages": out}
+
+
 @router.post("/mesh-start-all")
 async def mesh_start_all(db: AsyncSession = Depends(get_db)):
     """Batch «شروع گرم‌سازی همه» — enroll every active account not already enrolled."""

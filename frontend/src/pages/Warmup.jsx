@@ -41,6 +41,58 @@ const ROLE_LABELS = {
   none: "—",
 };
 
+// ── V23 — actual warm-up message texts (from warmup_event_log), AI vs fallback ──
+function RecentMessages() {
+  const [open, setOpen] = React.useState(false);
+  const { data, loading, reload } = useAsync(
+    () => (open ? WarmupApi.messages(10) : Promise.resolve({ messages: [] })), [open]);
+  const msgs = data?.messages || [];
+
+  return (
+    <div className="card space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-bold text-sm">💬 متن پیام‌های گرم‌سازی اخیر</span>
+        <div className="flex gap-2">
+          {open && <button className="btn-secondary text-xs" onClick={reload} disabled={loading}>بازخوانی</button>}
+          <button className="btn-secondary text-xs" onClick={() => setOpen((o) => !o)}>
+            {open ? "بستن" : "نمایش متن پیام‌ها"}
+          </button>
+        </div>
+      </div>
+      {open && (loading ? <Spinner /> : msgs.length === 0 ? (
+        <Empty label="هنوز پیام گرم‌سازی‌ای ارسال نشده." />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="text-slate-400"><tr>
+              <th className="text-right p-1">زمان</th>
+              <th className="text-right p-1">از → به</th>
+              <th className="text-right p-1">متن</th>
+              <th className="text-right p-1">منبع</th>
+            </tr></thead>
+            <tbody>
+              {msgs.map((m, i) => (
+                <tr key={i} className="border-t border-slate-800 align-top">
+                  <td className="p-1 whitespace-nowrap text-slate-400">{timeFa(m.at)}</td>
+                  <td className="p-1 whitespace-nowrap text-slate-400">{m.from_name} ← {m.to_name}</td>
+                  <td className="p-1 text-slate-200">{m.text || "—"}</td>
+                  <td className="p-1 whitespace-nowrap">
+                    <span className={`badge text-[10px] ${m.source === "ai"
+                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                      : "bg-slate-500/20 text-slate-300 border-slate-500/40"}`}>
+                      {m.source === "ai" ? "🤖 هوش مصنوعی" : "📝 مخزن"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── V17 — mesh warm-up dashboard (automatic, AI-driven, mesh-based) ──────────
 function MeshDashboard() {
   const dash = useAsync(() => WarmupApi.meshDashboard(), []);
@@ -136,6 +188,8 @@ function MeshDashboard() {
       <div className="card bg-sky-500/10 border-sky-500/30 text-sky-200 text-xs">
         هر شمارهٔ جدید به‌صورت خودکار و انسانی گرم می‌شود: ۲۴ساعت آماده‌سازی، سپس دریافت پیام از اکانت‌های گرم شما، سپس پاسخ‌دهی و افزایش تدریجی تا فارغ‌التحصیلی (حدود روز {fa(gday)}). فقط با اکانت‌های خودتان که مخاطب دوطرفه شده‌اند پیام رد و بدل می‌شود — هرگز با غریبه.
       </div>
+
+      <RecentMessages />
 
       {dash.loading ? <Spinner /> : numbers.length === 0 ? (
         <Empty label="هیچ شماره‌ای در گرم‌سازی مش نیست. در صفحهٔ حساب‌ها گرم‌سازی خودکار را روشن کنید یا «شروع گرم‌سازی همه» را بزنید." />

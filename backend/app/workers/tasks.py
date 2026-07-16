@@ -209,8 +209,11 @@ def task_process_mesh_warmup():
     async def _run():
         from app.database import AsyncSessionLocal
         from app.services.warmup_engine import run_warmup_tick
+        from app.services.warmup_ai import build_warmup_ai_fn
+        # V23 — connect the multi-provider AI key pool as the PRIMARY content source
+        # (curated Persian pool remains the automatic fallback inside generate_mesh_message).
         async with AsyncSessionLocal() as db:
-            await run_warmup_tick(db)
+            await run_warmup_tick(db, ai_fn=build_warmup_ai_fn())
     run_async(_run())
 
 
