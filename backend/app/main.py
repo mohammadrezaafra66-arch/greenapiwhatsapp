@@ -22,7 +22,7 @@ from app.api.v1 import (
     join_links, status_schedules, ai_keys,
     partner, messages, incidents, calls,
     capabilities as capabilities_router,
-    adlinks, warmup,
+    adlinks, warmup, warmup_helpers,
 )
 
 @asynccontextmanager
@@ -740,6 +740,42 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V17] {e}")
+        # ── V25 PART 1 — "human helpers" warm-up assist (≤25 known people) ──
+        ddl_v25 = [
+            """CREATE TABLE IF NOT EXISTS warmup_helper (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                name varchar(120) NOT NULL,
+                phone varchar(20) NOT NULL,
+                is_active boolean NOT NULL DEFAULT true,
+                created_at timestamp DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_warmup_helper_phone ON warmup_helper(phone)",
+            """CREATE TABLE IF NOT EXISTS warmup_helper_task (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                helper_id uuid NOT NULL,
+                cold_instance_id varchar(50) NOT NULL,
+                status varchar(20) NOT NULL DEFAULT 'pending',
+                asked_at timestamp,
+                reminded_at timestamp,
+                done_at timestamp,
+                attempts integer NOT NULL DEFAULT 0,
+                created_at timestamp DEFAULT now(),
+                UNIQUE (helper_id, cold_instance_id)
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_warmup_helper_task_helper ON warmup_helper_task(helper_id)",
+            "CREATE INDEX IF NOT EXISTS ix_warmup_helper_task_cold ON warmup_helper_task(cold_instance_id)",
+            """CREATE TABLE IF NOT EXISTS warmup_helper_config (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                is_enabled boolean NOT NULL DEFAULT false,
+                next_ask_at timestamp,
+                updated_at timestamp DEFAULT now()
+            )""",
+        ]
+        for stmt in ddl_v25:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V25] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:
@@ -796,6 +832,7 @@ for router in [
     join_links.router, status_schedules.router, ai_keys.router,
     partner.router, messages.router, incidents.router, calls.router,
     capabilities_router.router, adlinks.router, warmup.router,
+    warmup_helpers.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

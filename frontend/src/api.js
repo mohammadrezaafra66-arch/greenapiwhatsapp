@@ -472,6 +472,17 @@ export const WarmupApi = {
   deleteLink: (id) => http.delete(`/warmup/link-vault/${id}`).then((r) => r.data),
 };
 
+// ── Warm-up "human helpers" assist (V25 PART 1) ────────────
+export const WarmupHelpersApi = {
+  list: () => http.get("/warmup-helpers/").then((r) => r.data),
+  create: (body) => http.post("/warmup-helpers/", body).then((r) => r.data),
+  update: (id, body) => http.put(`/warmup-helpers/${id}`, body).then((r) => r.data),
+  remove: (id) => http.delete(`/warmup-helpers/${id}`).then((r) => r.data),
+  toggle: (enabled) => http.post("/warmup-helpers/toggle", { enabled }).then((r) => r.data),
+  tasks: (coldInstanceId) =>
+    http.get("/warmup-helpers/tasks", { params: coldInstanceId ? { cold_instance_id: coldInstanceId } : {} }).then((r) => r.data),
+};
+
 // ── Advertising links (V16 PART 3) ─────────────────────────
 export const AdLinksApi = {
   list: () => http.get("/advertising-links/").then((r) => r.data),

@@ -39,6 +39,9 @@ from app.models.warmup_mesh import (
     WarmupEnrollment, WarmupMeshEdge, WarmupEventLog,
     WarmupGroupTarget, WarmupGroupMembership, WarmupLinkVault,
 )
+from app.models.warmup_helpers import (
+    WarmupHelper, WarmupHelperTask, WarmupHelperConfig,
+)
 
 __all__ = [
     "Account",
@@ -94,4 +97,7 @@ __all__ = [
     "WarmupGroupTarget",
     "WarmupGroupMembership",
     "WarmupLinkVault",
+    "WarmupHelper",
+    "WarmupHelperTask",
+    "WarmupHelperConfig",
 ]

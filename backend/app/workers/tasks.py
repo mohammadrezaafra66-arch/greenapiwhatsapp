@@ -217,6 +217,20 @@ def task_process_mesh_warmup():
     run_async(_run())
 
 
+@celery_app.task(name="tasks.process_helper_warmup")
+def task_process_helper_warmup():
+    """V25 PART 1 — automatic "human helpers" warm-up assist tick (ADDITIVE; separate from the
+    mesh + group tracks). When the toggle is ON, the main warm account slowly asks ≤25 known
+    helpers to greet cold numbers. Sends AT MOST one ask/reminder per tick (waking-hours +
+    jittered rate gate). Webhook-only success detection; default OFF."""
+    async def _run():
+        from app.database import AsyncSessionLocal
+        from app.services.warmup_helper_engine import run_helper_tick
+        async with AsyncSessionLocal() as db:
+            await run_helper_tick(db)
+    run_async(_run())
+
+
 @celery_app.task(name="tasks.process_group_warmup")
 def task_process_group_warmup():
     """V19 PART 4 — automatic group-placement tick (ADDITIVE to the message mesh; the mesh

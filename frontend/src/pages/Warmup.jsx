@@ -1,5 +1,5 @@
 import React from "react";
-import { WarmupApi, Accounts } from "../api.js";
+import { WarmupApi, WarmupHelpersApi, Accounts } from "../api.js";
 import { useAsync, Spinner, Empty, Progress } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
 
@@ -390,6 +390,134 @@ function LinkVault() {
 }
 
 // V16 PART 5 — smart warm-up dashboard + phrase pool + batch controls.
+// ── V25 PART 1 — "human helpers" warm-up assist (≤25 known people) ──────────
+const HELPER_STATUS_FA = {
+  pending: { fa: "در انتظار", cls: "bg-slate-600/30 text-slate-300 border-slate-600" },
+  asked: { fa: "درخواست‌شده", cls: "bg-sky-500/20 text-sky-300 border-sky-500/40" },
+  reminded: { fa: "یادآوری‌شده", cls: "bg-amber-500/20 text-amber-300 border-amber-500/40" },
+  done: { fa: "انجام‌شد ✓", cls: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" },
+  skipped: { fa: "رد‌شده", cls: "bg-slate-700 text-slate-400 border-slate-600" },
+};
+
+function HumanHelpers() {
+  const { data, loading, reload } = useAsync(() => WarmupHelpersApi.list(), []);
+  const tasksAsync = useAsync(() => WarmupHelpersApi.tasks(), []);
+  const [form, setForm] = React.useState({ name: "", phone: "" });
+  const [showTasks, setShowTasks] = React.useState(false);
+
+  const enabled = data?.enabled;
+  const active = data?.active_count ?? 0;
+  const max = data?.max_active ?? 25;
+  const helpers = data?.helpers || [];
+
+  async function toggle() {
+    try {
+      const r = await WarmupHelpersApi.toggle(!enabled);
+      toast.success(r.enabled ? "کمک‌گیری از افراد واقعی روشن شد" : "خاموش شد");
+      reload();
+    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+  }
+  async function add() {
+    if (!form.name.trim() || !form.phone.trim()) return toast.error("نام و شماره لازم است");
+    try {
+      await WarmupHelpersApi.create({ name: form.name.trim(), phone: form.phone.trim() });
+      setForm({ name: "", phone: "" });
+      reload();
+    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+  }
+  async function del(h) {
+    if (!(await confirmDialog(`«${h.name}» حذف شود؟`))) return;
+    try { await WarmupHelpersApi.remove(h.id); reload(); }
+    catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+  }
+  async function toggleActive(h) {
+    try { await WarmupHelpersApi.update(h.id, { is_active: !h.is_active }); reload(); }
+    catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+  }
+
+  const atCap = active >= max;
+
+  return (
+    <div className="card space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h3 className="text-lg font-bold">👥 افراد کمک‌کننده (گرم‌سازی)</h3>
+          <p className="text-xs text-slate-400 mt-1">
+            لیست کوچکی از افراد واقعی و آشنا (حداکثر ۲۵ نفر) که شماره‌ی شما را دارند. اکانت اصلی گرم شما
+            به‌آرامی از آن‌ها می‌خواهد به شماره‌های جدید یک پیام کوتاه بدهند تا ترافیک انسانی واقعی ایجاد شود.
+          </p>
+        </div>
+        <button className={`text-sm px-3 py-1.5 rounded font-bold border ${enabled
+          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+          : "bg-slate-700 text-slate-300 border-slate-600"}`} onClick={toggle} disabled={loading}>
+          {enabled ? "روشن ✓" : "خاموش"}
+        </button>
+      </div>
+
+      <div className="flex items-center gap-2 text-sm">
+        <span className={`badge ${atCap ? "bg-amber-500/20 text-amber-300 border-amber-500/40" : "bg-slate-700 text-slate-300 border-slate-600"}`}>
+          {fa(active)} از {fa(max)}
+        </span>
+        {atCap && <span className="text-xs text-amber-300">به سقف ۲۵ نفر رسیدید — برای افزودن، یک نفر را حذف/غیرفعال کنید.</span>}
+      </div>
+
+      <div className="flex gap-2 flex-wrap">
+        <input className="input flex-1 min-w-[120px]" placeholder="نام" value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <input className="input flex-1 min-w-[140px]" placeholder="شماره (مثل ۹۸۹۱۲…)" value={form.phone}
+          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+          onKeyDown={(e) => e.key === "Enter" && add()} />
+        <button className="btn-primary" onClick={add} disabled={atCap}>افزودن</button>
+      </div>
+
+      {loading ? <Spinner /> : helpers.length === 0 ? (
+        <Empty label="هنوز فرد کمک‌کننده‌ای اضافه نشده." />
+      ) : (
+        <div className="divide-y divide-slate-800">
+          {helpers.map((h) => (
+            <div key={h.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+              <div>
+                <span className={h.is_active ? "font-bold" : "text-slate-500 line-through"}>{h.name}</span>
+                <span className="text-xs text-slate-500 font-mono mr-2">{fa(h.phone)}</span>
+              </div>
+              <div className="flex gap-1">
+                <button className={`badge ${h.is_active ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-slate-600/30 text-slate-400 border-slate-600"}`}
+                  onClick={() => toggleActive(h)}>{h.is_active ? "فعال" : "غیرفعال"}</button>
+                <button className="btn-danger text-xs" onClick={() => del(h)}>حذف</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div>
+        <button className="btn-secondary text-xs" onClick={() => { setShowTasks((s) => !s); if (!showTasks) tasksAsync.reload(); }}>
+          {showTasks ? "بستن وضعیت درخواست‌ها" : "نمایش وضعیت درخواست‌ها (چه کسی سلام کرد)"}
+        </button>
+        {showTasks && (
+          <div className="mt-2">
+            {tasksAsync.loading ? <Spinner /> : (tasksAsync.data?.tasks || []).length === 0 ? (
+              <Empty label="هنوز درخواستی ثبت نشده." />
+            ) : (
+              <div className="card bg-slate-900 divide-y divide-slate-800 max-h-72 overflow-y-auto">
+                {(tasksAsync.data.tasks || []).map((t) => {
+                  const s = HELPER_STATUS_FA[t.status] || HELPER_STATUS_FA.pending;
+                  return (
+                    <div key={t.id} className="flex items-center justify-between gap-2 py-2 text-xs">
+                      <span>{t.helper_name || "—"} → <span className="text-slate-400">{t.cold_name || t.cold_instance_id}</span></span>
+                      <span className={`badge ${s.cls}`}>{s.fa}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Warmup() {
   const dash = useAsync(() => WarmupApi.dashboard(), []);
   const ph = useAsync(() => WarmupApi.phrases(), []);
@@ -417,6 +545,9 @@ export default function Warmup() {
     <div className="space-y-6">
       {/* V17 — automatic AI-driven mesh warm-up */}
       <MeshDashboard />
+
+      {/* V25 PART 1 — automatic "human helpers" warm-up assist (≤25 known people) */}
+      <HumanHelpers />
 
       {/* V19 — group-based warm-up (additive to the mesh) */}
       <GroupTargets />

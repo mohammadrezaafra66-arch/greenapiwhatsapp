@@ -68,4 +68,8 @@ celery_app.conf.beat_schedule = {
     # V19 PART 4 — automatic group placement (ADDITIVE to the mesh). Frequent tick; the fixed
     # schedule itself caps this to ≤1 group action per cold number per day.
     "process-group-warmup": {"task": "tasks.process_group_warmup", "schedule": 600.0},  # every 10 min
+    # V25 PART 1 — automatic human-helper warm-up assist. Frequent tick; each tick sends AT
+    # MOST one helper-ask/reminder, gated by waking hours + the jittered rate limiter, so the
+    # main account is never blasted. Default OFF (no-op until the toggle is enabled).
+    "process-helper-warmup": {"task": "tasks.process_helper_warmup", "schedule": 180.0},
 }

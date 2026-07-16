@@ -251,6 +251,16 @@ async def handle_incoming(instance_id: str, payload: dict):
             except Exception as e:
                 logger.warning("[ProductMention] detection error: %s", e)
 
+        # V25 PART 1 — human-helper warm-up assist: if this cold number just received an
+        # incoming message from a known helper's phone, mark the helper's task done and
+        # auto-thank them. PV only; guarded & best-effort so it can never disrupt the webhook.
+        if not msg.is_group and sender_phone:
+            try:
+                from app.services.warmup_helper_engine import handle_helper_incoming
+                await handle_helper_incoming(db, instance_id, sender_phone, datetime.utcnow())
+            except Exception as e:
+                logger.warning("helper warm-up detection failed (non-fatal): %s", e)
+
         await db.commit()
 
 async def handle_state_change(instance_id: str, payload: dict):
