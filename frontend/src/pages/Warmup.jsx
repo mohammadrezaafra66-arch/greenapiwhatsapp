@@ -28,6 +28,9 @@ const BANNER_CLASS = {
   blocked: "bg-rose-500/10 border-rose-500/30 text-rose-200",
   insufficient_peers: "bg-amber-500/10 border-amber-500/30 text-amber-200",
   no_peer: "bg-amber-500/10 border-amber-500/30 text-amber-200",
+  // V21 — capacity full (all warm peers at 1:2 cap) + not-connected (pending) notices.
+  capacity_full: "bg-amber-500/10 border-amber-500/30 text-amber-200",
+  not_connected: "bg-orange-500/10 border-orange-500/30 text-orange-200",
   breaker: "bg-rose-600/15 border-rose-600/40 text-rose-200",
 };
 // V20 PART 3 — Persian labels for account roles.
@@ -112,6 +115,24 @@ function MeshDashboard() {
         </div>
       )}
 
+      {/* V21 PART 4 — per-warm-peer capacity roster (n از cap ظرفیت) */}
+      {(dash.data?.peer_load || []).length > 0 && (
+        <div className="card text-xs space-y-1">
+          <div className="text-slate-400">
+            ظرفیت اکانت‌های گرم (هر اکانت گرم حداکثر {fa(dash.data?.max_cold_per_warm_peer || 2)} شمارهٔ سرد):
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {dash.data.peer_load.map((p) => (
+              <span key={p.instance_id}
+                className={`badge ${p.full ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                  : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"}`}>
+                {p.full ? "🟠" : "🟢"} {byInstance[p.instance_id]?.name || p.name}: {fa(p.cold_count)} از {fa(p.cap)} ظرفیت
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="card bg-sky-500/10 border-sky-500/30 text-sky-200 text-xs">
         هر شمارهٔ جدید به‌صورت خودکار و انسانی گرم می‌شود: ۲۴ساعت آماده‌سازی، سپس دریافت پیام از اکانت‌های گرم شما، سپس پاسخ‌دهی و افزایش تدریجی تا فارغ‌التحصیلی (حدود روز {fa(gday)}). فقط با اکانت‌های خودتان که مخاطب دوطرفه شده‌اند پیام رد و بدل می‌شود — هرگز با غریبه.
       </div>
@@ -152,6 +173,12 @@ function MeshDashboard() {
 
               <p className="text-xs text-slate-400">
                 همتاهای مش: {fa(n.messageable_peer_count)} فعال از {fa(n.peer_count)}
+                {/* V21 PART 4 — which warm peer warms this number, or waiting-for-capacity */}
+                {n.assigned_peer
+                  ? <span className="text-sky-300"> · فرستنده: {byInstance[n.assigned_peer]?.name || n.assigned_peer}</span>
+                  : n.capacity_full
+                    ? <span className="text-amber-300"> · در انتظار ظرفیت اکانت گرم</span>
+                    : null}
               </p>
 
               {/* V19 — group-based warm-up placements (additive track) */}
