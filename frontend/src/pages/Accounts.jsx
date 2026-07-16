@@ -3,6 +3,7 @@ import { Accounts as Api, ProxyApi, WarmupApi } from "../api.js";
 import { Badge, Spinner, Empty, Modal, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
 import HelpTip, { TIPS } from "../components/HelpTip.jsx";
+import QrAntibanRules from "../components/QrAntibanRules.jsx";
 
 const faNum = (n) => (n == null ? "—" : String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]));
 
@@ -272,23 +273,27 @@ export default function Accounts() {
 
       {showAdd && <AddAccountModal onClose={() => setShowAdd(false)} onDone={reload} />}
       {qr !== null && (
-        <Modal title="کد QR" onClose={() => setQr(null)}>
-          {qr.qr ? (
-            <div className="space-y-2">
-              <img
-                alt="qr"
-                className="mx-auto bg-white p-2 rounded"
-                src={qr.qr.startsWith("data:") ? qr.qr : `data:image/png;base64,${qr.qr}`}
-              />
-              <p className="text-center text-xs text-slate-400">با واتس‌اپ گوشی این کد را اسکن کنید.</p>
-            </div>
-          ) : (
-            <p className="text-slate-400 text-sm">
-              {qr.type === "alreadyLogged"
-                ? "این حساب هم‌اکنون متصل است؛ کد QR لازم نیست."
-                : qr.message || "QR در دسترس نیست (احتمالاً حساب قبلاً متصل شده)."}
-            </p>
-          )}
+        <Modal title="کد QR" onClose={() => setQr(null)} wide>
+          <div className="space-y-3">
+            {/* V22 — anti-ban rules shown BEFORE scanning, above the QR image */}
+            <QrAntibanRules />
+            {qr.qr ? (
+              <div className="space-y-2">
+                <img
+                  alt="qr"
+                  className="mx-auto bg-white p-2 rounded"
+                  src={qr.qr.startsWith("data:") ? qr.qr : `data:image/png;base64,${qr.qr}`}
+                />
+                <p className="text-center text-xs text-slate-400">با واتس‌اپ گوشی این کد را اسکن کنید.</p>
+              </div>
+            ) : (
+              <p className="text-slate-400 text-sm">
+                {qr.type === "alreadyLogged"
+                  ? "این حساب هم‌اکنون متصل است؛ کد QR لازم نیست."
+                  : qr.message || "QR در دسترس نیست (احتمالاً حساب قبلاً متصل شده)."}
+              </p>
+            )}
+          </div>
         </Modal>
       )}
     </div>
