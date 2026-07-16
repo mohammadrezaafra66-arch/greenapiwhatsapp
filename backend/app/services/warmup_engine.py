@@ -221,9 +221,15 @@ async def run_warmup_tick(db, now: datetime | None = None, *, client_factory=Non
         )).scalar_one_or_none()
         if not new_acc or new_acc.status != AccountStatus.active:
             continue
+        # V21 PART 2 — verify the LIVE Green API connection every tick. A pending/unconnected
+        # number (e.g. enrolled while still pending) is skipped: no edges built, no send, and
+        # it consumes no warm-peer ratio slot until it authorizes. get_state is a GET (not polling).
+        from app.services.warmup_mesh_service import ensure_mesh_edges, instance_is_authorized
+        if not await instance_is_authorized(client_factory(new_acc.instance_id, new_acc.api_token)):
+            waited += 1
+            continue
         # V20 PART 2 — self-heal missing mesh edges to newly-available warm peers (fixes the
         # "enrolled before any peer existed → 0 edges" case). No-op when peers/edges suffice.
-        from app.services.warmup_mesh_service import ensure_mesh_edges
         await ensure_mesh_edges(db, new_acc, client_factory=client_factory, now=now, rng=r)
         edges = (await db.execute(
             select(WarmupMeshEdge).where(WarmupMeshEdge.new_instance_id == enr.instance_id)

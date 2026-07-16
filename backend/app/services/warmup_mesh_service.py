@@ -35,6 +35,24 @@ INSUFFICIENT_PEERS_NOTICE = (
 WARM_PEER_NOT_WARMED_NOTICE = (
     "این اکانت به‌عنوان «اکانت گرم مرجع / فرستنده» علامت خورده است و خودش گرم‌سازی نمی‌شود."
 )
+# V21 PART 2 — shown when a number isn't authorized/connected on Green API yet. An unconnected
+# number is NEVER enrolled and NEVER given a mesh slot until it authorizes (scan QR first).
+NOT_CONNECTED_NOTICE = (
+    "این شماره هنوز به واتساپ متصل نشده — ابتدا با اسکن QR وصل کنید تا گرم‌سازی شروع شود."
+)
+
+
+async def instance_is_authorized(client) -> bool:
+    """True ONLY when Green API reports this instance as `authorized` (connected). Fail-safe:
+    any non-authorized state (pending/notAuthorized/…) or any error → False, so an unconnected
+    number can never enter or run in the mesh. get_state is a plain GET — NOT polling."""
+    try:
+        state = await client.get_state()
+    except Exception as e:
+        logger.warning("connection state check failed for %s: %s",
+                       getattr(client, "instance_id", "?"), e)
+        return False
+    return str(state or "").strip() == "authorized"
 # V21 PART 1 — warm:cold ratio cap. One warm peer warms AT MOST this many cold numbers at a
 # time (conservative anti-ban: a peer serving many cold numbers is itself a suspicious pattern).
 MAX_COLD_PER_WARM_PEER = 2
@@ -324,6 +342,15 @@ async def enroll_and_preflight(db, account: Account, *, client_factory=None,
                 "notice": WARM_PEER_NOT_WARMED_NOTICE, "peers": [], "settings_applied": False,
                 "queue_cleared": False, "cooldown_hours": None}
 
+    # V21 PART 2 — never enroll an unconnected number. Verify the LIVE Green API state is
+    # `authorized` first; a pending/notAuthorized instance creates NO enrollment and NO edges
+    # and gets the connect-first notice (scan QR). Once it authorizes, toggling ON proceeds.
+    client = client_factory(account.instance_id, account.api_token)
+    if not await instance_is_authorized(client):
+        return {"instance_id": account.instance_id, "state": None, "not_connected": True,
+                "notice": NOT_CONNECTED_NOTICE, "peers": [], "settings_applied": False,
+                "queue_cleared": False, "cooldown_hours": None}
+
     enrollment = (await db.execute(
         select(WarmupEnrollment).where(WarmupEnrollment.instance_id == account.instance_id)
     )).scalar_one_or_none()
@@ -350,7 +377,7 @@ async def enroll_and_preflight(db, account: Account, *, client_factory=None,
     result = {"instance_id": account.instance_id, "settings_applied": False,
               "queue_cleared": False, "peers": [], "notice": None}
 
-    client = client_factory(account.instance_id, account.api_token)
+    # `client` was created above for the connection check — reuse it.
 
     # 1) Apply the exact warming settings (webhook-only; webhook URL left untouched).
     try:

@@ -14,6 +14,7 @@ from app.services.warmup_scheduler import (
 )
 from app.services.warmup_mesh_service import (
     edge_is_messageable, INSUFFICIENT_PEERS_NOTICE, CAPACITY_FULL_NOTICE, MAX_COLD_PER_WARM_PEER,
+    NOT_CONNECTED_NOTICE,
 )
 
 # Numbers are considered fully graduated (green light) around day 25.
@@ -100,10 +101,12 @@ def _build_group_warmup(enrollment, memberships, now, cfg) -> dict:
 def build_number_card(enrollment, edges, now: datetime | None = None,
                       cfg=DEFAULT_WARMUP_CONFIG, group_memberships=None,
                       has_eligible_peer: bool = True, capacity_full: bool = False,
-                      assigned_peer: str | None = None) -> dict:
+                      assigned_peer: str | None = None, not_connected: bool = False) -> dict:
     """One dashboard card for an enrolled number (mesh info + V19 group placements).
     V21 — `capacity_full` marks a cold number waiting because every warm peer is at its 1:2
-    cap; `assigned_peer` is the warm peer instance this cold number is warmed by (or None)."""
+    cap; `assigned_peer` is the warm peer instance this cold number is warmed by (or None);
+    `not_connected` marks a number that isn't authorized on Green API yet (enrolled while
+    pending) — the mesh skips it until it connects."""
     now = now or datetime.utcnow()
     state = getattr(enrollment, "state", WarmupState.ENROLLED.value)
     day = day_index(enrollment, now)
@@ -127,7 +130,10 @@ def build_number_card(enrollment, edges, now: datetime | None = None,
     received = int(getattr(enrollment, "received_today", 0) or 0)
 
     banner = None
-    if state == WarmupState.PAUSED.value:
+    if not_connected:
+        # V21 PART 2 — connection is the prerequisite; show it above every other banner.
+        banner = {"type": "not_connected", "message": NOT_CONNECTED_NOTICE}
+    elif state == WarmupState.PAUSED.value:
         banner = {"type": "paused", "message": "گرم‌سازی این شماره متوقف است."}
     elif state == WarmupState.YELLOWCARD.value:
         banner = {"type": "yellowcard", "message": "زرد‌کارت دریافت شده؛ شماره در حال استراحت است."}
@@ -173,6 +179,7 @@ def build_number_card(enrollment, edges, now: datetime | None = None,
         # whether it is currently waiting because every warm peer is at the 1:2 cap.
         "assigned_peer": assigned_peer or (peers[0]["peer_instance_id"] if peers else None),
         "capacity_full": bool(capacity_full and len(peers) == 0),
+        "not_connected": bool(not_connected),
         "banner": banner,
         # V19 — group-based warm-up placements (additive track under the same enrollment)
         "group_warmup": _build_group_warmup(enrollment, group_memberships, now, cfg),
@@ -184,7 +191,8 @@ def build_dashboard(enrollments, edges_by_instance: dict, breaker_tripped: bool 
                     memberships_by_instance: dict | None = None,
                     has_eligible_peer: bool = True, roles: list | None = None,
                     capacity_full_instances: set | None = None,
-                    peer_load: list | None = None) -> dict:
+                    peer_load: list | None = None,
+                    not_connected_instances: set | None = None) -> dict:
     """The full dashboard payload: one card per enrolled number (mesh + group placements),
     an account ROLE overview (being-warmed vs peer/sender vs none), a no-peer notice when no
     warm sender is marked, plus a global banner when the chain-ban breaker is tripped.
@@ -193,12 +201,14 @@ def build_dashboard(enrollments, edges_by_instance: dict, breaker_tripped: bool 
     now = now or datetime.utcnow()
     memberships_by_instance = memberships_by_instance or {}
     capacity_full_instances = capacity_full_instances or set()
+    not_connected_instances = not_connected_instances or set()
     cards = [
         build_number_card(
             enr, edges_by_instance.get(getattr(enr, "instance_id", None), []), now, cfg,
             group_memberships=memberships_by_instance.get(getattr(enr, "instance_id", None), []),
             has_eligible_peer=has_eligible_peer,
             capacity_full=getattr(enr, "instance_id", None) in capacity_full_instances,
+            not_connected=getattr(enr, "instance_id", None) in not_connected_instances,
         )
         for enr in enrollments
     ]

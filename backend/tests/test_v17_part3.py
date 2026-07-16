@@ -68,6 +68,7 @@ def _mock_factory(recorder):
     """Return a client factory whose clients record calls into `recorder` keyed by instance."""
     def factory(instance_id, api_token):
         c = MagicMock()
+        c.get_state = AsyncMock(return_value="authorized")   # V21 PART 2 — connection gate
         c.set_warming_instance_settings = AsyncMock(return_value=True)
         c.show_messages_queue = AsyncMock(return_value=[])
         c.clear_messages_queue = AsyncMock(return_value=True)

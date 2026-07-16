@@ -99,11 +99,16 @@ async def mesh_dashboard(db: AsyncSession = Depends(get_db)):
     # V21 — ratio/capacity snapshot: per-peer load (n/2) + cold numbers waiting on capacity.
     from app.services.warmup_mesh_service import mesh_capacity_snapshot
     snap = await mesh_capacity_snapshot(db)
+    # V21 PART 2 — an enrolled number whose account isn't active/connected is skipped by the
+    # mesh; flag it so its card shows the connect-first notice (db status is the cheap proxy).
+    active_ids = {a.instance_id for a in accounts}
+    not_connected = {e.instance_id for e in enrollments if e.instance_id not in active_ids}
     return build_dashboard(enrollments, edges_by_instance, breaker_tripped=tripped,
                            memberships_by_instance=memberships_by_instance,
                            has_eligible_peer=has_eligible_peer, roles=roles,
                            capacity_full_instances=snap["capacity_full_instances"],
-                           peer_load=snap["peer_load"])
+                           peer_load=snap["peer_load"],
+                           not_connected_instances=not_connected)
 
 
 async def _account_or_404(account_id: str, db) -> Account:

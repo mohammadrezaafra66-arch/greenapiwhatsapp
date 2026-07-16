@@ -126,6 +126,24 @@ def test_card_capacity_full_ignored_when_peer_present():
     assert (card["banner"] or {}).get("type") != "capacity_full"
 
 
+def test_card_not_connected_banner_top_priority():
+    # even a PAUSED number shows the connect-first notice when not connected
+    card = build_number_card(_enr(state="PAUSED"), [], NOW, not_connected=True)
+    assert card["banner"]["type"] == "not_connected"
+    assert card["not_connected"] is True
+
+
+def test_dashboard_marks_not_connected_instance():
+    e1 = _enr(instance_id="A", state="COOLDOWN")
+    e2 = _enr(instance_id="B", state="RAMPING")
+    dash = build_dashboard([e1, e2], {"A": [], "B": [_edge("HUB")]}, now=NOW,
+                           not_connected_instances={"A"})
+    a = next(c for c in dash["numbers"] if c["instance_id"] == "A")
+    b = next(c for c in dash["numbers"] if c["instance_id"] == "B")
+    assert a["banner"]["type"] == "not_connected" and a["not_connected"] is True
+    assert b["not_connected"] is False
+
+
 def test_dashboard_carries_peer_load_and_cap():
     e1 = _enr(instance_id="A", state="RAMPING")
     dash = build_dashboard([e1], {"A": [_edge("HUB")]}, now=NOW,
