@@ -312,10 +312,17 @@ async def is_breaker_tripped(db, now: datetime | None = None,
 
 
 async def reset_breaker(db, now: datetime | None = None) -> dict:
-    """Operator action: clear the mesh breaker (numbers stay PAUSED until resumed)."""
+    """Operator action: clear the mesh breaker (numbers stay PAUSED until resumed).
+
+    Self-commits the active:false row so the reset is DURABLE regardless of the caller —
+    get_db() does not commit on close, so a caller that forgets (or an error after the add)
+    would otherwise silently roll the reset back and leave the breaker stuck tripped (same
+    class of bug as the earlier disable-commit issue). Committing here guarantees every
+    reset persists in every branch."""
     db.add(WarmupEventLog(enrollment_id=None, event_type="kill",
                           payload_json=json.dumps({"scope": "mesh_breaker", "active": False,
                                                    "reason": "operator_reset"})))
+    await db.commit()
     return {"reset": True}
 
 

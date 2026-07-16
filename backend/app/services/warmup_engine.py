@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import random
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import select
 
 from app.models.account import Account, AccountStatus
@@ -38,6 +38,20 @@ logger = logging.getLogger("afrakala.warmup.engine")
 
 def _default_client_factory(instance_id: str, api_token: str) -> GreenAPIClient:
     return GreenAPIClient(instance_id, api_token)
+
+
+def _persist_next_action(dt: datetime | None) -> datetime | None:
+    """Normalize a scheduled next-action time to NAIVE UTC before it is stored on the
+    enrollment. The scheduler (schedule_next_action / next_active_start) returns Tehran-AWARE
+    datetimes for correct active-hours math, but `warmup_enrollment.next_action_at` is a naive
+    column and the rest of the engine compares it against naive `datetime.utcnow()`. Writing an
+    aware value straight in raises asyncpg's "can't subtract offset-naive and offset-aware
+    datetimes" on the very next tick. Convert (never merely drop tzinfo — that would be 3.5h off)."""
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 def messageable_edges(edges) -> list:
@@ -143,7 +157,7 @@ async def execute_action(db, action: dict, enrollment, new_account: Account,
     enrollment.reply_ratio = compute_reply_ratio(
         getattr(enrollment, "sent_today", 0), getattr(enrollment, "received_today", 0))
     enrollment.last_activity_at = now
-    enrollment.next_action_at = action.get("next_action_at")
+    enrollment.next_action_at = _persist_next_action(action.get("next_action_at"))
     edge.msg_count = int(getattr(edge, "msg_count", 0)) + 1
     edge.last_msg_at = now
 
@@ -237,7 +251,7 @@ async def run_warmup_tick(db, now: datetime | None = None, *, client_factory=Non
 
         plan = plan_number_action(enr, edges, now, DEFAULT_WARMUP_CONFIG, r)
         if plan["action"] == "defer":
-            enr.next_action_at = plan["next_action_at"]
+            enr.next_action_at = _persist_next_action(plan["next_action_at"])
             deferred += 1
             continue
         if plan["action"] != "send":
