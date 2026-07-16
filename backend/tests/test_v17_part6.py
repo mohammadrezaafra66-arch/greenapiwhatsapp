@@ -104,6 +104,37 @@ def test_card_low_ratio_flagged():
     assert card["reply_ratio_ok"] is False
 
 
+# ── V21 PART 1 — capacity-full banner + assigned peer ────────────────────────
+def test_card_capacity_full_banner():
+    # no peer edge at all + every warm peer at cap → capacity-full notice (even in COOLDOWN)
+    card = build_number_card(_enr(state="COOLDOWN"), [], NOW, capacity_full=True)
+    assert card["banner"]["type"] == "capacity_full"
+    assert card["capacity_full"] is True
+    assert card["assigned_peer"] is None
+
+
+def test_card_assigned_peer_reported():
+    card = build_number_card(_enr(state="RAMPING"), [_edge("P7")], NOW)
+    assert card["assigned_peer"] == "P7"
+    assert card["capacity_full"] is False
+
+
+def test_card_capacity_full_ignored_when_peer_present():
+    # if the number already has an edge, capacity_full must NOT mask it
+    card = build_number_card(_enr(state="RAMPING"), [_edge("P1")], NOW, capacity_full=True)
+    assert card["capacity_full"] is False
+    assert (card["banner"] or {}).get("type") != "capacity_full"
+
+
+def test_dashboard_carries_peer_load_and_cap():
+    e1 = _enr(instance_id="A", state="RAMPING")
+    dash = build_dashboard([e1], {"A": [_edge("HUB")]}, now=NOW,
+                           peer_load=[{"instance_id": "HUB", "name": "hub", "cold_count": 1,
+                                       "cap": 2, "full": False}])
+    assert dash["max_cold_per_warm_peer"] == 2
+    assert dash["peer_load"][0]["cold_count"] == 1 and dash["peer_load"][0]["cap"] == 2
+
+
 # ── build_dashboard ──────────────────────────────────────────────────────────
 def test_dashboard_aggregates_and_breaker_banner():
     e1 = _enr(instance_id="A", state="RAMPING")

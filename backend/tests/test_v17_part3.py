@@ -130,18 +130,19 @@ def test_edge_messageable_requires_both_flags_and_active():
     assert edge_is_messageable(e) is True        # both sides saved → messageable
 
 
-# ── full enroll + pre-flight with 3 warm peers ───────────────────────────────
+# ── full enroll + pre-flight — V21 ratio cap: ONE peer assigned even if 3 available ──
 @pytest.mark.asyncio
 async def test_enroll_preflight_full_handshake():
     new = _account("NEW1", "989120000001")
     peers = [_account(f"PEER{i}", f"98912000010{i}", is_warm_peer=True) for i in range(3)]
     fake = FakeSession(results=[
         FakeResult(scalars=[]),          # 1) no existing enrollment
-        FakeResult(scalars=peers),       # 2) active accounts (eligible pool)
-        FakeResult(scalars=[]),          # 3) graduated instance ids (none)
-        FakeResult(scalars=[]),          # 4) edge lookup peer 0 (new)
-        FakeResult(scalars=[]),          # 5) edge lookup peer 1 (new)
-        FakeResult(scalars=[]),          # 6) edge lookup peer 2 (new)
+        FakeResult(scalars=[]),          # 2) existing edges for NEW1 (none)
+        FakeResult(scalars=peers),       # 3) active accounts (eligible pool)
+        FakeResult(scalars=[]),          # 4) graduated instance ids (none)
+        FakeResult(scalars=[]),          # 5) peer_cold_load: all edges (none)
+        FakeResult(rows=[]),             # 6) peer_cold_load: enrollment states (none)
+        FakeResult(scalars=[]),          # 7) edge lookup (new, chosen peer)
     ])
     rec = {}
     res = await svc.enroll_and_preflight(
@@ -158,16 +159,20 @@ async def test_enroll_preflight_full_handshake():
     assert res["queue_cleared"] is True
     assert res["notice"] is None
 
-    # 3 edges built, every one messageable (mutual contact saved on BOTH sides)
+    # V21: exactly ONE edge built (ratio cap), messageable (mutual contact saved on both sides)
     edges = [x for x in fake.added if isinstance(x, WarmupMeshEdge)]
-    assert len(edges) == 3
-    assert all(edge_is_messageable(e) for e in edges)
-    assert len(res["peers"]) == 3 and all(p["messageable"] for p in res["peers"])
+    assert len(edges) == 1
+    assert edge_is_messageable(edges[0])
+    assert len(res["peers"]) == 1 and res["peers"][0]["messageable"]
 
-    # AddContact called on BOTH sides for each pair: new saved 3 peers; each peer saved new
-    assert len(rec["NEW1"]) == 3
-    for i in range(3):
-        assert len(rec[f"PEER{i}"]) == 1
+    # AddContact on BOTH sides of the single pair: NEW1 saved its one peer; that peer saved NEW1
+    chosen = res["peers"][0]["peer_instance_id"]
+    assert len(rec["NEW1"]) == 1
+    assert len(rec[chosen]) == 1
+    # the two peers NOT chosen were never contacted
+    for pid in [f"PEER{i}" for i in range(3)]:
+        if pid != chosen:
+            assert rec.get(pid, []) == []
     assert fake.commits == 1
 
 

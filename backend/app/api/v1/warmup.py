@@ -96,9 +96,14 @@ async def mesh_dashboard(db: AsyncSession = Depends(get_db)):
     has_eligible_peer = warm_peers > 0
 
     tripped = await is_breaker_tripped(db)
+    # V21 — ratio/capacity snapshot: per-peer load (n/2) + cold numbers waiting on capacity.
+    from app.services.warmup_mesh_service import mesh_capacity_snapshot
+    snap = await mesh_capacity_snapshot(db)
     return build_dashboard(enrollments, edges_by_instance, breaker_tripped=tripped,
                            memberships_by_instance=memberships_by_instance,
-                           has_eligible_peer=has_eligible_peer, roles=roles)
+                           has_eligible_peer=has_eligible_peer, roles=roles,
+                           capacity_full_instances=snap["capacity_full_instances"],
+                           peer_load=snap["peer_load"])
 
 
 async def _account_or_404(account_id: str, db) -> Account:

@@ -35,6 +35,20 @@ INSUFFICIENT_PEERS_NOTICE = (
 WARM_PEER_NOT_WARMED_NOTICE = (
     "این اکانت به‌عنوان «اکانت گرم مرجع / فرستنده» علامت خورده است و خودش گرم‌سازی نمی‌شود."
 )
+# V21 PART 1 — warm:cold ratio cap. One warm peer warms AT MOST this many cold numbers at a
+# time (conservative anti-ban: a peer serving many cold numbers is itself a suspicious pattern).
+MAX_COLD_PER_WARM_PEER = 2
+# V21 PART 1 — shown on a cold number's card when every eligible warm peer is already at its
+# cap, so this number is waiting for capacity (add another warm sender to free a slot).
+CAPACITY_FULL_NOTICE = (
+    "ظرفیت اکانت‌های گرم پر است — برای گرم‌کردن این شماره، یک اکانت گرم دیگر به‌عنوان فرستنده "
+    "اضافه کنید (هر اکانت گرم حداکثر ۲ شماره)."
+)
+# V21 PART 1 — cold-number enrollment states that FREE a warm peer's capacity slot (no longer
+# actively being warmed). Everything else (COOLDOWN/RECEIVING/…/YELLOWCARD) still occupies a slot.
+_SLOT_FREEING_STATES = {
+    WarmupState.GRADUATED.value, WarmupState.PAUSED.value, WarmupState.BLOCKED_RESET.value,
+}
 
 
 def _default_client_factory(instance_id: str, api_token: str) -> GreenAPIClient:
@@ -64,7 +78,9 @@ async def eligible_peer_accounts(db, exclude_instance_id: str) -> list[Account]:
 
 def select_peers(peers: list, cfg=DEFAULT_WARMUP_CONFIG, rng: random.Random | None = None) -> list:
     """Pick between peers_per_new_number_min and _max peers (capped by availability).
-    Randomized so different new numbers get different, overlapping peer sets."""
+    Randomized so different new numbers get different, overlapping peer sets.
+    NOTE: superseded by the V21 ratio-capped assignment (select_least_loaded_peer) for the
+    live mesh; kept as a pure utility."""
     r = rng or random
     if not peers:
         return []
@@ -74,6 +90,94 @@ def select_peers(peers: list, cfg=DEFAULT_WARMUP_CONFIG, rng: random.Random | No
     pool = list(peers)
     r.shuffle(pool)
     return pool[:k]
+
+
+# ── V21 PART 1 — warm:cold ratio cap (1 warm peer : MAX_COLD_PER_WARM_PEER cold) ──────
+def compute_peer_load(edges, enr_map: dict) -> dict[str, int]:
+    """How many ACTIVE cold numbers are currently assigned to each warm peer.
+
+    `edges` are WarmupMeshEdge-like objects (new_instance_id → peer_instance_id). `enr_map` is
+    {instance_id: (state, is_enabled)}. A cold number occupies its peer's slot while it is
+    enrolled+enabled and NOT in a slot-freeing state (GRADUATED/PAUSED/BLOCKED_RESET). Pure."""
+    load: dict[str, int] = {}
+    for e in edges or []:
+        st = enr_map.get(getattr(e, "new_instance_id", None))
+        if not st:
+            continue
+        state, enabled = st
+        if not enabled or state in _SLOT_FREEING_STATES:
+            continue
+        load[e.peer_instance_id] = load.get(e.peer_instance_id, 0) + 1
+    return load
+
+
+def select_least_loaded_peer(eligible: list, load: dict, cap: int = MAX_COLD_PER_WARM_PEER,
+                             rng: random.Random | None = None):
+    """Pick the eligible warm peer with the FEWEST assigned cold numbers that is still below
+    `cap` (balance load evenly, never overload one peer). Returns None when every eligible peer
+    is already at the cap → the cold number waits for capacity. Pure and deterministic given rng."""
+    r = rng or random
+    candidates = [p for p in eligible if load.get(p.instance_id, 0) < cap]
+    if not candidates:
+        return None
+    lo = min(load.get(p.instance_id, 0) for p in candidates)
+    least = [p for p in candidates if load.get(p.instance_id, 0) == lo]
+    return r.choice(least) if len(least) > 1 else least[0]
+
+
+async def peer_cold_load(db, cfg=None) -> dict[str, int]:
+    """DB-backed compute_peer_load: {warm_peer_instance_id: active-cold-count} across the mesh."""
+    from app.services.warmup_exclusion import enrollment_states_by_instance
+    edges = (await db.execute(select(WarmupMeshEdge))).scalars().all()
+    enr_map = await enrollment_states_by_instance(db)
+    return compute_peer_load(edges, enr_map)
+
+
+async def mesh_capacity_snapshot(db, cfg=None) -> dict:
+    """V21 — the dashboard's ratio/capacity view. Returns:
+      • peer_load: per-warm-peer roster [{instance_id, name, cold_count, cap, full}]
+      • capacity_full_instances: cold numbers actively being warmed that have NO eligible peer
+        edge AND every eligible warm peer is at the 1:MAX cap (so they are WAITING for capacity)
+      • assignments: {cold_instance_id: warm_peer_instance_id} for linked cold numbers.
+    Pure DB reads; used by the mesh dashboard endpoint and tested directly."""
+    cfg = cfg or DEFAULT_WARMUP_CONFIG
+    from app.services.warmup_exclusion import enrollment_states_by_instance, GRADUATED
+    accounts = (await db.execute(
+        select(Account).where(Account.status == AccountStatus.active)
+    )).scalars().all()
+    edges = (await db.execute(select(WarmupMeshEdge))).scalars().all()
+    enr_map = await enrollment_states_by_instance(db)
+
+    load = compute_peer_load(edges, enr_map)
+    graduated_ids = {iid for iid, (s, _e) in enr_map.items() if s == GRADUATED}
+    eligible_ids = {a.instance_id for a in accounts if getattr(a, "is_warm_peer", False)} | graduated_ids
+    id_to_name = {a.instance_id: a.name for a in accounts}
+
+    peer_load = [{
+        "instance_id": pid,
+        "name": id_to_name.get(pid, pid),
+        "cold_count": load.get(pid, 0),
+        "cap": MAX_COLD_PER_WARM_PEER,
+        "full": load.get(pid, 0) >= MAX_COLD_PER_WARM_PEER,
+    } for pid in sorted(eligible_ids)]
+
+    edges_by_cold: dict[str, set] = {}
+    for e in edges:
+        edges_by_cold.setdefault(e.new_instance_id, set()).add(e.peer_instance_id)
+    assignments = {cold: next(iter(peers & eligible_ids))
+                   for cold, peers in edges_by_cold.items() if (peers & eligible_ids)}
+
+    below_cap = any(load.get(pid, 0) < MAX_COLD_PER_WARM_PEER for pid in eligible_ids)
+    capacity_full: set = set()
+    if eligible_ids and not below_cap:
+        for iid, (state, enabled) in enr_map.items():
+            if not enabled or state in _SLOT_FREEING_STATES:
+                continue
+            if not (edges_by_cold.get(iid, set()) & eligible_ids):
+                capacity_full.add(iid)
+
+    return {"peer_load": peer_load, "capacity_full_instances": capacity_full,
+            "assignments": assignments}
 
 
 # ── 24h cooldown ─────────────────────────────────────────────────────────────
@@ -264,25 +368,49 @@ async def enroll_and_preflight(db, account: Account, *, client_factory=None,
     except Exception as e:
         logger.warning("pre-flight queue clear failed: %s", e)
 
-    # 4) Build the mesh (mutual-contact handshake) with eligible warm peers.
+    # 4) Build the mesh (mutual-contact handshake). V21 PART 1 — assign the ONE least-loaded
+    #    warm peer that is still below the 1:MAX_COLD_PER_WARM_PEER ratio cap (balance load,
+    #    never overload a peer). No eligible peer at all → insufficient-peers notice; peers
+    #    exist but all at capacity → capacity-full notice (add another warm sender).
+    existing_edges = (await db.execute(
+        select(WarmupMeshEdge).where(WarmupMeshEdge.new_instance_id == account.instance_id)
+    )).scalars().all()
+    have = {e.peer_instance_id for e in existing_edges}
     eligible = await eligible_peer_accounts(db, account.instance_id)
-    selected = select_peers(eligible, cfg, rng)
-    if len(eligible) < cfg.peers_per_new_number_min:
+    eligible_ids = {p.instance_id for p in eligible}
+    if any(pid in eligible_ids for pid in have):
+        # Already linked to a still-eligible peer (e.g. re-enroll) — retry the handshake, no new peer.
+        for e in existing_edges:
+            if e.peer_instance_id in eligible_ids:
+                peer = next(p for p in eligible if p.instance_id == e.peer_instance_id)
+                edge = await _handshake_edge(db, account, peer, client_factory)
+                result["peers"].append({
+                    "peer_instance_id": peer.instance_id,
+                    "handshake_state": edge.handshake_state,
+                    "messageable": edge_is_messageable(edge),
+                })
+    elif not eligible:
         result["notice"] = INSUFFICIENT_PEERS_NOTICE
-    for peer in selected:
-        edge = await _handshake_edge(db, account, peer, client_factory)
-        result["peers"].append({
-            "peer_instance_id": peer.instance_id,
-            "handshake_state": edge.handshake_state,
-            "messageable": edge_is_messageable(edge),
-        })
+    else:
+        load = await peer_cold_load(db, cfg)
+        peer = select_least_loaded_peer(
+            [p for p in eligible if p.instance_id not in have], load, MAX_COLD_PER_WARM_PEER, rng)
+        if peer is None:
+            result["notice"] = CAPACITY_FULL_NOTICE
+        else:
+            edge = await _handshake_edge(db, account, peer, client_factory)
+            result["peers"].append({
+                "peer_instance_id": peer.instance_id,
+                "handshake_state": edge.handshake_state,
+                "messageable": edge_is_messageable(edge),
+            })
 
     # 3) Enforce the 24h cooldown — hold in COOLDOWN regardless of peers.
     if enrollment.state == WarmupState.ENROLLED.value:
         transition(enrollment, WarmupState.COOLDOWN, now=now)
     enrollment.next_action_at = enrollment.authorized_at + timedelta(hours=cfg.cooldown_hours)
     await _log(db, enrollment.id, "state_change", to=enrollment.state,
-               peers=len(selected), notice=result["notice"])
+               peers=len(result["peers"]), notice=result["notice"])
 
     result["state"] = enrollment.state
     result["cooldown_hours"] = round(cooldown_remaining_hours(enrollment, cfg, now), 2)
@@ -369,6 +497,12 @@ async def ensure_mesh_edges(db, account: Account, *, client_factory=None,
     accounts.phone or a transient addContact failure can never leave an edge stuck at `none`
     forever. Once phones are present (getWaSettings fallback fills them), the retry completes
     the mutual-contact save and the edge flips to ACTIVE. Returns how many NEW edges were built.
+
+    V21 PART 1 — RATIO CAP: a cold number is assigned exactly ONE warm peer, chosen as the
+    least-loaded eligible peer still below the 1:MAX_COLD_PER_WARM_PEER cap. If the number
+    already has an edge to a still-eligible peer, no new peer is added (retries only). If every
+    eligible peer is at capacity, nothing is built (the number waits — surfaced on the dashboard).
+    This guarantees a peer never exceeds MAX_COLD_PER_WARM_PEER cold numbers under any tick/retry.
     """
     client_factory = client_factory or _default_client_factory
     cfg = cfg or DEFAULT_WARMUP_CONFIG
@@ -392,15 +526,17 @@ async def ensure_mesh_edges(db, account: Account, *, client_factory=None,
         await _handshake_edge(db, account, peer_acc, client_factory)
         retried += 1
 
-    # Build new edges to fresh eligible peers up to the target.
+    # Assign at most ONE warm peer, respecting the ratio cap and balancing load.
     built = 0
-    slots = cfg.peers_per_new_number_max - len(have)
-    if slots > 0:
-        eligible = await eligible_peer_accounts(db, account.instance_id)
+    eligible = await eligible_peer_accounts(db, account.instance_id)
+    eligible_ids = {p.instance_id for p in eligible}
+    # Already linked to a still-eligible peer? Then it has its peer — do not add another.
+    already_linked = any(pid in eligible_ids for pid in have)
+    if not already_linked:
         fresh = [p for p in eligible if p.instance_id not in have]
-        r = rng or random
-        r.shuffle(fresh)
-        for peer in fresh[:slots]:
+        load = await peer_cold_load(db, cfg)
+        peer = select_least_loaded_peer(fresh, load, MAX_COLD_PER_WARM_PEER, rng)
+        if peer is not None:
             await _handshake_edge(db, account, peer, client_factory)
             built += 1
 

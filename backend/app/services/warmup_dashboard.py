@@ -12,7 +12,9 @@ from app.services.warmup_state import WarmupState, DEFAULT_WARMUP_CONFIG
 from app.services.warmup_scheduler import (
     day_index, target_state_for_day, receiving_inbound_target, ramp_daily_target,
 )
-from app.services.warmup_mesh_service import edge_is_messageable, INSUFFICIENT_PEERS_NOTICE
+from app.services.warmup_mesh_service import (
+    edge_is_messageable, INSUFFICIENT_PEERS_NOTICE, CAPACITY_FULL_NOTICE, MAX_COLD_PER_WARM_PEER,
+)
 
 # Numbers are considered fully graduated (green light) around day 25.
 GRADUATE_DAY = 25
@@ -97,8 +99,11 @@ def _build_group_warmup(enrollment, memberships, now, cfg) -> dict:
 
 def build_number_card(enrollment, edges, now: datetime | None = None,
                       cfg=DEFAULT_WARMUP_CONFIG, group_memberships=None,
-                      has_eligible_peer: bool = True) -> dict:
-    """One dashboard card for an enrolled number (mesh info + V19 group placements)."""
+                      has_eligible_peer: bool = True, capacity_full: bool = False,
+                      assigned_peer: str | None = None) -> dict:
+    """One dashboard card for an enrolled number (mesh info + V19 group placements).
+    V21 — `capacity_full` marks a cold number waiting because every warm peer is at its 1:2
+    cap; `assigned_peer` is the warm peer instance this cold number is warmed by (or None)."""
     now = now or datetime.utcnow()
     state = getattr(enrollment, "state", WarmupState.ENROLLED.value)
     day = day_index(enrollment, now)
@@ -128,6 +133,10 @@ def build_number_card(enrollment, edges, now: datetime | None = None,
         banner = {"type": "yellowcard", "message": "زرد‌کارت دریافت شده؛ شماره در حال استراحت است."}
     elif state == WarmupState.BLOCKED_RESET.value:
         banner = {"type": "blocked", "message": "شماره مسدود/خارج شده؛ گرم‌سازی بازنشانی می‌شود."}
+    elif capacity_full and messageable_count == 0 and len(peers) == 0:
+        # V21 PART 1 — every warm peer is at its 1:2 cap → this number waits for capacity.
+        # Shown across stages (incl. COOLDOWN) so a waiting number is never silently peerless.
+        banner = {"type": "capacity_full", "message": CAPACITY_FULL_NOTICE}
     elif state in (WarmupState.RECEIVING.value, WarmupState.REPLYING.value,
                    WarmupState.RAMPING.value, WarmupState.MATURING.value) and messageable_count == 0:
         # V20 PART 3 — distinguish "no warm sender marked at all" from "peers exist, edges
@@ -160,6 +169,10 @@ def build_number_card(enrollment, edges, now: datetime | None = None,
         "peers": peers,
         "peer_count": len(peers),
         "messageable_peer_count": messageable_count,
+        # V21 — which warm peer warms this cold number (first messageable/assigned edge), and
+        # whether it is currently waiting because every warm peer is at the 1:2 cap.
+        "assigned_peer": assigned_peer or (peers[0]["peer_instance_id"] if peers else None),
+        "capacity_full": bool(capacity_full and len(peers) == 0),
         "banner": banner,
         # V19 — group-based warm-up placements (additive track under the same enrollment)
         "group_warmup": _build_group_warmup(enrollment, group_memberships, now, cfg),
@@ -169,17 +182,23 @@ def build_number_card(enrollment, edges, now: datetime | None = None,
 def build_dashboard(enrollments, edges_by_instance: dict, breaker_tripped: bool = False,
                     now: datetime | None = None, cfg=DEFAULT_WARMUP_CONFIG,
                     memberships_by_instance: dict | None = None,
-                    has_eligible_peer: bool = True, roles: list | None = None) -> dict:
+                    has_eligible_peer: bool = True, roles: list | None = None,
+                    capacity_full_instances: set | None = None,
+                    peer_load: list | None = None) -> dict:
     """The full dashboard payload: one card per enrolled number (mesh + group placements),
     an account ROLE overview (being-warmed vs peer/sender vs none), a no-peer notice when no
-    warm sender is marked, plus a global banner when the chain-ban breaker is tripped."""
+    warm sender is marked, plus a global banner when the chain-ban breaker is tripped.
+    V21 — `capacity_full_instances` marks cold numbers waiting on the 1:2 ratio cap;
+    `peer_load` is the per-warm-peer capacity roster (n/cap) shown on the dashboard."""
     now = now or datetime.utcnow()
     memberships_by_instance = memberships_by_instance or {}
+    capacity_full_instances = capacity_full_instances or set()
     cards = [
         build_number_card(
             enr, edges_by_instance.get(getattr(enr, "instance_id", None), []), now, cfg,
             group_memberships=memberships_by_instance.get(getattr(enr, "instance_id", None), []),
             has_eligible_peer=has_eligible_peer,
+            capacity_full=getattr(enr, "instance_id", None) in capacity_full_instances,
         )
         for enr in enrollments
     ]
@@ -204,4 +223,7 @@ def build_dashboard(enrollments, edges_by_instance: dict, breaker_tripped: bool 
         "warm_peer_count": warm_peer_count,
         "has_eligible_peer": bool(has_eligible_peer),
         "no_peer_notice": (None if has_eligible_peer else NO_PEER_NOTICE),
+        # V21 — per-warm-peer capacity roster (n/cap) + the 1:2 cap value.
+        "peer_load": peer_load or [],
+        "max_cold_per_warm_peer": MAX_COLD_PER_WARM_PEER,
     }
