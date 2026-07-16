@@ -1,5 +1,5 @@
 import React from "react";
-import { Inbox as Api, MessagesApi, Contacts } from "../api.js";
+import { Inbox as Api, MessagesApi, Contacts, Accounts } from "../api.js";
 import { Spinner, Empty, Modal, useAsync } from "../ui.jsx";
 import { toast } from "../ui/toast.jsx";
 
@@ -74,13 +74,20 @@ function renderSpecial(m) {
 }
 
 export default function Inbox() {
-  const [filter, setFilter] = React.useState({ unread: false, category: "", msgType: "", archived: false });
+  // V25 PART 2 — instanceId selects WHICH account's incoming messages are shown (server-side
+  // filter). "" = all accounts (default). Kept in component state, not browser storage.
+  const [filter, setFilter] = React.useState({ unread: false, category: "", msgType: "", archived: false, instanceId: "" });
   const [data, setData] = React.useState(null);
   const [stats, setStats] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [reply, setReply] = React.useState(null);
   const [richSend, setRichSend] = React.useState(null);
   const [infoPhone, setInfoPhone] = React.useState(null);
+  const [accounts, setAccounts] = React.useState([]);
+
+  React.useEffect(() => {
+    Accounts.list().then((list) => setAccounts(Array.isArray(list) ? list : [])).catch(() => setAccounts([]));
+  }, []);
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -88,6 +95,7 @@ export default function Inbox() {
     if (filter.unread) params.unread = true;
     if (filter.category) params.category = filter.category;
     if (filter.archived) params.archived = true;
+    if (filter.instanceId) params.instance_id = filter.instanceId;
     Promise.all([Api.list(params), Api.stats()])
       .then(([list, s]) => { setData(list); setStats(s); })
       .finally(() => setLoading(false));
@@ -100,6 +108,13 @@ export default function Inbox() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-2xl font-bold">صندوق ورودی</h2>
         <div className="flex flex-wrap gap-2 items-center">
+          <select className="input w-auto" value={filter.instanceId} title="فیلتر بر اساس اکانت"
+            onChange={(e) => setFilter({ ...filter, instanceId: e.target.value })}>
+            <option value="">همه اکانت‌ها</option>
+            {accounts.map((a) => (
+              <option key={a.instance_id} value={a.instance_id}>{a.name || a.instance_id}</option>
+            ))}
+          </select>
           <button className="btn-secondary text-sm" onClick={async () => {
             const chats = [...new Set((data || []).filter((m) => !m.is_group && m.sender_phone).map((m) => m.sender_phone))];
             if (chats.length === 0) return toast.info("چتی برای علامت‌گذاری نیست");
