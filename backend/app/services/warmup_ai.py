@@ -41,6 +41,24 @@ def persona_for_instance(instance_id: str | None) -> str:
     return PERSONAS[idx]
 
 
+def name_for_instance(instance_id: str | None) -> str | None:
+    """A STABLE, safe optional chat name for a recipient — a realistic Persian first
+    name for some numbers, None for the rest. Deterministic from instance_id so a
+    conversation keeps one consistent (or no) name across turns.
+
+    Crucially it is NEVER derived from the account's label/number/phone: warm-up runs
+    between our own accounts, so there is no real recipient name to reuse, and the
+    account label (e.g. "9048249533 گوشی زینب شخصی") must never touch a message."""
+    from app.services.warmup_content import HUMAN_NAMES  # curated realistic first names
+    if not instance_id:
+        return None
+    h = sum(ord(c) for c in str(instance_id))
+    # ~40% of recipients get a stable first name; the rest stay name-less (more natural).
+    if h % 5 < 2:
+        return HUMAN_NAMES[h % len(HUMAN_NAMES)]
+    return None
+
+
 def _system_prompt(persona: str | None) -> str:
     persona = persona or PERSONAS[0]
     return (
@@ -48,7 +66,11 @@ def _system_prompt(persona: str | None) -> str:
         "خانگی گپ می‌زنی. فقط و فقط «یک» پیام کوتاه فارسی و طبیعی بنویس، مثل چت واقعی "
         "بین دو نفر. قوانین: خیلی کوتاه (حداکثر یک جمله)، بدون امضا و بدون معرفی خودت، "
         "هر بار جمله را متفاوت بگو و تکراری نشو، گاهی می‌تونی یک ایموجی بذاری، گفتگو را "
-        "با توجه به پیام‌های قبلی به‌شکل طبیعی ادامه بده. فقط متن همان یک پیام را خروجی بده."
+        "با توجه به پیام‌های قبلی به‌شکل طبیعی ادامه بده. "
+        "هرگز شمارهٔ تلفن، شمارهٔ اکانت، آیدی، یا هر رشتهٔ عددی طولانی در پیام نیاور. "
+        "اگر خواستی کسی را صدا بزنی فقط از یک اسم کوچک واقعی و رایج فارسی استفاده کن "
+        "(مثل رضا یا مریم) و هرگز عدد یا برچسب سیستمی مثل «گوشی زینب شخصی» را به‌جای اسم به‌کار نبر. "
+        "فقط متن همان یک پیام را خروجی بده."
     )
 
 

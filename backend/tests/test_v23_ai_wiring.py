@@ -22,14 +22,16 @@ async def test_ai_is_called_first_and_used():
         return "قیمت پکیج دیواری امروز چطوره؟"
 
     ai_fn = build_warmup_ai_fn(chat_fn=fake_chat)
-    text, source = await generate_mesh_message(ai_fn=ai_fn, name="زینب", rng=random.Random(1))
+    # V24: names must be realistic curated first names — never account labels. "رضا"
+    # is in the safe pool, so it reaches the prompt; a label/number would be dropped.
+    text, source = await generate_mesh_message(ai_fn=ai_fn, name="رضا", rng=random.Random(1))
 
     assert source == "ai"
     assert text == "قیمت پکیج دیواری امروز چطوره؟"
     assert len(calls) == 1                                   # AI attempted first
     system, user, max_tokens, _temp = calls[0]
     assert "لوازم خانگی" in system                           # persona system prompt
-    assert "زینب" in user                                    # recipient name fed in
+    assert "رضا" in user                                     # recipient name fed in
     assert max_tokens <= 100                                 # kept short
 
 

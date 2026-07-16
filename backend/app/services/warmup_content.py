@@ -18,8 +18,68 @@ import difflib
 import hashlib
 import logging
 import random
+import re
 
 logger = logging.getLogger("afrakala.warmup.content")
+
+# ── Safety: never let an internal identifier reach a warm-up message ──────────
+# Warm-up runs between our OWN accounts; there is no real "recipient". The only
+# names that may ever appear are realistic human first names from this curated
+# pool — NEVER an account number, instance id, phone number, or system label like
+# "9048249533 گوشی زینب شخصی". A message containing any digit run that looks like a
+# phone/instance id, or any chunk of a known account identifier, is rejected.
+HUMAN_NAMES = [
+    "رضا", "علی", "مریم", "زهرا", "حسین", "محمد", "فاطمه", "سارا", "نیما", "مهدی",
+    "الهام", "کیوان", "نگار", "امیر", "بهنام", "شیرین", "پویا", "لیلا", "سعید", "مینا",
+    "آرش", "نازنین", "کامران", "پریسا", "حامد", "مهسا", "بابک", "رعنا", "فرهاد", "سمیرا",
+]
+
+# Persian/Arabic-Indic → ASCII digits, so "۹۰۴۸۲۴۹۵۳۲" is caught just like "9048249532".
+_DIGIT_MAP = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+
+# A run of >=7 consecutive digits looks like a phone number / instance id — never a
+# legitimate product number (e.g. "کولر گازی ۱۸۰۰۰" is only 5 digits, "۵۵ اینچ" is 2).
+_LONG_DIGIT_RUN = re.compile(r"\d{7,}")
+
+
+def _to_ascii_digits(s: str) -> str:
+    return (s or "").translate(_DIGIT_MAP)
+
+
+def looks_like_identifier(text: str) -> bool:
+    """True if `text` contains a digit run resembling a phone number or instance id."""
+    return bool(_LONG_DIGIT_RUN.search(_to_ascii_digits(text)))
+
+
+def message_is_safe(text: str, forbidden=()) -> bool:
+    """Hard filter run on EVERY warm-up message before it is sent (AI or fallback).
+
+    Rejects the text if it (a) is empty, (b) contains any long digit run that looks
+    like a phone/instance id, or (c) contains a chunk of a known internal identifier or
+    label passed in `forbidden` (the account number/instance_id/phone/name of either
+    side of the edge). This is the last line of defense so a leaked identifier never
+    ships even if the persona/history somehow reintroduced one."""
+    if not text or not text.strip():
+        return False
+    norm = _to_ascii_digits(text).lower()
+    if _LONG_DIGIT_RUN.search(norm):
+        return False
+    for f in forbidden:
+        if not f:
+            continue
+        fn = _to_ascii_digits(str(f)).lower().strip()
+        if not fn:
+            continue
+        # Any digit chunk (>=4) from an identifier must not appear verbatim.
+        for chunk in re.findall(r"\d{4,}", fn):
+            if chunk in norm:
+                return False
+        # Any distinctive non-numeric label token (>=3 chars) must not appear, so
+        # "گوشی زینب شخصی" can never surface even split into words.
+        for tok in re.split(r"[\s،,.\-_/|]+", fn):
+            if len(tok) >= 3 and not tok.isdigit() and tok in norm:
+                return False
+    return True
 
 # ── Category templates (hardcoded seeds for the combinatorial pool) ──────────
 GREETINGS = [
@@ -187,16 +247,30 @@ def _apply_variation(text: str, rng: random.Random) -> str:
     return text + rng.choice(tails)
 
 
+def _safe_name(name: str | None, rng: random.Random) -> str | None:
+    """Guarantee any name used in a message is a realistic human first name — never an
+    account number/label. If the caller passed an identifier-looking or unknown value,
+    drop it; None means the message simply uses no name."""
+    if not name:
+        return None
+    if looks_like_identifier(name) or name not in HUMAN_NAMES:
+        return None
+    return name
+
+
 def assemble_fallback_message(recent_hashes: set[str] | None = None,
                               name: str | None = None,
                               product: str | None = None,
                               rng: random.Random | None = None,
+                              forbidden=(),
                               max_tries: int = 40) -> str:
     """Pick a non-repeating fallback phrase (optionally filling name/product slots) that
     is not already in `recent_hashes`. Never touches the DB — works even with an empty
-    DB phrase table."""
+    DB phrase table. Any name is forced through `_safe_name`, and every candidate is
+    passed through `message_is_safe` so an internal identifier can never leak."""
     r = rng or random
     recent_hashes = recent_hashes or set()
+    name = _safe_name(name, r)
 
     # Occasionally use a slotted, personalized template.
     use_slot = bool(name) and r.random() < 0.35
@@ -210,10 +284,15 @@ def assemble_fallback_message(recent_hashes: set[str] | None = None,
             if name and r.random() < 0.25:
                 msg = f"{name} جان، {msg}"
         msg = _apply_variation(msg, r)
-        if content_hash(msg) not in recent_hashes:
+        if content_hash(msg) in recent_hashes or not message_is_safe(msg, forbidden):
+            continue
+        return msg
+    # Extremely unlikely: pool exhausted for this edge — return a plain, safe phrase.
+    for _ in range(max_tries):
+        msg = _apply_variation(r.choice(FALLBACK_PHRASES), r)
+        if message_is_safe(msg, forbidden):
             return msg
-    # Extremely unlikely: pool exhausted for this edge — return a varied phrase anyway.
-    return _apply_variation(r.choice(FALLBACK_PHRASES), r)
+    return "سلام وقت بخیر"
 
 
 async def generate_mesh_message(*, persona: str | None = None,
@@ -221,30 +300,43 @@ async def generate_mesh_message(*, persona: str | None = None,
                                 recent_hashes: set[str] | None = None,
                                 name: str | None = None,
                                 product: str | None = None,
+                                forbidden=(),
                                 ai_fn=None,
                                 rng: random.Random | None = None,
                                 max_ai_tries: int = 2) -> tuple[str, str]:
     """Generate one mesh message. Returns (text, source) where source is "ai" or
     "fallback". Tries the AI generator first (if provided); on failure, timeout, empty,
-    or a near-duplicate result, falls back to the curated pool. The result is always
-    checked against `recent_hashes`/`history` for anti-repeat."""
+    a near-duplicate, or an UNSAFE result (one containing an internal identifier/label),
+    falls back to the curated pool. The result is always checked against `recent_hashes`/
+    `history` for anti-repeat AND against `message_is_safe` so no identifier ever ships.
+
+    `name` is coerced to a realistic human first name (or dropped) before it reaches the
+    AI/fallback, and `history` is pre-filtered to safe lines so a previously-leaked
+    identifier in the running conversation can't be echoed back."""
     history = history or []
     recent_hashes = recent_hashes or set()
     r = rng or random
+    name = _safe_name(name, r)
+    # Never feed an identifier-tainted history line back into the persona/history prompt.
+    safe_history = [h for h in history if message_is_safe(h, forbidden)]
 
     if ai_fn is not None:
         for _ in range(max_ai_tries):
             try:
-                text = await ai_fn(persona=persona, history=history, name=name, product=product)
+                text = await ai_fn(persona=persona, history=safe_history, name=name, product=product)
             except Exception as e:
                 logger.debug("mesh AI generation failed, will fall back: %s", e)
                 break
             if not text or not text.strip():
                 break
             text = text.strip()
-            if content_hash(text) in recent_hashes or is_near_duplicate(text, history):
+            if not message_is_safe(text, forbidden):
+                logger.debug("mesh AI output contained an identifier/label — rejecting")
+                continue  # retry the AI once more before falling back
+            if content_hash(text) in recent_hashes or is_near_duplicate(text, safe_history):
                 continue  # retry the AI once more before falling back
             return text, "ai"
 
     return assemble_fallback_message(recent_hashes=recent_hashes, name=name,
-                                     product=product, rng=r), "fallback"
+                                     product=product, forbidden=forbidden,
+                                     rng=r), "fallback"

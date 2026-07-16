@@ -31,7 +31,7 @@ from app.services.warmup_scheduler import (
 )
 from app.services.warmup_mesh_service import edge_is_messageable
 from app.services.warmup_content import generate_mesh_message, content_hash
-from app.services.warmup_ai import persona_for_instance
+from app.services.warmup_ai import persona_for_instance, name_for_instance
 from app.services.typing_sim import show_typing_for_send
 
 logger = logging.getLogger("afrakala.warmup.engine")
@@ -132,16 +132,26 @@ async def execute_action(db, action: dict, enrollment, new_account: Account,
     edge = action["edge"]
 
     # Sender/recipient are decided by direction FIRST, so the message is written in the
-    # SENDER's persona and addressed to the RECIPIENT's name (inbound = peer → new).
+    # SENDER's persona (inbound = peer → new).
     if direction == "inbound":
         sender, recipient, event_type = peer_account, new_account, "receive"
     else:
         sender, recipient, event_type = new_account, peer_account, "send"
 
+    # The chat "name" is a STABLE realistic first name derived from the recipient's
+    # instance_id — NEVER the account label/number/phone (those would get an account
+    # banned if echoed into a message like "9048249533 جان"). Every account identifier
+    # of both sides is passed as `forbidden` so the hard filter rejects any leak.
+    forbidden = tuple(
+        v for v in (
+            recipient.instance_id, recipient.phone, recipient.name,
+            sender.instance_id, sender.phone, sender.name,
+        ) if v
+    )
     msg, source = await generate_mesh_message(
         persona=persona_for_instance(sender.instance_id), history=history or [],
-        recent_hashes=recent_hashes, name=recipient.name,
-        ai_fn=ai_fn, rng=rng,
+        recent_hashes=recent_hashes, name=name_for_instance(recipient.instance_id),
+        forbidden=forbidden, ai_fn=ai_fn, rng=rng,
     )
 
     client = client_factory(sender.instance_id, sender.api_token)
