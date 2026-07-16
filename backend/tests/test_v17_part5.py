@@ -6,6 +6,7 @@ breaker; block→re-auth restarts from Day 1; low delivery throttles; and peers 
 node keep operating unless the breaker trips.
 """
 import uuid
+import json
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 import pytest
@@ -169,15 +170,22 @@ async def test_low_delivery_throttles():
 
 
 # ════════════════════════ chain-ban circuit breaker ════════════════════════
+def _incident(iid, when):
+    """A warmup_event_log incident row (payload carries the instance + kind)."""
+    return SimpleNamespace(
+        event_type="incident", created_at=when,
+        payload_json=json.dumps({"instance_id": iid, "kind": "yellowCard"}))
+
+
 @pytest.mark.asyncio
-async def test_breaker_trips_on_two_incidents():
-    # count_recent_incidents → 2; then trip_global_breaker loads enabled enrollments + edges.
+async def test_breaker_trips_on_two_distinct_numbers():
+    # V21 PART 3 — 2 DISTINCT numbers carded in the window → trip.
     e1 = _enr(instance_id="A", state=WarmupState.RAMPING.value)
     e2 = _enr(instance_id="B", state=WarmupState.REPLYING.value)
     edges = [SimpleNamespace(new_instance_id="A", peer_instance_id="HUB"),
              SimpleNamespace(new_instance_id="B", peer_instance_id="HUB")]
     db = FakeSession(results=[
-        FakeResult(scalar=2),          # count_recent_incidents → 2
+        FakeResult(scalars=[_incident("A", NOW), _incident("B", NOW)]),  # recent incidents (2 distinct)
         FakeResult(scalars=[e1, e2]),  # enabled enrollments to pause
         FakeResult(scalars=edges),     # edges for most_connected_instance
     ])
@@ -185,27 +193,41 @@ async def test_breaker_trips_on_two_incidents():
     assert res["tripped"] is True
     assert res["paused"] == 2
     assert res["quarantine"] == "HUB"                   # most-connected node quarantined
+    assert {o["instance_id"] for o in res["offenders"]} == {"A", "B"}   # offenders recorded
     assert e1.state == WarmupState.PAUSED.value and e2.state == WarmupState.PAUSED.value
 
 
 @pytest.mark.asyncio
-async def test_breaker_does_not_trip_on_one_incident():
-    db = FakeSession(results=[FakeResult(scalar=1)])    # only 1 incident in window
+async def test_breaker_does_not_trip_on_three_incidents_one_number():
+    # V21 PART 3 — 3 incidents but ALL from ONE number → distinct=1 → NO global trip.
+    db = FakeSession(results=[FakeResult(scalars=[
+        _incident("A", NOW), _incident("A", NOW), _incident("A", NOW),
+    ])])
     res = await check_and_maybe_trip_breaker(db, NOW)
-    assert res["tripped"] is False and res["incidents"] == 1
+    assert res["tripped"] is False
+    assert res["incidents"] == 1                          # distinct count, not raw 3
+    assert res["distinct_numbers"] == ["A"]
 
 
 @pytest.mark.asyncio
 async def test_single_yellowcard_does_not_trip_breaker_peers_keep_running():
-    """One carded number pauses ITSELF but, with only 1 incident, the breaker stays open so
-    its peers keep operating."""
+    """One carded number pauses ITSELF but, with only 1 distinct number, the breaker stays
+    open so its peers keep operating."""
     db = FakeSession(results=[
         FakeResult(scalars=[_enr(instance_id="NEW")]),  # handle_warmup_state_signal: lookup enrollment
-        FakeResult(scalar=1),                            # count_recent_incidents → 1 (no trip)
+        FakeResult(scalars=[_incident("NEW", NOW)]),     # recent incidents → 1 distinct (no trip)
     ])
     res = await ks.handle_warmup_state_signal(db, "NEW", "yellowCard", NOW)
     assert res["action"] == "yellowCard"
     assert res["breaker"]["tripped"] is False            # peers unaffected
+
+
+@pytest.mark.asyncio
+async def test_repeated_cards_same_number_never_trip_even_across_ticks():
+    """Even many cards from one flaky number → still 1 distinct → global breaker never trips."""
+    db = FakeSession(results=[FakeResult(scalars=[_incident("A", NOW) for _ in range(6)])])
+    res = await check_and_maybe_trip_breaker(db, NOW)
+    assert res["tripped"] is False and res["incidents"] == 1
 
 
 @pytest.mark.asyncio

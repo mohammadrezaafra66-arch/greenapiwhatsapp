@@ -136,7 +136,9 @@ def build_number_card(enrollment, edges, now: datetime | None = None,
     elif state == WarmupState.PAUSED.value:
         banner = {"type": "paused", "message": "گرم‌سازی این شماره متوقف است."}
     elif state == WarmupState.YELLOWCARD.value:
-        banner = {"type": "yellowcard", "message": "زرد‌کارت دریافت شده؛ شماره در حال استراحت است."}
+        # V21 PART 3 — a single carded number is quarantined on its own; the rest keeps running.
+        banner = {"type": "yellowcard",
+                  "message": "این شماره به‌دلیل کارت زرد قرنطینه شد — بقیهٔ شبکه فعال است."}
     elif state == WarmupState.BLOCKED_RESET.value:
         banner = {"type": "blocked", "message": "شماره مسدود/خارج شده؛ گرم‌سازی بازنشانی می‌شود."}
     elif capacity_full and messageable_count == 0 and len(peers) == 0:
@@ -192,7 +194,8 @@ def build_dashboard(enrollments, edges_by_instance: dict, breaker_tripped: bool 
                     has_eligible_peer: bool = True, roles: list | None = None,
                     capacity_full_instances: set | None = None,
                     peer_load: list | None = None,
-                    not_connected_instances: set | None = None) -> dict:
+                    not_connected_instances: set | None = None,
+                    breaker_offenders: list | None = None) -> dict:
     """The full dashboard payload: one card per enrolled number (mesh + group placements),
     an account ROLE overview (being-warmed vs peer/sender vs none), a no-peer notice when no
     warm sender is marked, plus a global banner when the chain-ban breaker is tripped.
@@ -214,10 +217,13 @@ def build_dashboard(enrollments, edges_by_instance: dict, breaker_tripped: bool 
     ]
     global_banner = None
     if breaker_tripped:
-        global_banner = {
-            "type": "breaker",
-            "message": "بریکر زنجیره‌بن فعال است: کل شبکهٔ گرم‌سازی متوقف شده. لطفاً وضعیت شماره‌ها را بررسی کنید.",
-        }
+        offenders = breaker_offenders or []
+        names = "، ".join(o.get("instance_id", "?") for o in offenders)
+        msg = "بریکر زنجیره‌بن فعال است: کل شبکهٔ گرم‌سازی متوقف شده. لطفاً وضعیت شماره‌ها را بررسی کنید."
+        if names:
+            # V21 PART 3 — show WHICH distinct numbers tripped it.
+            msg += f" شماره‌های عامل: {names}."
+        global_banner = {"type": "breaker", "message": msg, "offenders": offenders}
     roles = roles or []
     for r in roles:
         r.setdefault("role_label", ROLE_LABELS_FA.get(r.get("role"), r.get("role")))

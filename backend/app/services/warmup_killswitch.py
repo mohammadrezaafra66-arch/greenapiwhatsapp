@@ -193,6 +193,8 @@ async def record_incident(db, instance_id: str, kind: str, now: datetime | None 
 
 async def count_recent_incidents(db, now: datetime | None = None,
                                  window_hours: int = BREAKER_WINDOW_HOURS) -> int:
+    """RAW incident count in the window (repeats from one number included). Informational;
+    the breaker trips on DISTINCT numbers — see recent_incident_instances."""
     now = now or datetime.utcnow()
     cutoff = now - timedelta(hours=window_hours)
     return (await db.execute(
@@ -201,6 +203,35 @@ async def count_recent_incidents(db, now: datetime | None = None,
             WarmupEventLog.created_at >= cutoff,
         )
     )).scalar() or 0
+
+
+async def recent_incident_instances(db, now: datetime | None = None,
+                                    window_hours: int = BREAKER_WINDOW_HOURS) -> list[dict]:
+    """V21 PART 3 — the DISTINCT instances that hit yellowCard/blocked within the rolling
+    window, each with its latest time + kind. Repeated cards from ONE number collapse to a
+    single entry, so a single flaky number can never inflate the breaker's trip count."""
+    now = now or datetime.utcnow()
+    cutoff = now - timedelta(hours=window_hours)
+    rows = (await db.execute(
+        select(WarmupEventLog).where(
+            WarmupEventLog.event_type == "incident",
+            WarmupEventLog.created_at >= cutoff,
+        ).order_by(WarmupEventLog.created_at)
+    )).scalars().all()
+    by_instance: dict[str, dict] = {}
+    for r in rows:
+        try:
+            p = json.loads(r.payload_json or "{}")
+        except Exception:
+            continue
+        iid = p.get("instance_id")
+        if not iid:
+            continue
+        by_instance[iid] = {
+            "instance_id": iid, "kind": p.get("kind"),
+            "at": r.created_at.isoformat() if getattr(r, "created_at", None) else None,
+        }
+    return list(by_instance.values())
 
 
 async def most_connected_instance(db) -> str | None:
@@ -216,9 +247,12 @@ async def most_connected_instance(db) -> str | None:
 
 
 async def trip_global_breaker(db, reason: str, now: datetime | None = None,
-                              quarantine_instance: str | None = None) -> dict:
+                              quarantine_instance: str | None = None,
+                              offenders: list | None = None) -> dict:
     """Halt the ENTIRE mesh: pause every enabled enrollment, quarantine the most-connected
-    node first, alert the operator. An emergency override — sets state directly to PAUSED."""
+    node first, alert the operator. An emergency override — sets state directly to PAUSED.
+    `offenders` (the distinct numbers that caused the trip) is stored on the event so the
+    dashboard can show WHICH numbers tripped it and when."""
     now = now or datetime.utcnow()
     enrollments = (await db.execute(
         select(WarmupEnrollment).where(WarmupEnrollment.is_enabled.is_(True))
@@ -231,18 +265,29 @@ async def trip_global_breaker(db, reason: str, now: datetime | None = None,
             paused += 1
     db.add(WarmupEventLog(enrollment_id=None, event_type="kill",
                           payload_json=json.dumps({"scope": "mesh_breaker", "active": True,
-                                                   "reason": reason, "quarantine": quarantine})))
+                                                   "reason": reason, "quarantine": quarantine,
+                                                   "offenders": offenders or []},
+                                                  ensure_ascii=False)))
     await _alert(db, "بریکر زنجیره‌بن فعال شد: کل شبکهٔ گرم‌سازی موقتاً متوقف شد. لطفاً بررسی کنید.",
                  scope="mesh", instance_id=quarantine)
-    return {"tripped": True, "paused": paused, "quarantine": quarantine}
+    return {"tripped": True, "paused": paused, "quarantine": quarantine,
+            "offenders": offenders or []}
 
 
 async def check_and_maybe_trip_breaker(db, now: datetime | None = None) -> dict:
-    """If >= threshold incidents happened in the rolling window, trip the breaker."""
-    n = await count_recent_incidents(db, now)
-    if should_trip_breaker(n):
-        return await trip_global_breaker(db, reason=f"{n} incidents in {BREAKER_WINDOW_HOURS}h", now=now)
-    return {"tripped": False, "incidents": n}
+    """V21 PART 3 — trip the mesh-wide breaker only when >= threshold DISTINCT numbers hit
+    yellowCard/blocked in the rolling window. Repeated cards from ONE flaky number no longer
+    trip the global breaker (that single number is already paused by its own kill-switch);
+    the rest of the mesh keeps running."""
+    instances = await recent_incident_instances(db, now)
+    distinct = len(instances)
+    if should_trip_breaker(distinct):
+        offenders = list(instances)
+        return await trip_global_breaker(
+            db, reason=f"{distinct} distinct numbers carded in {BREAKER_WINDOW_HOURS}h",
+            now=now, offenders=offenders)
+    return {"tripped": False, "incidents": distinct,
+            "distinct_numbers": [i["instance_id"] for i in instances]}
 
 
 async def is_breaker_tripped(db, now: datetime | None = None,

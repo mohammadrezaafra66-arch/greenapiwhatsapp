@@ -144,6 +144,16 @@ def test_dashboard_marks_not_connected_instance():
     assert b["not_connected"] is False
 
 
+def test_dashboard_breaker_banner_shows_offenders():
+    e1 = _enr(instance_id="A", state="RAMPING")
+    dash = build_dashboard([e1], {"A": [_edge("HUB")]}, breaker_tripped=True, now=NOW,
+                           breaker_offenders=[{"instance_id": "X", "kind": "yellowCard", "at": None},
+                                              {"instance_id": "Y", "kind": "yellowCard", "at": None}])
+    assert dash["global_banner"]["type"] == "breaker"
+    assert {o["instance_id"] for o in dash["global_banner"]["offenders"]} == {"X", "Y"}
+    assert "X" in dash["global_banner"]["message"] and "Y" in dash["global_banner"]["message"]
+
+
 def test_dashboard_carries_peer_load_and_cap():
     e1 = _enr(instance_id="A", state="RAMPING")
     dash = build_dashboard([e1], {"A": [_edge("HUB")]}, now=NOW,

@@ -96,6 +96,9 @@ async def mesh_dashboard(db: AsyncSession = Depends(get_db)):
     has_eligible_peer = warm_peers > 0
 
     tripped = await is_breaker_tripped(db)
+    # V21 PART 3 — the distinct numbers that carded recently (shown when the breaker tripped).
+    from app.services.warmup_killswitch import recent_incident_instances
+    offenders = await recent_incident_instances(db) if tripped else []
     # V21 — ratio/capacity snapshot: per-peer load (n/2) + cold numbers waiting on capacity.
     from app.services.warmup_mesh_service import mesh_capacity_snapshot
     snap = await mesh_capacity_snapshot(db)
@@ -108,7 +111,8 @@ async def mesh_dashboard(db: AsyncSession = Depends(get_db)):
                            has_eligible_peer=has_eligible_peer, roles=roles,
                            capacity_full_instances=snap["capacity_full_instances"],
                            peer_load=snap["peer_load"],
-                           not_connected_instances=not_connected)
+                           not_connected_instances=not_connected,
+                           breaker_offenders=offenders)
 
 
 async def _account_or_404(account_id: str, db) -> Account:
