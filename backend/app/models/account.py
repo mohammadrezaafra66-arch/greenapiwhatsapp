@@ -47,6 +47,10 @@ class Account(Base):
     # V17 PART 3 — manually mark a known-good number as an eligible warm mesh peer
     # (e.g. 989122270261), so it can warm new numbers even before it "GRADUATED".
     is_warm_peer: Mapped[bool] = mapped_column(Boolean, default=False)
+    # V26 — dedicated group-monitoring "listener" role. A listener ONLY receives group
+    # messages and (optionally) auto-replies; it is mutually exclusive with the
+    # campaign-sender / warm-up-peer / warm-up-cold roles (guarded in listener_service).
+    is_listener: Mapped[bool] = mapped_column(Boolean, default=False)
     # V14 PART F — yellowCard safety (throttle + cooldown)
     throttle_factor: Mapped[float] = mapped_column(Float, default=1.0)
     throttle_until: Mapped[datetime | None] = mapped_column(DateTime)

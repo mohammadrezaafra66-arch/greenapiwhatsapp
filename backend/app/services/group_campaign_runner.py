@@ -45,10 +45,12 @@ async def run_group_campaign(campaign_id: str):
         # V18 PART 2 — warm-up exclusion keys off warmup_enrollment (not the legacy flag).
         from app.services import governors
         from app.services.warmup_exclusion import enrollment_states_by_instance, warmup_campaign_excluded
+        from app.services.listener_service import listener_campaign_excluded
         from app.services.account_selection import resolve_sending_accounts
         enr_map = await enrollment_states_by_instance(db)
         eligible = [a for a in all_active
-                    if not governors.in_cooldown(a) and not warmup_campaign_excluded(a, enr_map)]
+                    if not governors.in_cooldown(a) and not warmup_campaign_excluded(a, enr_map)
+                    and not listener_campaign_excluded(a)]
         accounts, abort_reason = resolve_sending_accounts(eligible, campaign)
         if abort_reason:
             campaign.status = CampaignStatus.paused

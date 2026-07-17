@@ -42,6 +42,9 @@ from app.models.warmup_mesh import (
 from app.models.warmup_helpers import (
     WarmupHelper, WarmupHelperTask, WarmupHelperConfig,
 )
+from app.models.group_monitor import (
+    MonitoredGroup, GroupMessage, GroupKeyword, GroupPredefinedReply, GroupForbiddenAlert,
+)
 
 __all__ = [
     "Account",
@@ -100,4 +103,9 @@ __all__ = [
     "WarmupHelper",
     "WarmupHelperTask",
     "WarmupHelperConfig",
+    "MonitoredGroup",
+    "GroupMessage",
+    "GroupKeyword",
+    "GroupPredefinedReply",
+    "GroupForbiddenAlert",
 ]

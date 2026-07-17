@@ -299,9 +299,11 @@ async def _run_campaign_inner(campaign_id: str):
         # warmup_enrollment); graduated numbers become eligible again.
         from app.services import governors
         from app.services.warmup_exclusion import enrollment_states_by_instance, warmup_campaign_excluded
+        from app.services.listener_service import listener_campaign_excluded
         enr_map = await enrollment_states_by_instance(db)
         eligible = [a for a in all_active
-                    if not governors.in_cooldown(a) and not warmup_campaign_excluded(a, enr_map)]
+                    if not governors.in_cooldown(a) and not warmup_campaign_excluded(a, enr_map)
+                    and not listener_campaign_excluded(a)]
         # V18 PART 1 — FAIL-CLOSED selection. Selecting one account never expands to many;
         # if the chosen account is not eligible, ABORT (never fall back to all accounts).
         accounts, abort_reason = resolve_sending_accounts(eligible, campaign)

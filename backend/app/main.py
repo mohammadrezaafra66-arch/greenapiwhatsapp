@@ -23,6 +23,7 @@ from app.api.v1 import (
     partner, messages, incidents, calls,
     capabilities as capabilities_router,
     adlinks, warmup, warmup_helpers,
+    group_monitor,
 )
 
 @asynccontextmanager
@@ -776,6 +777,78 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V25] {e}")
+        # ── V26 — group monitoring (listener) + voice transcription schema ──
+        ddl_v26 = [
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_listener boolean DEFAULT false",
+            """CREATE TABLE IF NOT EXISTS monitored_group (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                listener_instance_id varchar(50) NOT NULL,
+                group_id varchar(80) NOT NULL,
+                group_name varchar(300),
+                is_monitored boolean NOT NULL DEFAULT true,
+                auto_reply_enabled boolean NOT NULL DEFAULT false,
+                conversation_mode varchar(20) NOT NULL DEFAULT 'off',
+                created_at timestamp DEFAULT now()
+            )""",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_monitored_group_listener_group ON monitored_group(listener_instance_id, group_id)",
+            "CREATE INDEX IF NOT EXISTS ix_monitored_group_listener ON monitored_group(listener_instance_id)",
+            """CREATE TABLE IF NOT EXISTS group_message (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                listener_instance_id varchar(50) NOT NULL,
+                group_id varchar(80) NOT NULL,
+                group_name varchar(300),
+                sender varchar(80),
+                sender_name varchar(300),
+                id_message varchar(200) NOT NULL UNIQUE,
+                type_message varchar(50),
+                text text,
+                is_voice boolean NOT NULL DEFAULT false,
+                audio_url text,
+                audio_local_path text,
+                transcription text,
+                transcription_status varchar(20) NOT NULL DEFAULT 'none',
+                transcription_error text,
+                matched_keywords text,
+                flagged_forbidden boolean NOT NULL DEFAULT false,
+                replied boolean NOT NULL DEFAULT false,
+                timestamp timestamp,
+                created_at timestamp DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_group_message_group_created ON group_message(group_id, created_at)",
+            """CREATE TABLE IF NOT EXISTS group_keyword (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                word varchar(300) NOT NULL,
+                kind varchar(20) NOT NULL DEFAULT 'trigger',
+                active boolean NOT NULL DEFAULT true,
+                created_at timestamp DEFAULT now()
+            )""",
+            """CREATE TABLE IF NOT EXISTS group_predefined_reply (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                keyword_id uuid REFERENCES group_keyword(id) ON DELETE CASCADE,
+                reply_text text NOT NULL,
+                active boolean NOT NULL DEFAULT true,
+                created_at timestamp DEFAULT now()
+            )""",
+            """CREATE TABLE IF NOT EXISTS group_forbidden_alert (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                listener_instance_id varchar(50),
+                group_id varchar(80),
+                group_name varchar(300),
+                sender varchar(80),
+                sender_name varchar(300),
+                word varchar(300),
+                message_text text,
+                group_message_id uuid,
+                is_read boolean NOT NULL DEFAULT false,
+                created_at timestamp DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_group_forbidden_alert_created ON group_forbidden_alert(created_at DESC)",
+        ]
+        for stmt in ddl_v26:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V26] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:
@@ -832,7 +905,7 @@ for router in [
     join_links.router, status_schedules.router, ai_keys.router,
     partner.router, messages.router, incidents.router, calls.router,
     capabilities_router.router, adlinks.router, warmup.router,
-    warmup_helpers.router,
+    warmup_helpers.router, group_monitor.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 
