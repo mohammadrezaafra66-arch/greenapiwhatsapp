@@ -461,6 +461,16 @@ class GreenAPIClient:
         phone = self._normalize(phone)
         return await self._post("checkAccount", {"phoneNumber": int(phone)})
 
+    async def contact_exists(self, phone: str) -> bool:
+        """Platform-aware existence check: WhatsApp uses checkWhatsapp, Telegram uses
+        checkAccount ({'exist': ...}). The single guard the add-participant pipeline calls."""
+        if self.platform == "telegram":
+            try:
+                return bool((await self.check_account(phone)).get("exist", False))
+            except Exception:
+                return False
+        return await self.check_whatsapp(phone)
+
     async def get_avatar(self, phone: str) -> Optional[str]:
         r = await self._post("getAvatar", {"chatId": self._chat_id(phone)})
         return r.get("urlAvatar")

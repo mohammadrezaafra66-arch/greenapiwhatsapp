@@ -82,7 +82,10 @@ async def safe_add_participants(group_db_id: str, phones: list[str]):
         if not account:
             await _set_progress(group_db_id, {"error": "no account", "finished": True})
             return
-        client = GreenAPIClient(account.instance_id, account.api_token)
+        # TG — platform-aware client (Telegram host/chatId); WhatsApp behavior unchanged.
+        client = GreenAPIClient(account.instance_id, account.api_token,
+                                platform=getattr(account, "platform", "whatsapp") or "whatsapp",
+                                api_host=getattr(account, "api_host", None))
 
         # Size guard + invite link (for failed-add fallback).
         invite_link = None
@@ -100,9 +103,10 @@ async def safe_add_participants(group_db_id: str, phones: list[str]):
         results = []
         remaining = list(phones)
         for idx, phone in enumerate(phones):
-            # 1) checkWhatsapp FIRST — the single most important ban guard.
+            # 1) existence check FIRST — the single most important ban guard.
+            #    Platform-aware: WhatsApp→checkWhatsapp, Telegram→checkAccount.
             try:
-                exists = await client.check_whatsapp(phone)
+                exists = await client.contact_exists(phone)
             except Exception:
                 exists = False
             if not exists:
