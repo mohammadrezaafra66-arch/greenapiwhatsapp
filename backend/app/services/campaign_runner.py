@@ -408,6 +408,17 @@ async def _run_campaign_inner(campaign_id: str):
             if is_new_contact and not await governors.warmup_new_contact_allowed(str(account.id), account.days_active):
                 continue
 
+            # TG PART 6 — hard 48h non-contact gate: a Telegram instance in its first 48h
+            # must NOT message strangers (campaign recipients are non-contacts). Skip them
+            # until the gate opens; WhatsApp accounts are unaffected.
+            if (getattr(account, "platform", "whatsapp") or "whatsapp") == "telegram":
+                from app.services.telegram_send import telegram_can_send_to
+                if not telegram_can_send_to(getattr(account, "authorized_at", None),
+                                            is_existing_contact=not is_new_contact):
+                    cc.status = MessageStatus.skipped
+                    await db.commit()
+                    continue
+
             products = await _deliver_message(db, campaign, cc, contact, account, products, poll_options, buttons)
             if cc.status == MessageStatus.sent and is_new_contact:
                 contact.first_messaged_at = datetime.utcnow()
