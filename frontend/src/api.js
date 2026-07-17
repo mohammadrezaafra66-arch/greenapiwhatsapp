@@ -500,3 +500,29 @@ export const BlacklistApi = {
   remove: (phone) => http.delete(`/blacklist/${phone}`).then((r) => r.data),
   optOutLog: () => http.get("/blacklist/opt-out-log").then((r) => r.data),
 };
+
+// ── Group monitoring / listener + voice (V26) ──────────────
+export const GroupMonitorApi = {
+  setListener: (accountId, is_listener) =>
+    http.post(`/group-monitor/listener/${accountId}`, { is_listener }).then((r) => r.data),
+  listeners: () => http.get("/group-monitor/listeners").then((r) => r.data),
+  availableGroups: (accountId) =>
+    http.get(`/group-monitor/available-groups/${accountId}`).then((r) => r.data),
+  monitored: (listenerInstanceId) =>
+    http.get("/group-monitor/monitored", { params: listenerInstanceId ? { listener_instance_id: listenerInstanceId } : {} }).then((r) => r.data),
+  upsertMonitored: (body) => http.post("/group-monitor/monitored", body).then((r) => r.data),
+  patchMonitored: (id, body) => http.patch(`/group-monitor/monitored/${id}`, body).then((r) => r.data),
+  removeMonitored: (id) => http.delete(`/group-monitor/monitored/${id}`).then((r) => r.data),
+  keywords: () => http.get("/group-monitor/keywords").then((r) => r.data),
+  createKeyword: (body) => http.post("/group-monitor/keywords", body).then((r) => r.data),
+  updateKeyword: (id, body) => http.put(`/group-monitor/keywords/${id}`, body).then((r) => r.data),
+  removeKeyword: (id) => http.delete(`/group-monitor/keywords/${id}`).then((r) => r.data),
+  replies: () => http.get("/group-monitor/replies").then((r) => r.data),
+  createReply: (body) => http.post("/group-monitor/replies", body).then((r) => r.data),
+  updateReply: (id, body) => http.put(`/group-monitor/replies/${id}`, body).then((r) => r.data),
+  removeReply: (id) => http.delete(`/group-monitor/replies/${id}`).then((r) => r.data),
+  messages: (params) => http.get("/group-monitor/messages", { params }).then((r) => r.data),
+  alerts: (onlyUnread) =>
+    http.get("/group-monitor/alerts", { params: onlyUnread ? { only_unread: true } : {} }).then((r) => r.data),
+  markAlertRead: (id) => http.post(`/group-monitor/alerts/${id}/read`).then((r) => r.data),
+};
