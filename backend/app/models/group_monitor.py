@@ -44,7 +44,9 @@ class MonitoredGroup(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     # The listener instance (Green API idInstance as string) that watches this group.
     listener_instance_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    group_id: Mapped[str] = mapped_column(String(80), nullable=False)   # ...@g.us
+    # TG — 'whatsapp' | 'telegram' (reuses this table for both platforms via a discriminator).
+    platform: Mapped[str] = mapped_column(String(20), nullable=False, default="whatsapp")
+    group_id: Mapped[str] = mapped_column(String(80), nullable=False)   # WA: ...@g.us / TG: -number
     group_name: Mapped[str | None] = mapped_column(String(300))
     is_monitored: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     auto_reply_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -61,9 +63,11 @@ class GroupMessage(Base):
     __tablename__ = "group_message"
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     listener_instance_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    # TG — 'whatsapp' | 'telegram'.
+    platform: Mapped[str] = mapped_column(String(20), nullable=False, default="whatsapp")
     group_id: Mapped[str] = mapped_column(String(80), nullable=False)
     group_name: Mapped[str | None] = mapped_column(String(300))
-    sender: Mapped[str | None] = mapped_column(String(80))          # ...@c.us (author inside group)
+    sender: Mapped[str | None] = mapped_column(String(80))          # author inside group
     sender_name: Mapped[str | None] = mapped_column(String(300))
     # Green API idMessage — unique for dedupe.
     id_message: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)

@@ -23,9 +23,10 @@ from app.models.group_monitor import (
 logger = logging.getLogger("afrakala.group_ingest")
 
 
-def is_group_chat(chat_id: str | None) -> bool:
-    """A WhatsApp chat is a GROUP iff its chatId ends with @g.us (private chats end @c.us)."""
-    return bool(chat_id) and chat_id.endswith("@g.us")
+def is_group_chat(chat_id: str | None, platform: str = "whatsapp") -> bool:
+    """A chat is a GROUP: WhatsApp → ends '@g.us'; Telegram → a negative-number chatId."""
+    from app.services.platforms import is_group_chat_id
+    return is_group_chat_id(chat_id, platform)
 
 
 def extract_group_message_fields(payload: dict) -> dict:
@@ -98,15 +99,16 @@ async def _monitored_group(db, instance_id: str, group_id: str) -> MonitoredGrou
     )).scalar_one_or_none()
 
 
-async def ingest_group_message(instance_id: str, payload: dict):
+async def ingest_group_message(instance_id: str, payload: dict, platform: str = "whatsapp"):
     """Capture one incoming group message if (and only if) it belongs to a listener
     instance and a monitored group. Deduped on id_message. Returns the GroupMessage id
     (str) for a new row, or None if ignored/duplicate. Opens its own session; safe to call
     best-effort. In PART 3/4 the caller kicks detection/voice off the returned id.
+    Platform-aware: WhatsApp groups end '@g.us', Telegram groups are a negative number.
     """
     sender = payload.get("senderData", {}) or {}
     chat_id = sender.get("chatId", "")
-    if not is_group_chat(chat_id):
+    if not is_group_chat(chat_id, platform):
         return None  # private chat → handled by the existing inbox path, not here
 
     id_message = payload.get("idMessage", "")
@@ -131,6 +133,7 @@ async def ingest_group_message(instance_id: str, payload: dict):
         # group_name falls back to the monitored-group record if the webhook omitted it.
         gm = GroupMessage(
             listener_instance_id=instance_id,
+            platform=platform,
             group_id=fields["group_id"] or chat_id,
             group_name=fields["group_name"] or (mg.group_name or ""),
             sender=fields["sender"],

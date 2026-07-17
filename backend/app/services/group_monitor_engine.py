@@ -181,10 +181,18 @@ async def _send_reply(db, gm: GroupMessage, reply_text: str) -> bool:
     if not acc:
         return False
     try:
+        import asyncio
         from app.services.green_api import GreenAPIClient
-        client = GreenAPIClient(acc.instance_id, acc.api_token)
+        platform = getattr(acc, "platform", "whatsapp") or "whatsapp"
+        client = GreenAPIClient(acc.instance_id, acc.api_token,
+                                platform=platform, api_host=getattr(acc, "api_host", None))
         # Typing/recording indicator for a length-scaled, jittered duration (anti-ban).
         await apply_typing_simulation(client, gm.group_id, reply_text)
+        # TG — a monitored group we're replying in is an established chat (not a fresh
+        # non-contact), so the 48h gate doesn't block it; still honor Telegram's 10–15s pacing.
+        if platform == "telegram":
+            from app.services.telegram_send import telegram_send_delay
+            await asyncio.sleep(telegram_send_delay())
         msg_id = await client.send_group_message(gm.group_id, reply_text)
         return bool(msg_id)
     except Exception as e:

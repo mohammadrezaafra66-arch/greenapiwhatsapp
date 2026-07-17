@@ -107,6 +107,7 @@ class MonitoredUpsert(BaseModel):
     is_monitored: bool = True
     auto_reply_enabled: bool = False
     conversation_mode: str = CONVERSATION_MODE_OFF
+    platform: str = "whatsapp"    # TG — 'whatsapp' | 'telegram'
 
 
 @router.get("/monitored")
@@ -137,10 +138,12 @@ async def upsert_monitored(body: MonitoredUpsert, db: AsyncSession = Depends(get
         existing.conversation_mode = body.conversation_mode
         m = existing
     else:
+        from app.services.platforms import normalize_platform
         m = MonitoredGroup(
             listener_instance_id=body.listener_instance_id, group_id=body.group_id,
             group_name=body.group_name, is_monitored=body.is_monitored,
             auto_reply_enabled=body.auto_reply_enabled, conversation_mode=body.conversation_mode,
+            platform=normalize_platform(body.platform),
         )
         db.add(m)
     await db.commit()
