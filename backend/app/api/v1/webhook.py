@@ -91,6 +91,22 @@ async def handle_incoming(instance_id: str, payload: dict):
         await _process_reaction(instance_id, payload)
         return
 
+    # V26 PART 2 — ADDITIVE group-monitoring ingest. If this instance is a listener and
+    # the message is from a monitored group (@g.us), capture it into group_message (deduped
+    # on idMessage). Fully guarded & best-effort so it can NEVER disrupt the existing inbox/
+    # campaign/warm-up processing below; private (@c.us) messages skip this entirely.
+    try:
+        if "@g.us" in sender.get("chatId", ""):
+            from app.services.group_ingest import ingest_group_message
+            gm_id = await ingest_group_message(instance_id, payload)
+            if gm_id:
+                # V26 PART 3/4 — run keyword detection + optional auto-reply; a voice note
+                # is transcribed first (PART 4) then detected on its transcript.
+                from app.services.group_monitor_engine import handle_new_group_message
+                await handle_new_group_message(gm_id)
+    except Exception as e:
+        logger.warning("group-monitor ingest failed (non-fatal): %s", e)
+
     is_edited = type_message == "editedMessage"
     is_deleted = type_message in ("deletedMessage", "revokedMessage")
 

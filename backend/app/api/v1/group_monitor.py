@@ -32,7 +32,19 @@ async def set_listener_role(account_id: str, body: ListenerBody, db: AsyncSessio
     if not ok:
         raise HTTPException(400, err)
     await db.commit()
-    return {"account_id": account_id, "is_listener": acc.is_listener}
+
+    webhook_applied = False
+    if acc.is_listener:
+        # Enable the incomingWebhook setting so group messages reach the backend. This is
+        # webhook-only: polling is NEVER touched and the webhook URL / ngrok is NOT changed.
+        try:
+            from app.services.green_api import GreenAPIClient
+            client = GreenAPIClient(acc.instance_id, acc.api_token)
+            webhook_applied = await client.set_settings({"incomingWebhook": "yes"})
+        except Exception:
+            webhook_applied = False
+    return {"account_id": account_id, "is_listener": acc.is_listener,
+            "incoming_webhook_applied": bool(webhook_applied)}
 
 
 @router.get("/listeners")
