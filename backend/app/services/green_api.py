@@ -45,10 +45,24 @@ def _register_error(instance_id: str):
 
 
 class GreenAPIClient:
-    def __init__(self, instance_id: str, api_token: str):
+    def __init__(self, instance_id: str, api_token: str, platform: str = "whatsapp",
+                 api_host: str | None = None):
         self.instance_id = instance_id
         self.api_token = api_token
-        self.base_url = f"https://api.green-api.com/waInstance{instance_id}"
+        # TG — platform + API host awareness. Telegram instances live on a separate Green API
+        # partner project/host; api_host overrides the default. The 'waInstance' path prefix
+        # is the same for both platforms (Green API legacy naming).
+        self.platform = (platform or "whatsapp").strip().lower()
+        host = (api_host or "https://api.green-api.com").rstrip("/")
+        self.api_host = host
+        self.base_url = f"{host}/waInstance{instance_id}"
+
+    @classmethod
+    def for_account(cls, account) -> "GreenAPIClient":
+        """Build a client from an Account row, honoring its platform + api_host."""
+        return cls(account.instance_id, account.api_token,
+                   platform=getattr(account, "platform", "whatsapp") or "whatsapp",
+                   api_host=getattr(account, "api_host", None))
 
     async def _guarded(self, call):
         """Run an httpx call under the per-instance semaphore, with 429 backoff
@@ -762,6 +776,17 @@ class GreenAPIClient:
         return phone
 
     def _chat_id(self, phone: str) -> str:
+        # TG — a Telegram recipient is often already a resolved numeric chatId
+        # (positive=private, negative=group); pass those through untouched. A raw phone
+        # still falls back to the '<phone>@c.us' form that Green API also accepts for Telegram.
+        if self.platform == "telegram":
+            s = str(phone).strip()
+            if s.endswith("@c.us") or s.endswith("@g.us"):
+                return s
+            import re as _re
+            if _re.match(r"^-?\d+$", s) and (s.startswith("-") or len(s) <= 12):
+                # negative → group id; short positive → resolved Telegram chatId
+                return s
         return f"{self._normalize(phone)}@c.us"
 
     # Backward-compatible alias (v1 used _normalize_phone)

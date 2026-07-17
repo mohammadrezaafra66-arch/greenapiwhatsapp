@@ -18,6 +18,13 @@ class Account(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     instance_id: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     api_token: Mapped[str] = mapped_column(String(200), nullable=False)
+    # TG — platform discriminator: 'whatsapp' (default, existing behavior) | 'telegram'.
+    platform: Mapped[str] = mapped_column(String(20), nullable=False, default="whatsapp")
+    # TG — Telegram API base host for this instance (Telegram lives on a separate Green API
+    # partner project). Null → the default WhatsApp host is used (backward compatible).
+    api_host: Mapped[str | None] = mapped_column(String(200))
+    # TG — set when the instance reached 'authorized'; drives the 48h non-contact gate.
+    authorized_at: Mapped[datetime | None] = mapped_column(DateTime)
     phone: Mapped[str | None] = mapped_column(String(20))
     status: Mapped[AccountStatus] = mapped_column(SAEnum(AccountStatus), default=AccountStatus.pending)
     daily_limit: Mapped[int] = mapped_column(Integer, default=50)

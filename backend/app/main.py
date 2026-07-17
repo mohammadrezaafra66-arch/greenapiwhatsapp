@@ -849,6 +849,33 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V26] {e}")
+        # ── TG — Telegram platform abstraction (additive; WhatsApp defaults preserved) ──
+        ddl_tg = [
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS platform varchar(20) NOT NULL DEFAULT 'whatsapp'",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS api_host varchar(200)",
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS authorized_at timestamp",
+            "CREATE INDEX IF NOT EXISTS idx_accounts_platform ON accounts(platform)",
+            # Telegram group monitoring reuses the V26 tables via a platform column (PART 4).
+            "ALTER TABLE monitored_group ADD COLUMN IF NOT EXISTS platform varchar(20) NOT NULL DEFAULT 'whatsapp'",
+            "ALTER TABLE group_message ADD COLUMN IF NOT EXISTS platform varchar(20) NOT NULL DEFAULT 'whatsapp'",
+            # Telegram warm-up enrollment reuses the V17 table via a platform column (PART 6).
+            "ALTER TABLE warmup_enrollment ADD COLUMN IF NOT EXISTS platform varchar(20) NOT NULL DEFAULT 'whatsapp'",
+            # Cache the resolved Telegram chatId per (instance, phone) so CheckAccount runs once.
+            """CREATE TABLE IF NOT EXISTS telegram_chatid_cache (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                instance_id varchar(50) NOT NULL,
+                phone varchar(30) NOT NULL,
+                chat_id varchar(60) NOT NULL,
+                exist boolean NOT NULL DEFAULT true,
+                created_at timestamp DEFAULT now(),
+                UNIQUE (instance_id, phone)
+            )""",
+        ]
+        for stmt in ddl_tg:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL TG] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:
