@@ -526,3 +526,15 @@ export const GroupMonitorApi = {
     http.get("/group-monitor/alerts", { params: onlyUnread ? { only_unread: true } : {} }).then((r) => r.data),
   markAlertRead: (id) => http.post(`/group-monitor/alerts/${id}/read`).then((r) => r.data),
 };
+
+// ── Telegram (TG PART 2) ───────────────────────────────────
+export const TelegramApi = {
+  create: (body) => http.post("/telegram/accounts", body).then((r) => r.data),
+  qrNotice: () => http.get("/telegram/qr-notice").then((r) => r.data),
+  qr: (id) => http.get(`/telegram/accounts/${id}/qr`).then((r) => r.data),
+  authStart: (id, phone) => http.post(`/telegram/accounts/${id}/auth/start`, { phone }).then((r) => r.data),
+  authCode: (id, code) => http.post(`/telegram/accounts/${id}/auth/code`, { code }).then((r) => r.data),
+  authPassword: (id, password) => http.post(`/telegram/accounts/${id}/auth/password`, { password }).then((r) => r.data),
+  state: (id) => http.get(`/telegram/accounts/${id}/state`).then((r) => r.data),
+  sendTest: (id, chat_id) => http.post(`/telegram/accounts/${id}/send-test`, { chat_id }).then((r) => r.data),
+};

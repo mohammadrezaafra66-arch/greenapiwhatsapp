@@ -23,7 +23,7 @@ from app.api.v1 import (
     partner, messages, incidents, calls,
     capabilities as capabilities_router,
     adlinks, warmup, warmup_helpers,
-    group_monitor,
+    group_monitor, telegram,
 )
 
 @asynccontextmanager
@@ -852,6 +852,7 @@ async def lifespan(app: FastAPI):
         # ── TG — Telegram platform abstraction (additive; WhatsApp defaults preserved) ──
         ddl_tg = [
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS platform varchar(20) NOT NULL DEFAULT 'whatsapp'",
+            "ALTER TYPE accountstatus ADD VALUE IF NOT EXISTS 'suspended'",
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS api_host varchar(200)",
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS authorized_at timestamp",
             "CREATE INDEX IF NOT EXISTS idx_accounts_platform ON accounts(platform)",
@@ -932,7 +933,7 @@ for router in [
     join_links.router, status_schedules.router, ai_keys.router,
     partner.router, messages.router, incidents.router, calls.router,
     capabilities_router.router, adlinks.router, warmup.router,
-    warmup_helpers.router, group_monitor.router,
+    warmup_helpers.router, group_monitor.router, telegram.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

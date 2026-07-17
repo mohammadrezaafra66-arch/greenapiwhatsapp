@@ -11,6 +11,7 @@ class AccountStatus(str, enum.Enum):
     disconnected = "disconnected"
     pending = "pending"
     deleted = "deleted"   # V14 F2 — soft-delete after partner deleteInstanceAccount
+    suspended = "suspended"  # TG — Telegram spam-restriction state (Green API 2026)
 
 class Account(Base):
     __tablename__ = "accounts"

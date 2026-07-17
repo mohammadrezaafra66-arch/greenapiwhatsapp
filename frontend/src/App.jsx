@@ -34,6 +34,7 @@ import Capabilities from "./pages/Capabilities.jsx";
 import AdvertisingLinks from "./pages/AdvertisingLinks.jsx";
 import Warmup from "./pages/Warmup.jsx";
 import GroupMonitoring from "./pages/GroupMonitoring.jsx";
+import TelegramAccounts from "./pages/TelegramAccounts.jsx";
 
 export default function App() {
   return (
@@ -73,6 +74,7 @@ export default function App() {
         <Route path="advertising-links" element={<AdvertisingLinks />} />
         <Route path="warmup" element={<Warmup />} />
         <Route path="group-monitoring" element={<GroupMonitoring />} />
+        <Route path="telegram-accounts" element={<TelegramAccounts />} />
         <Route path="*" element={<div className="text-slate-400">صفحه یافت نشد</div>} />
       </Route>
       </Routes>

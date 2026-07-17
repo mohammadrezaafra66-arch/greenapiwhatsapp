@@ -163,6 +163,25 @@ class GreenAPIClient:
         phone = self._normalize(phone)
         return await self._post("getAuthorizationCode", {"phoneNumber": int(phone)})
 
+    # ── TG — Telegram code-based authorization (FALLBACK; QR is preferred) ────
+    async def start_authorization(self, phone: str) -> dict:
+        """Telegram: begin code-based login; Telegram sends a login code to `phone`.
+        (Green API support flags this path as possibly unstable — prefer QR.)"""
+        return await self._post("startAuthorization",
+                                {"phoneNumber": int(self._normalize(phone))})
+
+    async def send_authorization_code(self, code: str) -> dict:
+        """Telegram: submit the login code received in the Telegram app."""
+        return await self._post("sendAuthorizationCode", {"code": str(code)})
+
+    async def send_authorization_password(self, password: str) -> dict:
+        """Telegram: submit the 2FA cloud password (only for accounts with 2FA enabled)."""
+        return await self._post("sendAuthorizationPassword", {"password": str(password)})
+
+    async def get_account_settings(self) -> dict:
+        """Telegram/WhatsApp account settings + status (exposes suspended/blocked in 2026)."""
+        return await self._get("getAccountSettings")
+
     async def get_wa_settings(self) -> dict:
         """Get WhatsApp account info (name, phone, etc)."""
         return await self._get("getWaSettings")
