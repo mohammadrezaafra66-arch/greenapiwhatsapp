@@ -125,7 +125,9 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
         from app.services.adlinks import links_for_campaign
         message += await links_for_campaign(campaign, db)
         cc.generated_message = message
-        client = GreenAPIClient(account.instance_id, account.api_token)
+        client = GreenAPIClient(account.instance_id, account.api_token,
+                                    platform=getattr(account, 'platform', 'whatsapp') or 'whatsapp',
+                                    api_host=getattr(account, 'api_host', None))  # TG — platform-aware
 
         # V17 PART 1 — typing indicator before sending. When the campaign's typing
         # simulation is OFF (default) this runs the EXACT V16 path (2–4s), so behavior
@@ -417,8 +419,9 @@ async def _run_campaign_inner(campaign_id: str):
                 from app.services.drip import drip_incr
                 await drip_incr(campaign_id)
 
-            from app.services.delay_service import get_delay
-            min_d, max_d = await get_delay(str(account.id))
+            from app.services.delay_service import get_delay_for_account
+            # TG — Telegram accounts use the distinct 10–15s pacing; WhatsApp keeps its config.
+            min_d, max_d = await get_delay_for_account(account)
             # V14 F23.6 — enforce the 500ms absolute floor between chats.
             delay = max(governors.MIN_DELAY_FLOOR_MS / 1000.0, random.uniform(min_d, max_d))
             await asyncio.sleep(delay)
@@ -535,6 +538,6 @@ async def _send_chunk(campaign_id: str, account_id: str, items: list):
 
             products = await _deliver_message(db, campaign, cc, contact, account, products, poll_options, buttons)
 
-            from app.services.delay_service import get_delay
-            min_d, max_d = await get_delay(str(account.id))
+            from app.services.delay_service import get_delay_for_account
+            min_d, max_d = await get_delay_for_account(account)   # TG — platform-aware pacing
             await asyncio.sleep(max(_gov.MIN_DELAY_FLOOR_MS / 1000.0, random.uniform(min_d, max_d)))

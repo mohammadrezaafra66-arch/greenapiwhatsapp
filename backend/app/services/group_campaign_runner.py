@@ -128,7 +128,9 @@ async def run_group_campaign(campaign_id: str):
                 from app.services.adlinks import links_for_campaign
                 message += await links_for_campaign(campaign, db)
 
-                client = GreenAPIClient(account.instance_id, account.api_token)
+                client = GreenAPIClient(account.instance_id, account.api_token,
+                                    platform=getattr(account, 'platform', 'whatsapp') or 'whatsapp',
+                                    api_host=getattr(account, 'api_host', None))  # TG — platform-aware
 
                 # Show "typing..." for 2-4 seconds before sending (more human-like)
                 try:

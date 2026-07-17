@@ -23,6 +23,22 @@ async def get_delay(account_id: str) -> tuple[int, int]:
     return settings.default_min_delay, settings.default_max_delay
 
 
+def delay_for_platform(platform: str | None, wa_delay: tuple[int, int]) -> tuple[int, int]:
+    """TG — return the send delay for `platform`. Telegram uses its OWN 10–15s pacing
+    constant (never the WhatsApp delay); any other platform keeps `wa_delay` unchanged."""
+    from app.services.platforms import normalize_platform, telegram_delay_seconds
+    if normalize_platform(platform) == "telegram":
+        return telegram_delay_seconds()
+    return wa_delay
+
+
+async def get_delay_for_account(account) -> tuple[int, int]:
+    """Platform-aware (min, max) send delay for an Account row. WhatsApp keeps its per-account
+    config; Telegram is forced onto its distinct 10–15s constant."""
+    wa = await get_delay(str(account.id))
+    return delay_for_platform(getattr(account, "platform", "whatsapp"), wa)
+
+
 async def set_delay(account_id: str, min_sec: int, max_sec: int):
     """Upsert the per-account send delay config."""
     async with AsyncSessionLocal() as db:

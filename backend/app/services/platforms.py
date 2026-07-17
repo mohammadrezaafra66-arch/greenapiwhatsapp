@@ -98,3 +98,18 @@ def telegram_delay_seconds() -> tuple[int, int]:
     lo = settings.telegram_min_delay_seconds or TELEGRAM_MIN_DELAY_SECONDS
     hi = settings.telegram_max_delay_seconds or TELEGRAM_MAX_DELAY_SECONDS
     return lo, hi
+
+
+def summarize_by_platform(accounts) -> dict:
+    """Pure: per-platform breakdown of accounts (count + today's sent/received). Powers the
+    platform-aware reporting so WhatsApp and Telegram are reported side-by-side, not merged."""
+    out = {p: {"count": 0, "sent_today": 0, "received_today": 0, "active": 0}
+           for p in PLATFORMS}
+    for a in accounts:
+        p = normalize_platform(getattr(a, "platform", PLATFORM_WHATSAPP))
+        out[p]["count"] += 1
+        out[p]["sent_today"] += int(getattr(a, "sent_today", 0) or 0)
+        out[p]["received_today"] += int(getattr(a, "received_today", 0) or 0)
+        if str(getattr(getattr(a, "status", None), "value", getattr(a, "status", ""))) == "active":
+            out[p]["active"] += 1
+    return out

@@ -455,6 +455,12 @@ class GreenAPIClient:
         r = await self._post("checkWhatsapp", {"phoneNumber": int(phone)})
         return r.get("existsWhatsapp", False)
 
+    async def check_account(self, phone: str) -> dict:
+        """TG — resolve a phone to its real Telegram chatId. Returns Green API's
+        {"exist": bool, "chatId": "..."} (chatId is the resolved numeric id)."""
+        phone = self._normalize(phone)
+        return await self._post("checkAccount", {"phoneNumber": int(phone)})
+
     async def get_avatar(self, phone: str) -> Optional[str]:
         r = await self._post("getAvatar", {"chatId": self._chat_id(phone)})
         return r.get("urlAvatar")

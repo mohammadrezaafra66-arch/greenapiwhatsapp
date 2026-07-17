@@ -45,6 +45,7 @@ from app.models.warmup_helpers import (
 from app.models.group_monitor import (
     MonitoredGroup, GroupMessage, GroupKeyword, GroupPredefinedReply, GroupForbiddenAlert,
 )
+from app.models.telegram import TelegramChatIdCache
 
 __all__ = [
     "Account",
@@ -108,4 +109,5 @@ __all__ = [
     "GroupKeyword",
     "GroupPredefinedReply",
     "GroupForbiddenAlert",
+    "TelegramChatIdCache",
 ]
