@@ -1,6 +1,7 @@
 import React from "react";
 import { Accounts as Api, ProxyApi, WarmupApi } from "../api.js";
 import { Badge, Spinner, Empty, Modal, useAsync } from "../ui.jsx";
+import PlatformSwitcher, { filterByPlatform } from "../components/PlatformSwitcher.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
 import HelpTip, { TIPS } from "../components/HelpTip.jsx";
 import QrAntibanRules from "../components/QrAntibanRules.jsx";
@@ -56,6 +57,7 @@ export default function Accounts() {
   const [renaming, setRenaming] = React.useState(null); // account id being renamed
   const [newName, setNewName] = React.useState("");
   const [pfpProg, setPfpProg] = React.useState(null); // {done,total,finished}
+  const [platform, setPlatform] = React.useState("all"); // TG PART 7 — platform switcher
 
   // FEATURE 17 — apply one picture to every account (0.1/s → 10s apart, background).
   const applyPfpAll = async (file) => {
@@ -139,12 +141,17 @@ export default function Accounts() {
         هر حساب یک شماره واتساپ مستقل است. می‌توانید چندین حساب همزمان فعال داشته باشید. کمپین‌ها به‌صورت چرخشی (round-robin) بین حساب‌های فعال ارسال می‌شوند.
       </div>
 
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-slate-400">پلتفرم:</span>
+        <PlatformSwitcher value={platform} onChange={setPlatform} />
+      </div>
+
       {loading && <Spinner />}
       {error && <div className="card text-red-400">{error}</div>}
       {data && data.length === 0 && <Empty label="هیچ حسابی ثبت نشده است." />}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {data?.map((a) => (
+        {filterByPlatform(data, platform).map((a) => (
           <div key={a.id} className="card space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
