@@ -22,6 +22,20 @@ def task_run_group_campaign(self, campaign_id: str):
     except Exception as exc:
         raise self.retry(exc=exc, countdown=60)
 
+
+# V26 PART 4 — transcribe a monitored-group voice note (Whisper, Persian), then run the
+# SAME keyword detection / auto-reply on the transcript. rate_limit caps concurrency so a
+# busy group can't hammer the OpenAI API; exponential backoff on retryable errors.
+@celery_app.task(bind=True, name="tasks.transcribe_group_voice", max_retries=4,
+                 rate_limit="20/m")
+def task_transcribe_group_voice(self, gm_id: str):
+    try:
+        from app.services.group_voice import process_voice_message
+        run_async(process_voice_message(gm_id))
+    except Exception as exc:
+        # 30s, 60s, 120s, 240s backoff (idempotent: a 'done' row is skipped on retry).
+        raise self.retry(exc=exc, countdown=30 * (2 ** self.request.retries))
+
 @celery_app.task(name="tasks.clear_old_product_mentions")
 def task_clear_old_product_mentions():
     async def _c():
