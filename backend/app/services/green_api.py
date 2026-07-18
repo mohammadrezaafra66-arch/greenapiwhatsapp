@@ -18,6 +18,14 @@ CB_ERROR_THRESHOLD = 5      # consecutive errors before opening the breaker
 CB_COOLDOWN_SECONDS = 300   # skip the instance for 5 minutes when open
 MAX_429_RETRIES = 3
 
+# V27 PART 10 — Green API HTTP status for tariff/monthly-quota exhaustion.
+QUOTA_STATUS_CODE = 466
+
+
+class GreenQuotaExceeded(Exception):
+    """Raised when a Green API call returns 466 (tariff/quota limit). A BILLING condition,
+    deliberately distinct from a ban/yellowCard so the admin alert can tell them apart."""
+
 _semaphores: dict = {}   # (instance_id, loop_id) -> asyncio.Semaphore
 _cb_errors: dict = {}    # instance_id -> consecutive error count
 _cb_until: dict = {}     # instance_id -> monotonic time until which it is skipped
@@ -66,6 +74,12 @@ class GreenAPIClient:
                 if r.status_code == 429 and attempt < MAX_429_RETRIES:
                     await asyncio.sleep(2 ** attempt)  # 1, 2, 4s
                     continue
+                # V27 PART 10 — Green API returns 466 when the account tariff/monthly quota is
+                # exhausted. This is a BILLING state, NOT a ban/health failure, so it must be
+                # surfaced distinctly and must NOT trip the health circuit-breaker.
+                if r.status_code == QUOTA_STATUS_CODE:
+                    raise GreenQuotaExceeded(
+                        f"Green API tariff/quota limit (466) for instance {self.instance_id}")
                 try:
                     r.raise_for_status()
                 except Exception:

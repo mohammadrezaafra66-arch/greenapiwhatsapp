@@ -253,6 +253,14 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
         cc.error_message = str(e)
         cc.retry_count += 1
         campaign.failed_count += 1
+        # V27 PART 10 — a 466 tariff/quota failure is a BILLING issue, not a ban. Record the
+        # distinct Persian admin alert so "nothing is sending" isn't misdiagnosed as a ban.
+        try:
+            from app.services.quota_monitor import is_quota_error, record_quota_incident
+            if is_quota_error(e):
+                await record_quota_incident(db, account, via="send")
+        except Exception:
+            pass
     finally:
         await db.commit()
     return products

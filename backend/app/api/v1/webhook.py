@@ -520,10 +520,12 @@ async def handle_quota_exceeded(instance_id: str, payload: dict):
         )
         account = result.scalar_one_or_none()
         if account:
-            account.quota_exceeded_at = datetime.utcnow()
-            # Don't ban — quota resets, unlike a real ban
+            # V27 PART 10 — record a DISTINCT tariff/quota alert (not a ban/yellowCard) so the
+            # admin knows the cause is billing, not health. Sets quota_exceeded_at internally.
+            from app.services.quota_monitor import record_quota_incident
+            await record_quota_incident(db, account, via="webhook")
             await db.commit()
-            print(f"[ALERT] Account {instance_id} quota exceeded at {datetime.utcnow()}")
+            print(f"[ALERT] Account {instance_id} tariff/quota exceeded at {datetime.utcnow()}")
 
 
 async def handle_device_status(instance_id: str, payload: dict):
