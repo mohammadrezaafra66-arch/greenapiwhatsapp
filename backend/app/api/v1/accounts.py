@@ -95,6 +95,10 @@ async def list_accounts(db: AsyncSession = Depends(get_db)):
             "warmup_state": (enr_map.get(a.instance_id) or (None, None))[0],
             # V20 PART 2 — warm PEER (sender) role: independent of being warmed
             "is_warm_peer": bool(a.is_warm_peer),
+            # V26 — dedicated group-monitoring listener role (mutually exclusive)
+            "is_listener": bool(getattr(a, "is_listener", False)),
+            # TG — platform ('whatsapp' | 'telegram')
+            "platform": getattr(a, "platform", "whatsapp") or "whatsapp",
         }
         for a in accounts
     ]

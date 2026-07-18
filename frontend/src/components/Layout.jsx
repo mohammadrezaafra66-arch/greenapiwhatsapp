@@ -40,12 +40,14 @@ const NAV = [
       { to: "/inbox", label: "صندوق ورودی", badgeKey: "inbox" },
       { to: "/journals", label: "تاریخچه پیام‌ها" },
       { to: "/keyword-rules", label: "پاسخ خودکار" },
+      { to: "/group-monitoring", label: "پایش گروه‌ها" },
       { to: "/calls", label: "تماس‌ها" },
     ],
   },
   {
     label: "شماره‌ها", icon: "📱", children: [
       { to: "/accounts", label: "حساب‌های واتساپ" },
+      { to: "/telegram-accounts", label: "حساب‌های تلگرام" },
       { to: "/account-schedules", label: "زمان‌بندی حساب‌ها" },
       { to: "/protection", label: "محافظت و سلامت", badgeKey: "incidents", badgeRed: true },
       { to: "/warmup", label: "گرم‌سازی هوشمند" },
@@ -92,6 +94,8 @@ const PAGES = [
   { to: "/inbox", label: "صندوق ورودی", syn: "inbox پیام‌های دریافتی" },
   { to: "/journals", label: "تاریخچه پیام‌ها", syn: "journals history" },
   { to: "/keyword-rules", label: "پاسخ خودکار", syn: "keyword auto reply" },
+  { to: "/group-monitoring", label: "پایش گروه‌ها", syn: "group monitor listener voice whisper شنونده صوتی رونویسی کلمه کلیدی ممنوعه" },
+  { to: "/telegram-accounts", label: "حساب‌های تلگرام", syn: "telegram تلگرام اکانت qr اتصال" },
   { to: "/calls", label: "تماس‌ها", syn: "calls تماس بی‌پاسخ hot lead" },
   { to: "/accounts", label: "حساب‌های واتساپ", syn: "accounts شماره پروفایل" },
   { to: "/account-schedules", label: "زمان‌بندی حساب‌ها", syn: "schedule" },

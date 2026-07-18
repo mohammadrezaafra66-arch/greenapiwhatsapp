@@ -53,10 +53,24 @@ def _register_error(instance_id: str):
 
 
 class GreenAPIClient:
-    def __init__(self, instance_id: str, api_token: str):
+    def __init__(self, instance_id: str, api_token: str, platform: str = "whatsapp",
+                 api_host: str | None = None):
         self.instance_id = instance_id
         self.api_token = api_token
-        self.base_url = f"https://api.green-api.com/waInstance{instance_id}"
+        # TG — platform + API host awareness. Telegram instances live on a separate Green API
+        # partner project/host; api_host overrides the default. The 'waInstance' path prefix
+        # is the same for both platforms (Green API legacy naming).
+        self.platform = (platform or "whatsapp").strip().lower()
+        host = (api_host or "https://api.green-api.com").rstrip("/")
+        self.api_host = host
+        self.base_url = f"{host}/waInstance{instance_id}"
+
+    @classmethod
+    def for_account(cls, account) -> "GreenAPIClient":
+        """Build a client from an Account row, honoring its platform + api_host."""
+        return cls(account.instance_id, account.api_token,
+                   platform=getattr(account, "platform", "whatsapp") or "whatsapp",
+                   api_host=getattr(account, "api_host", None))
 
     async def _guarded(self, call):
         """Run an httpx call under the per-instance semaphore, with 429 backoff
@@ -162,6 +176,25 @@ class GreenAPIClient:
         """Login by phone number without QR scan."""
         phone = self._normalize(phone)
         return await self._post("getAuthorizationCode", {"phoneNumber": int(phone)})
+
+    # ── TG — Telegram code-based authorization (FALLBACK; QR is preferred) ────
+    async def start_authorization(self, phone: str) -> dict:
+        """Telegram: begin code-based login; Telegram sends a login code to `phone`.
+        (Green API support flags this path as possibly unstable — prefer QR.)"""
+        return await self._post("startAuthorization",
+                                {"phoneNumber": int(self._normalize(phone))})
+
+    async def send_authorization_code(self, code: str) -> dict:
+        """Telegram: submit the login code received in the Telegram app."""
+        return await self._post("sendAuthorizationCode", {"code": str(code)})
+
+    async def send_authorization_password(self, password: str) -> dict:
+        """Telegram: submit the 2FA cloud password (only for accounts with 2FA enabled)."""
+        return await self._post("sendAuthorizationPassword", {"password": str(password)})
+
+    async def get_account_settings(self) -> dict:
+        """Telegram/WhatsApp account settings + status (exposes suspended/blocked in 2026)."""
+        return await self._get("getAccountSettings")
 
     async def get_wa_settings(self) -> dict:
         """Get WhatsApp account info (name, phone, etc)."""
@@ -435,6 +468,22 @@ class GreenAPIClient:
         phone = self._normalize(phone)
         r = await self._post("checkWhatsapp", {"phoneNumber": int(phone)})
         return r.get("existsWhatsapp", False)
+
+    async def check_account(self, phone: str) -> dict:
+        """TG — resolve a phone to its real Telegram chatId. Returns Green API's
+        {"exist": bool, "chatId": "..."} (chatId is the resolved numeric id)."""
+        phone = self._normalize(phone)
+        return await self._post("checkAccount", {"phoneNumber": int(phone)})
+
+    async def contact_exists(self, phone: str) -> bool:
+        """Platform-aware existence check: WhatsApp uses checkWhatsapp, Telegram uses
+        checkAccount ({'exist': ...}). The single guard the add-participant pipeline calls."""
+        if self.platform == "telegram":
+            try:
+                return bool((await self.check_account(phone)).get("exist", False))
+            except Exception:
+                return False
+        return await self.check_whatsapp(phone)
 
     async def get_avatar(self, phone: str) -> Optional[str]:
         r = await self._post("getAvatar", {"chatId": self._chat_id(phone)})
@@ -776,6 +825,17 @@ class GreenAPIClient:
         return phone
 
     def _chat_id(self, phone: str) -> str:
+        # TG — a Telegram recipient is often already a resolved numeric chatId
+        # (positive=private, negative=group); pass those through untouched. A raw phone
+        # still falls back to the '<phone>@c.us' form that Green API also accepts for Telegram.
+        if self.platform == "telegram":
+            s = str(phone).strip()
+            if s.endswith("@c.us") or s.endswith("@g.us"):
+                return s
+            import re as _re
+            if _re.match(r"^-?\d+$", s) and (s.startswith("-") or len(s) <= 12):
+                # negative → group id; short positive → resolved Telegram chatId
+                return s
         return f"{self._normalize(phone)}@c.us"
 
     # Backward-compatible alias (v1 used _normalize_phone)

@@ -139,7 +139,9 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
         from app.services.adlinks import links_for_campaign
         message += await links_for_campaign(campaign, db)
         cc.generated_message = message
-        client = GreenAPIClient(account.instance_id, account.api_token)
+        client = GreenAPIClient(account.instance_id, account.api_token,
+                                    platform=getattr(account, 'platform', 'whatsapp') or 'whatsapp',
+                                    api_host=getattr(account, 'api_host', None))  # TG — platform-aware
 
         # V27 PART 5 — lazy, cached WhatsApp-existence validation. At most ONE CheckWhatsapp
         # per number per 30 days (cache-first); a number confirmed NOT on WhatsApp is excluded
@@ -352,9 +354,11 @@ async def _run_campaign_inner(campaign_id: str):
         # warmup_enrollment); graduated numbers become eligible again.
         from app.services import governors
         from app.services.warmup_exclusion import enrollment_states_by_instance, warmup_campaign_excluded
+        from app.services.listener_service import listener_campaign_excluded
         enr_map = await enrollment_states_by_instance(db)
         eligible = [a for a in all_active
-                    if not governors.in_cooldown(a) and not warmup_campaign_excluded(a, enr_map)]
+                    if not governors.in_cooldown(a) and not warmup_campaign_excluded(a, enr_map)
+                    and not listener_campaign_excluded(a)]
         # V18 PART 1 — FAIL-CLOSED selection. Selecting one account never expands to many;
         # if the chosen account is not eligible, ABORT (never fall back to all accounts).
         accounts, abort_reason = resolve_sending_accounts(eligible, campaign)
@@ -468,6 +472,17 @@ async def _run_campaign_inner(campaign_id: str):
             if is_new_contact and not await governors.warmup_new_contact_allowed(str(account.id), account.days_active):
                 continue
 
+            # TG PART 6 — hard 48h non-contact gate: a Telegram instance in its first 48h
+            # must NOT message strangers (campaign recipients are non-contacts). Skip them
+            # until the gate opens; WhatsApp accounts are unaffected.
+            if (getattr(account, "platform", "whatsapp") or "whatsapp") == "telegram":
+                from app.services.telegram_send import telegram_can_send_to
+                if not telegram_can_send_to(getattr(account, "authorized_at", None),
+                                            is_existing_contact=not is_new_contact):
+                    cc.status = MessageStatus.skipped
+                    await db.commit()
+                    continue
+
             products = await _deliver_message(db, campaign, cc, contact, account, products, poll_options, buttons)
             if cc.status == MessageStatus.sent and is_new_contact:
                 contact.first_messaged_at = datetime.utcnow()
@@ -479,8 +494,9 @@ async def _run_campaign_inner(campaign_id: str):
                 from app.services.drip import drip_incr
                 await drip_incr(campaign_id)
 
-            from app.services.delay_service import get_delay
-            min_d, max_d = await get_delay(str(account.id))
+            from app.services.delay_service import get_delay_for_account
+            # TG — Telegram accounts use the distinct 10–15s pacing; WhatsApp keeps its config.
+            min_d, max_d = await get_delay_for_account(account)
             # V14 F23.6 — enforce the 500ms absolute floor between chats.
             delay = max(governors.MIN_DELAY_FLOOR_MS / 1000.0, random.uniform(min_d, max_d))
             await asyncio.sleep(delay)
@@ -605,6 +621,6 @@ async def _send_chunk(campaign_id: str, account_id: str, items: list):
 
             products = await _deliver_message(db, campaign, cc, contact, account, products, poll_options, buttons)
 
-            from app.services.delay_service import get_delay
-            min_d, max_d = await get_delay(str(account.id))
+            from app.services.delay_service import get_delay_for_account
+            min_d, max_d = await get_delay_for_account(account)   # TG — platform-aware pacing
             await asyncio.sleep(max(_gov.MIN_DELAY_FLOOR_MS / 1000.0, random.uniform(min_d, max_d)))

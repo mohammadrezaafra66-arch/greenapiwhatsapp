@@ -24,6 +24,8 @@ celery_app.conf.task_routes = {
     "tasks.run_campaign": {"queue": "campaigns"},
     "tasks.run_group_campaign": {"queue": "campaigns"},
     "tasks.poll_accounts": {"queue": "webhooks"},
+    # V26 PART 4 — voice transcription on the webhooks worker (keeps the webhook fast).
+    "tasks.transcribe_group_voice": {"queue": "webhooks"},
     "tasks.extract_all_groups": {"queue": "extraction"},
     "tasks.backfill_group_member_counts": {"queue": "backfill"},
 }

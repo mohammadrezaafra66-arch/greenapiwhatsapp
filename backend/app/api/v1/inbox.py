@@ -20,6 +20,7 @@ async def list_inbox(
     unread: bool = None,
     category: str = None,
     instance_id: str = None,
+    platform: str = None,
     archived: bool = False,
     limit: int = 100,
     db: AsyncSession = Depends(get_db)
@@ -32,6 +33,13 @@ async def list_inbox(
         query = query.where(InboxMessage.category == category)
     if instance_id:
         query = query.where(InboxMessage.instance_id == instance_id)
+    if platform:
+        # TG PART 7 — platform filter: restrict to instances on the given platform.
+        from app.models.account import Account
+        from app.services.platforms import normalize_platform
+        query = query.where(InboxMessage.instance_id.in_(
+            select(Account.instance_id).where(Account.platform == normalize_platform(platform))
+        ))
     # V14 F15 — exclude archived by default; archived=True shows only archived.
     query = query.where(InboxMessage.archived.is_(bool(archived)))
     query = query.order_by(InboxMessage.received_at.desc()).limit(limit)

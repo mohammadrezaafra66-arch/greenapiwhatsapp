@@ -91,6 +91,26 @@ async def handle_incoming(instance_id: str, payload: dict):
         await _process_reaction(instance_id, payload)
         return
 
+    # V26 PART 2 / TG PART 4 — ADDITIVE group-monitoring ingest, now platform-aware. If this
+    # instance is a listener and the message is from a monitored group, capture it into
+    # group_message (deduped on idMessage). WhatsApp groups end '@g.us'; Telegram groups are
+    # a NEGATIVE number string (typeInstance='telegram'). Fully guarded & best-effort so it
+    # can NEVER disrupt existing processing; private chats skip this entirely.
+    try:
+        from app.services.platforms import platform_from_type_instance, is_group_chat_id
+        _platform = platform_from_type_instance(
+            (payload.get("instanceData", {}) or {}).get("typeInstance"))
+        if is_group_chat_id(sender.get("chatId", ""), _platform):
+            from app.services.group_ingest import ingest_group_message
+            gm_id = await ingest_group_message(instance_id, payload, platform=_platform)
+            if gm_id:
+                # V26 PART 3/4 — run keyword detection + optional auto-reply; a voice note
+                # is transcribed first (PART 4) then detected on its transcript.
+                from app.services.group_monitor_engine import handle_new_group_message
+                await handle_new_group_message(gm_id)
+    except Exception as e:
+        logger.warning("group-monitor ingest failed (non-fatal): %s", e)
+
     is_edited = type_message == "editedMessage"
     is_deleted = type_message in ("deletedMessage", "revokedMessage")
 

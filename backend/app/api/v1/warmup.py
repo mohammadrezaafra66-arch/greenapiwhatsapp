@@ -24,6 +24,11 @@ async def enroll_account(account_id: str, db: AsyncSession = Depends(get_db)):
     acc = await db.get(Account, uuid.UUID(account_id))
     if not acc:
         raise HTTPException(404, "اکانت یافت نشد")
+    # V26 — one account = one role: a listener account can never be enrolled in warm-up.
+    from app.services.listener_service import can_enroll_in_warmup
+    ok, err = can_enroll_in_warmup(is_listener=bool(getattr(acc, "is_listener", False)))
+    if not ok:
+        raise HTTPException(400, err)
     from app.services.warmup_mesh_service import enroll_and_preflight
     return await enroll_and_preflight(db, acc)
 
@@ -53,6 +58,12 @@ async def set_warm_peer(account_id: str, body: WarmPeerBody, db: AsyncSession = 
     if not acc:
         raise HTTPException(404, "اکانت یافت نشد")
     if body.is_warm_peer:
+        # V26 — one account = one role: a listener account can never become a warm peer.
+        from app.services.listener_service import can_mark_as_warm_peer
+        ok, err = can_mark_as_warm_peer(is_listener=bool(getattr(acc, "is_listener", False)))
+        if not ok:
+            raise HTTPException(400, err)
+        # V27 PART 3 — gate flagging ON on a real 14-day age + clean history.
         from app.services.warmup_peer_eligibility import check_peer_eligibility
         eligible, reason, message = await check_peer_eligibility(db, acc)
         if not eligible:

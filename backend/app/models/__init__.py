@@ -45,6 +45,10 @@ from app.models.warmup_helpers import (
 from app.models.instance_state import InstanceLiveState
 from app.models.number_check import WhatsappNumberCheck
 from app.models.media_send import CampaignMediaSend
+from app.models.group_monitor import (
+    MonitoredGroup, GroupMessage, GroupKeyword, GroupPredefinedReply, GroupForbiddenAlert,
+)
+from app.models.telegram import TelegramChatIdCache
 
 __all__ = [
     "InstanceLiveState",
@@ -106,4 +110,10 @@ __all__ = [
     "WarmupHelper",
     "WarmupHelperTask",
     "WarmupHelperConfig",
+    "MonitoredGroup",
+    "GroupMessage",
+    "GroupKeyword",
+    "GroupPredefinedReply",
+    "GroupForbiddenAlert",
+    "TelegramChatIdCache",
 ]

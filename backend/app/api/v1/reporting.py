@@ -87,8 +87,19 @@ async def delete_subscriber(subscriber_id: str, db: AsyncSession = Depends(get_d
 
 
 # ── Daily send logs ────────────────────────────────────────
+@router.get("/platform-summary")
+async def platform_summary(db: AsyncSession = Depends(get_db)):
+    """TG — per-platform (WhatsApp vs Telegram) account + send breakdown for the reports UI."""
+    from app.models.account import Account, AccountStatus
+    from app.services.platforms import summarize_by_platform
+    accounts = (await db.execute(
+        select(Account).where(Account.status != AccountStatus.deleted))).scalars().all()
+    return summarize_by_platform(accounts)
+
+
 @router.get("/daily-logs")
-async def daily_logs(date: str | None = None, db: AsyncSession = Depends(get_db)):
+async def daily_logs(date: str | None = None, platform: str | None = None,
+                     db: AsyncSession = Depends(get_db)):
     query = select(DailySendLog).order_by(DailySendLog.sent_at.desc())
     if date:
         try:
@@ -96,6 +107,13 @@ async def daily_logs(date: str | None = None, db: AsyncSession = Depends(get_db)
             query = query.where(DailySendLog.date == d)
         except ValueError:
             raise HTTPException(400, "Invalid date (use YYYY-MM-DD)")
+    if platform:
+        # TG — platform breakdown: restrict to accounts on the given platform.
+        from app.models.account import Account
+        from app.services.platforms import normalize_platform
+        query = query.where(DailySendLog.account_id.in_(
+            select(Account.id).where(Account.platform == normalize_platform(platform))
+        ))
     query = query.limit(500)
     rows = (await db.execute(query)).scalars().all()
     return [

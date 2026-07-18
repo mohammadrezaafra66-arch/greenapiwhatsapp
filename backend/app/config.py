@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     green_partner_token: str = ""
     green_partner_api_url: str = "https://api.green-api.com"
     partner_daily_rate: float = 0
+    # TG — Telegram is a SEPARATE Green API partner project ("4500 Telegram") with its OWN
+    # partner key + API base, stored DISTINCTLY from the WhatsApp partner credentials above.
+    # Never let a Telegram call use the WhatsApp key or vice-versa (see services/platforms.py).
+    green_partner_token_telegram: str = ""
+    green_partner_api_url_telegram: str = "https://api.green-api.com"
+    # TG — Telegram-specific pacing/limits (NEVER share the WhatsApp delay constants).
+    telegram_min_delay_seconds: int = 10
+    telegram_max_delay_seconds: int = 15
     # V14 F23.4 — semi-automatic failover after yellowCard (default OFF: silently moving
     # load to another number can card it too if the message content is the trigger).
     auto_failover_on_yellow_card: bool = False

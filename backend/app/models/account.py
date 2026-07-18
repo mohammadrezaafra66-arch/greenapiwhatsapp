@@ -11,6 +11,7 @@ class AccountStatus(str, enum.Enum):
     disconnected = "disconnected"
     pending = "pending"
     deleted = "deleted"   # V14 F2 — soft-delete after partner deleteInstanceAccount
+    suspended = "suspended"  # TG — Telegram spam-restriction state (Green API 2026)
 
 class Account(Base):
     __tablename__ = "accounts"
@@ -18,6 +19,13 @@ class Account(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     instance_id: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     api_token: Mapped[str] = mapped_column(String(200), nullable=False)
+    # TG — platform discriminator: 'whatsapp' (default, existing behavior) | 'telegram'.
+    platform: Mapped[str] = mapped_column(String(20), nullable=False, default="whatsapp")
+    # TG — Telegram API base host for this instance (Telegram lives on a separate Green API
+    # partner project). Null → the default WhatsApp host is used (backward compatible).
+    api_host: Mapped[str | None] = mapped_column(String(200))
+    # TG — set when the instance reached 'authorized'; drives the 48h non-contact gate.
+    authorized_at: Mapped[datetime | None] = mapped_column(DateTime)
     phone: Mapped[str | None] = mapped_column(String(20))
     status: Mapped[AccountStatus] = mapped_column(SAEnum(AccountStatus), default=AccountStatus.pending)
     daily_limit: Mapped[int] = mapped_column(Integer, default=50)
@@ -47,6 +55,10 @@ class Account(Base):
     # V17 PART 3 — manually mark a known-good number as an eligible warm mesh peer
     # (e.g. 989122270261), so it can warm new numbers even before it "GRADUATED".
     is_warm_peer: Mapped[bool] = mapped_column(Boolean, default=False)
+    # V26 — dedicated group-monitoring "listener" role. A listener ONLY receives group
+    # messages and (optionally) auto-replies; it is mutually exclusive with the
+    # campaign-sender / warm-up-peer / warm-up-cold roles (guarded in listener_service).
+    is_listener: Mapped[bool] = mapped_column(Boolean, default=False)
     # V14 PART F — yellowCard safety (throttle + cooldown)
     throttle_factor: Mapped[float] = mapped_column(Float, default=1.0)
     throttle_until: Mapped[datetime | None] = mapped_column(DateTime)

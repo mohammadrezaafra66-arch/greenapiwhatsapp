@@ -54,7 +54,11 @@ async def _client_for_group(group: WhatsAppGroup, db: AsyncSession) -> GreenAPIC
     account = await db.get(Account, group.account_id)
     if not account:
         raise HTTPException(400, "Owning account not found")
-    return GreenAPIClient(account.instance_id, account.api_token)
+    # TG — platform-aware client (Telegram host/chatId) via a constructor call so tests that
+    # mock GreenAPIClient(...) keep working.
+    return GreenAPIClient(account.instance_id, account.api_token,
+                          platform=getattr(account, "platform", "whatsapp") or "whatsapp",
+                          api_host=getattr(account, "api_host", None))
 
 
 @router.get("/")
