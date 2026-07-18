@@ -141,6 +141,22 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
         cc.generated_message = message
         client = GreenAPIClient(account.instance_id, account.api_token)
 
+        # V27 PART 5 — lazy, cached WhatsApp-existence validation. At most ONE CheckWhatsapp
+        # per number per 30 days (cache-first); a number confirmed NOT on WhatsApp is excluded
+        # with a logged reason instead of messaged (a documented spam trigger). Fail-open — a
+        # check error never blocks a legitimate send.
+        try:
+            from app.services.number_validation import validate_number, NONEXISTENT_REASON_FA
+            _res = await validate_number(db, contact.phone, client)
+            if not _res["exists"]:
+                cc.status = MessageStatus.failed
+                cc.error_message = NONEXISTENT_REASON_FA
+                campaign.failed_count += 1
+                await db.commit()
+                return products
+        except Exception:
+            pass  # fail-open — never block a send on the validator
+
         # V17 PART 1 — typing indicator before sending. When the campaign's typing
         # simulation is OFF (default) this runs the EXACT V16 path (2–4s), so behavior
         # is byte-identical. When ON, it uses the length-scaled, jittered simulation.

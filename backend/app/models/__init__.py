@@ -43,9 +43,11 @@ from app.models.warmup_helpers import (
     WarmupHelper, WarmupHelperTask, WarmupHelperConfig,
 )
 from app.models.instance_state import InstanceLiveState
+from app.models.number_check import WhatsappNumberCheck
 
 __all__ = [
     "InstanceLiveState",
+    "WhatsappNumberCheck",
     "Account",
     "AccountStatus",
     "Contact",
