@@ -62,6 +62,35 @@ CAPACITY_FULL_NOTICE = (
     "ظرفیت اکانت‌های گرم پر است — برای گرم‌کردن این شماره، یک اکانت گرم دیگر به‌عنوان فرستنده "
     "اضافه کنید (هر اکانت گرم حداکثر ۲ شماره)."
 )
+# V27 PART 9 — a single-peer, single-point-of-failure design took down a whole cohort when the
+# lone peer was carded. Require at least MIN_DISTINCT_HEALTHY_PEERS distinct HEALTHY peers before
+# a cohort grows beyond SMALL_COHORT active cold numbers, and stagger cold numbers under one peer
+# by STAGGER_DAYS_PER_COLD so a single peer incident can't hit them all on the same day.
+MIN_DISTINCT_HEALTHY_PEERS = 2
+SMALL_COHORT = 2
+STAGGER_DAYS_PER_COLD = 1
+
+
+def is_peer_healthy(account, now: datetime | None = None) -> bool:
+    """A warm peer counts toward the min-peers requirement only if it's usable RIGHT NOW:
+    active, not resting in cooldown, and not throttled."""
+    from app.services import governors
+    return governors.account_available(account, now) and not governors.is_throttled(account, now)
+
+
+def requires_more_peers(active_assigned_cold: int, healthy_peer_count: int,
+                        min_peers: int = MIN_DISTINCT_HEALTHY_PEERS,
+                        small_cohort: int = SMALL_COHORT) -> bool:
+    """True when adding another actively-warmed cold number would push the cohort beyond the
+    small-cohort size without at least `min_peers` distinct healthy peers to spread the risk."""
+    return int(active_assigned_cold) >= int(small_cohort) and int(healthy_peer_count) < int(min_peers)
+
+
+def stagger_offset_days(peer_existing_cold_count: int,
+                        per_cold: int = STAGGER_DAYS_PER_COLD) -> int:
+    """Days to offset a new cold number's first action so two numbers under the SAME peer don't
+    start on the same day (0 for the first, +1 day for the second, …)."""
+    return max(0, int(peer_existing_cold_count)) * int(per_cold)
 # V21 PART 1 — cold-number enrollment states that FREE a warm peer's capacity slot (no longer
 # actively being warmed). Everything else (COOLDOWN/RECEIVING/…/YELLOWCARD) still occupies a slot.
 _SLOT_FREEING_STATES = {
@@ -405,6 +434,7 @@ async def enroll_and_preflight(db, account: Account, *, client_factory=None,
     have = {e.peer_instance_id for e in existing_edges}
     eligible = await eligible_peer_accounts(db, account.instance_id)
     eligible_ids = {p.instance_id for p in eligible}
+    stagger_days = 0   # V27 PART 9 — set when a new peer is assigned that already serves cold numbers
     if any(pid in eligible_ids for pid in have):
         # Already linked to a still-eligible peer (e.g. re-enroll) — retry the handshake, no new peer.
         for e in existing_edges:
@@ -420,22 +450,34 @@ async def enroll_and_preflight(db, account: Account, *, client_factory=None,
         result["notice"] = INSUFFICIENT_PEERS_NOTICE
     else:
         load = await peer_cold_load(db, cfg)
-        peer = select_least_loaded_peer(
-            [p for p in eligible if p.instance_id not in have], load, MAX_COLD_PER_WARM_PEER, rng)
-        if peer is None:
+        # V27 PART 9 — don't concentrate a growing cohort on too few peers. `load` already holds
+        # every peer's cold count (no extra query), so sum(load) is how many cold numbers are
+        # actively assigned right now, and healthy peers come from the loaded eligible pool.
+        active_assigned = sum(load.values())
+        healthy_peers = sum(1 for p in eligible if is_peer_healthy(p, now))
+        if requires_more_peers(active_assigned, healthy_peers):
             result["notice"] = CAPACITY_FULL_NOTICE
         else:
-            edge = await _handshake_edge(db, account, peer, client_factory)
-            result["peers"].append({
-                "peer_instance_id": peer.instance_id,
-                "handshake_state": edge.handshake_state,
-                "messageable": edge_is_messageable(edge),
-            })
+            peer = select_least_loaded_peer(
+                [p for p in eligible if p.instance_id not in have], load, MAX_COLD_PER_WARM_PEER, rng)
+            if peer is None:
+                result["notice"] = CAPACITY_FULL_NOTICE
+            else:
+                # Stagger: if this peer already serves cold numbers, offset this one's first
+                # action so a single peer incident can't hit the whole cohort on the same day.
+                stagger_days = stagger_offset_days(load.get(peer.instance_id, 0))
+                edge = await _handshake_edge(db, account, peer, client_factory)
+                result["peers"].append({
+                    "peer_instance_id": peer.instance_id,
+                    "handshake_state": edge.handshake_state,
+                    "messageable": edge_is_messageable(edge),
+                })
 
     # 3) Enforce the 24h cooldown — hold in COOLDOWN regardless of peers.
     if enrollment.state == WarmupState.ENROLLED.value:
         transition(enrollment, WarmupState.COOLDOWN, now=now)
-    enrollment.next_action_at = enrollment.authorized_at + timedelta(hours=cfg.cooldown_hours)
+    enrollment.next_action_at = (enrollment.authorized_at + timedelta(hours=cfg.cooldown_hours)
+                                 + timedelta(days=stagger_days))
     await _log(db, enrollment.id, "state_change", to=enrollment.state,
                peers=len(result["peers"]), notice=result["notice"])
 
