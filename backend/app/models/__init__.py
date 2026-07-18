@@ -44,10 +44,12 @@ from app.models.warmup_helpers import (
 )
 from app.models.instance_state import InstanceLiveState
 from app.models.number_check import WhatsappNumberCheck
+from app.models.media_send import CampaignMediaSend
 
 __all__ = [
     "InstanceLiveState",
     "WhatsappNumberCheck",
+    "CampaignMediaSend",
     "Account",
     "AccountStatus",
     "Contact",

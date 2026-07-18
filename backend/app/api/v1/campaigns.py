@@ -187,6 +187,15 @@ def _campaign_detail(c: Campaign) -> dict:
     }
 
 
+@router.get("/media-reuse-report")
+async def media_reuse_report(db: AsyncSession = Depends(get_db)):
+    """V27 PART 6 — instances that sent the identical media file to many recipients within the
+    rolling window (spam-risk warning; not a block). For the campaign UI/report."""
+    from app.services.media_fingerprint import reuse_report
+    flagged = await reuse_report(db)
+    return {"flagged": flagged, "count": len(flagged)}
+
+
 @router.get("/price-status")
 async def price_status():
     """V15 — diagnostic: can the app read product prices from Supabase right now?

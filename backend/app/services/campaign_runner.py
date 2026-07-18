@@ -211,6 +211,16 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
             account.sent_today += 1
             campaign.sent_count += 1
             await record_send(str(account.id))
+            # V27 PART 6 — media-fingerprint reuse tracking (image campaigns). Records the
+            # SHA-256 of the file per recipient and logs a spam-risk WARNING (never blocks)
+            # when one instance sends the identical file to many recipients within the window.
+            if campaign.campaign_type == CampaignType.image and campaign.image_url:
+                try:
+                    from app.services.media_fingerprint import media_hash, record_and_check
+                    await record_and_check(db, account.instance_id,
+                                           media_hash(campaign.image_url), contact.phone)
+                except Exception:
+                    pass  # a reuse-tracking hiccup must never affect the send
             # V27 PART 2 — feed the shared per-instance pacer so the mesh (or any other path)
             # won't also fire this instance within the 10–15s floor. Campaign's own per-account
             # 45–110s delay already exceeds the floor, so this only shares the timestamp.
