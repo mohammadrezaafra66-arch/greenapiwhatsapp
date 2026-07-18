@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import select
 
 from app.models.account import Account, AccountStatus
@@ -294,10 +294,27 @@ async def run_warmup_tick(db, now: datetime | None = None, *, client_factory=Non
         )).scalar_one_or_none()
         if not peer_acc:
             continue
+        # V27 PART 2 — peer-level rate limit. The message is sent FROM sender_id (for an
+        # inbound plan that is the shared warm PEER). If that instance sent within the last
+        # jittered 10–15s (for ANY cold number, or a campaign), defer THIS one instead of
+        # letting the peer emit two sends 2.6–9s apart like the incident.
+        from app.services import peer_pacer
+        direction = plan.get("direction")
+        sender_id = peer_acc.instance_id if direction == "inbound" else new_acc.instance_id
+        if not peer_pacer.peer_ready(sender_id, now):
+            wait_s = peer_pacer.seconds_until_ready(sender_id, now)
+            enr.next_action_at = _persist_next_action(
+                now + timedelta(seconds=max(wait_s, peer_pacer.MIN_PEER_GAP_SECONDS)))
+            deferred += 1
+            continue
         recent_hashes, history = await _recent_edge_history(db, getattr(edge, "id", None))
-        await execute_action(db, plan, enr, new_acc, peer_acc, client_factory=client_factory,
-                             now=now, recent_hashes=recent_hashes, history=history,
-                             ai_fn=ai_fn, rng=r)
+        result = await execute_action(db, plan, enr, new_acc, peer_acc, client_factory=client_factory,
+                                      now=now, recent_hashes=recent_hashes, history=history,
+                                      ai_fn=ai_fn, rng=r)
+        if isinstance(result, dict) and result.get("skipped"):
+            deferred += 1
+            continue
+        peer_pacer.record_peer_send(sender_id, now, r)
         acted += 1
 
     await db.commit()

@@ -195,6 +195,11 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
             account.sent_today += 1
             campaign.sent_count += 1
             await record_send(str(account.id))
+            # V27 PART 2 — feed the shared per-instance pacer so the mesh (or any other path)
+            # won't also fire this instance within the 10–15s floor. Campaign's own per-account
+            # 45–110s delay already exceeds the floor, so this only shares the timestamp.
+            from app.services import peer_pacer
+            peer_pacer.record_peer_send(account.instance_id)
             # A3: also increment the scalable Redis day/hour counters (non-fatal).
             try:
                 from app.services import redis_rate_limiter
