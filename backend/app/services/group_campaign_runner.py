@@ -126,6 +126,13 @@ async def run_group_campaign(campaign_id: str):
                 from app.services.adlinks import links_for_campaign
                 message += await links_for_campaign(campaign, db)
 
+                # V27 PART 1 — live pre-send health gate before any group send.
+                from app.services.send_gate import gate_check as _gate_check
+                _grp_allowed, _grp_reason = _gate_check(account)
+                if not _grp_allowed:
+                    print(f"[GroupCampaign] send gate blocked {account.instance_id}: {_grp_reason}")
+                    continue
+
                 client = GreenAPIClient(account.instance_id, account.api_token)
 
                 # Show "typing..." for 2-4 seconds before sending (more human-like)

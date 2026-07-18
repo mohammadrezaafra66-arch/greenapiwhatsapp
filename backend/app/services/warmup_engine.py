@@ -148,6 +148,23 @@ async def execute_action(db, action: dict, enrollment, new_account: Account,
             sender.instance_id, sender.phone, sender.name,
         ) if v
     )
+    # V27 PART 1 — live pre-send health gate. The SENDER (for inbound this is the warm PEER)
+    # must be healthy at the exact moment of sending, not just when this action was scheduled.
+    # This is the direct fix for incident gap #1: a carded peer kept sending 19 more messages
+    # because nothing re-checked its cooldown/live-state right before the API call.
+    from app.services.send_gate import gate_check
+    allowed, gate_reason = gate_check(sender, now)
+    if not allowed:
+        logger.info("mesh send skipped (%s → %s): gate=%s",
+                    sender.instance_id, recipient.instance_id, gate_reason)
+        db.add(WarmupEventLog(
+            enrollment_id=getattr(enrollment, "id", None),
+            edge_id=getattr(edge, "id", None), event_type="gate_skip",
+            delivery_status=gate_reason,
+            payload_json=json.dumps({"sender": sender.instance_id, "reason": gate_reason},
+                                    ensure_ascii=False)))
+        return {"skipped": True, "reason": gate_reason, "message_id": None}
+
     msg, source = await generate_mesh_message(
         persona=persona_for_instance(sender.instance_id), history=history or [],
         recent_hashes=recent_hashes, name=name_for_instance(recipient.instance_id),

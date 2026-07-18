@@ -211,7 +211,10 @@ async def handle_incoming(instance_id: str, payload: dict):
                         is_group=msg.is_group,
                         account_id=str(account.id) if account else None,
                     )
-                    if kw_matched and kw_reply and account:
+                    # V27 PART 1 — live pre-send health gate on the auto-reply send path.
+                    from app.services.send_gate import gate_check as _gate_check
+                    _kw_allowed = bool(account) and _gate_check(account)[0]
+                    if kw_matched and kw_reply and account and _kw_allowed:
                         # scope determines WHERE to reply: 'group'/'both' in a group
                         # replies to the group chatId (raw), otherwise to the sender (PV).
                         if rule_scope in ("group", "both") and msg.is_group:

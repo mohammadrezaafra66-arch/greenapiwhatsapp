@@ -142,6 +142,13 @@ async def _resolve_cold_phone(db, cold_instance_id: str, client_factory) -> tupl
 async def _send_from_main(sender: Account, to_phone: str, text: str, client_factory) -> str | None:
     """Send one message from the main warm account, respecting typing simulation so it looks
     human. Best-effort — a send failure never crashes the tick."""
+    # V27 PART 1 — live pre-send health gate: never ask a helper through an unhealthy main
+    # account (cooldown/throttle/live yellowCard-blocked).
+    from app.services.send_gate import gate_check
+    allowed, gate_reason = gate_check(sender)
+    if not allowed:
+        logger.info("helper-ask skipped via %s: gate=%s", sender.instance_id, gate_reason)
+        return None
     client = client_factory(sender.instance_id, sender.api_token)
     try:
         await show_typing_for_send(client, to_phone, text, enabled=True)

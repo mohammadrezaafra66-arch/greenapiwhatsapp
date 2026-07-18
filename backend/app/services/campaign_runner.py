@@ -97,6 +97,20 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
     """Generate + send one message for (cc, contact) using `account`; mutates state
     and commits. Returns the (possibly lazily-fetched) products list for reuse."""
     try:
+        # V27 PART 1 — live pre-send health gate, immediately before any send work. If the
+        # account went into cooldown/throttle or a live yellowCard/blocked between scheduling
+        # and now, do NOT send: leave the contact pending for a healthy account/future run and
+        # trip the kill-switch on a live danger state so nothing else uses this instance.
+        from app.services.send_gate import gate_check, is_kill_reason, trip_kill_switch_for
+        allowed, gate_reason = gate_check(account)
+        if not allowed:
+            cc.status = MessageStatus.pending
+            cc.error_message = f"send gate: {gate_reason}"
+            if is_kill_reason(gate_reason):
+                await trip_kill_switch_for(db, account, gate_reason)
+            await db.commit()
+            return products
+
         cc.status = MessageStatus.generating
         await db.commit()
 

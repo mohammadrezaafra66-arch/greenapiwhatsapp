@@ -42,8 +42,10 @@ from app.models.warmup_mesh import (
 from app.models.warmup_helpers import (
     WarmupHelper, WarmupHelperTask, WarmupHelperConfig,
 )
+from app.models.instance_state import InstanceLiveState
 
 __all__ = [
+    "InstanceLiveState",
     "Account",
     "AccountStatus",
     "Contact",
