@@ -154,6 +154,31 @@ def task_poll_instance_states():
     run_async(_run())
 
 
+@celery_app.task(name="tasks.quality_score_monitor")
+def task_quality_score_monitor():
+    """V27 PART 8 — hourly per-instance quality score (reply-rate + failure-rate). A low score
+    auto-throttles that instance's outbound campaign sending and records a Persian dashboard
+    warning. Applies to every active sending instance, not only warm-up enrollments."""
+    async def _run():
+        from sqlalchemy import select
+        from app.database import AsyncSessionLocal
+        from app.models.account import Account, AccountStatus
+        from app.services.quality_score import evaluate_and_act
+        async with AsyncSessionLocal() as db:
+            accounts = (await db.execute(
+                select(Account).where(Account.status == AccountStatus.active))).scalars().all()
+            acted = False
+            for acc in accounts:
+                try:
+                    res = await evaluate_and_act(db, acc)
+                    acted = acted or (res.get("acted") == "throttled")
+                except Exception:
+                    continue
+            if acted:
+                await db.commit()
+    run_async(_run())
+
+
 @celery_app.task(name="tasks.sync_call_logs")
 def task_sync_call_logs():
     """V14 F24 — pull the call journals every 30 min (complements live webhooks)."""

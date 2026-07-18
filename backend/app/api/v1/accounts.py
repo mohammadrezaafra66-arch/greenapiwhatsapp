@@ -34,6 +34,29 @@ class AccountLimitsUpdate(BaseModel):
     max_sends_per_minute: float = 2.0
 
 
+@router.get("/quality-scores")
+async def account_quality_scores(db: AsyncSession = Depends(get_db)):
+    """V27 PART 8 — live per-instance quality score (reply-rate + failure-rate) for the
+    dashboard. score is null when there's too little recent volume to judge."""
+    from app.services.quality_score import instance_quality, is_low_quality, LOW_QUALITY_FA
+    accounts = (await db.execute(
+        select(Account).where(Account.status == AccountStatus.active)
+    )).scalars().all()
+    out = []
+    for a in accounts:
+        q = await instance_quality(db, a)
+        low = q["score"] is not None and is_low_quality(q["score"])
+        out.append({
+            "instance_id": a.instance_id, "name": a.name,
+            "score": round(q["score"], 3) if q["score"] is not None else None,
+            "reply_rate": round(q["reply_rate"], 3) if q["reply_rate"] is not None else None,
+            "failure_rate": round(q["failure_rate"], 3) if q["failure_rate"] is not None else None,
+            "sample": q["sample"], "low_quality": low,
+            "notice": LOW_QUALITY_FA if low else None,
+        })
+    return {"accounts": out}
+
+
 @router.get("/")
 async def list_accounts(db: AsyncSession = Depends(get_db)):
     # Hide soft-deleted accounts (status='deleted') from the UI.
