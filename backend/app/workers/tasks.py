@@ -123,6 +123,37 @@ def task_detect_yellow_cards():
     run_async(_run())
 
 
+@celery_app.task(name="tasks.poll_instance_states")
+def task_poll_instance_states():
+    """V27 PART 4 — poll getStateInstance for every active instance on a ~60s cadence
+    (staggered to avoid a thundering herd), refresh the live-state cache the pre-send gate
+    reads, and immediately quarantine any instance reporting a danger state. get_state is a
+    plain GET — this is NOT Green API message-polling (webhook-only receipt stays intact)."""
+    async def _run():
+        from sqlalchemy import select
+        from app.database import AsyncSessionLocal
+        from app.models.account import Account, AccountStatus
+        from app.services.green_api import GreenAPIClient
+        from app.services.state_monitor import apply_state
+        async with AsyncSessionLocal() as db:
+            accounts = (await db.execute(
+                select(Account).where(Account.status == AccountStatus.active))).scalars().all()
+            total = len(accounts)
+            for i, acc in enumerate(accounts):
+                try:
+                    state = await GreenAPIClient(acc.instance_id, acc.api_token).get_state()
+                except Exception:
+                    continue
+                try:
+                    await apply_state(db, acc, state, "poll")
+                except Exception:
+                    pass
+                if i < total - 1:
+                    await asyncio.sleep(0.5)   # stagger across the ~60s window
+            await db.commit()
+    run_async(_run())
+
+
 @celery_app.task(name="tasks.sync_call_logs")
 def task_sync_call_logs():
     """V14 F24 — pull the call journals every 30 min (complements live webhooks)."""

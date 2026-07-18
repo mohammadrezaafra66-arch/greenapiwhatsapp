@@ -49,6 +49,10 @@ celery_app.conf.beat_schedule = {
     "sync-partner-instances": {"task": "tasks.sync_partner_instances", "schedule": 21600.0},
     # V14 F23 — poll for yellowCard every 2 min (webhooks can be missed if the tunnel dies).
     "detect-yellow-cards": {"task": "tasks.detect_yellow_cards", "schedule": 120.0},
+    # V27 PART 4 — real-time instance-state monitoring: refresh the live-state cache the
+    # pre-send gate reads every ~60s and quarantine danger states immediately (getStateInstance
+    # GET only — webhook-only message receipt is untouched).
+    "poll-instance-states": {"task": "tasks.poll_instance_states", "schedule": 60.0},
     # V14 F24 — pull call journals every 30 min.
     "sync-call-logs": {"task": "tasks.sync_call_logs", "schedule": 1800.0},
     # V14 F23.6 — reply-rate monitor hourly.

@@ -268,10 +268,16 @@ async def handle_incoming(instance_id: str, payload: dict):
 
 async def handle_state_change(instance_id: str, payload: dict):
     state = payload.get("stateInstance", "")
+    # V27 PART 4 — a pushed state-change webhook updates the gate's live-state mirror
+    # IMMEDIATELY (faster than the ~60s poll), so a just-carded instance is refused by the
+    # pre-send gate within a webhook round-trip rather than sending more messages.
+    from app.services import send_gate
+    send_gate.update_live_state(instance_id, state)
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Account).where(Account.instance_id == instance_id))
         account = result.scalar_one_or_none()
         if account:
+            await send_gate.persist_live_state(db, instance_id, state, "webhook")
             if state == "blocked":
                 account.status = AccountStatus.banned
                 account.banned_at = datetime.utcnow()
