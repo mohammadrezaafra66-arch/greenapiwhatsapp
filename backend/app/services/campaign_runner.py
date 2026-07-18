@@ -416,6 +416,7 @@ async def _run_campaign_inner(campaign_id: str):
             drip_remaining = max(0, (campaign.drip_per_day or 50) - already)
 
         acc_idx = 0
+        _spike_caps: dict = {}   # V27 PART 7 — per-account guarded cap, computed once per run
         for cc, contact in pending:
             await db.refresh(campaign)
             if campaign.status != CampaignStatus.running:
@@ -438,7 +439,17 @@ async def _run_campaign_inner(campaign_id: str):
                 account = accounts[acc_idx % len(accounts)]
                 acc_idx += 1
 
-            if account.sent_today >= governors.effective_daily_cap(account):
+            # V27 PART 7 — volume-spike guard: cap today's sends to a smooth ramp vs the
+            # trailing 7-day average (applies to graduated/established numbers too). Fail-open.
+            _cap = _spike_caps.get(account.id)
+            if _cap is None:
+                try:
+                    from app.services.volume_guard import effective_daily_cap_guarded
+                    _cap = await effective_daily_cap_guarded(db, account)
+                except Exception:
+                    _cap = governors.effective_daily_cap(account)
+                _spike_caps[account.id] = _cap
+            if account.sent_today >= _cap:
                 continue
             if not await can_send(str(account.id)):
                 await asyncio.sleep(60)
@@ -557,6 +568,7 @@ async def _send_chunk(campaign_id: str, account_id: str, items: list):
 
         buttons = [b for b in [campaign.button1_text, campaign.button2_text, campaign.button3_text] if b]
 
+        _chunk_cap = [None]   # V27 PART 7 — guarded daily cap for this chunk's fixed account
         for cc_id, contact_id in items:
             await db.refresh(campaign)
             if campaign.status != CampaignStatus.running:
@@ -570,8 +582,15 @@ async def _send_chunk(campaign_id: str, account_id: str, items: list):
                 await db.commit()
                 continue
             from app.services import governors as _gov
-            if account.sent_today >= _gov.effective_daily_cap(account):
-                break  # this account has hit its daily cap
+            # V27 PART 7 — volume-spike guard (account is fixed for this chunk → compute once).
+            if _chunk_cap[0] is None:
+                try:
+                    from app.services.volume_guard import effective_daily_cap_guarded
+                    _chunk_cap[0] = await effective_daily_cap_guarded(db, account)
+                except Exception:
+                    _chunk_cap[0] = _gov.effective_daily_cap(account)
+            if account.sent_today >= _chunk_cap[0]:
+                break  # this account has hit its (spike-guarded) daily cap
             if not await can_send(str(account.id)):
                 await asyncio.sleep(60)
                 continue
