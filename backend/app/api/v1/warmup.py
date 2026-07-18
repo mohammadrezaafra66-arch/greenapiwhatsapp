@@ -44,13 +44,32 @@ class WarmPeerBody(BaseModel):
 
 @router.post("/warm-peer/{account_id}")
 async def set_warm_peer(account_id: str, body: WarmPeerBody, db: AsyncSession = Depends(get_db)):
-    """Manually mark a known-good number (e.g. 989122270261) as an eligible warm mesh peer."""
+    """Manually mark a known-good number (e.g. 989122270261) as an eligible warm mesh peer.
+
+    V27 PART 3 — flagging ON is now gated on a real 14-day age + clean 14-day history so a
+    fresh batch-mate can't be turned into a sender (the exact incident). Un-flagging (OFF) is
+    always allowed."""
     acc = await db.get(Account, uuid.UUID(account_id))
     if not acc:
         raise HTTPException(404, "اکانت یافت نشد")
+    if body.is_warm_peer:
+        from app.services.warmup_peer_eligibility import check_peer_eligibility
+        eligible, reason, message = await check_peer_eligibility(db, acc)
+        if not eligible:
+            raise HTTPException(400, message)
     acc.is_warm_peer = body.is_warm_peer
     await db.commit()
     return {"account_id": account_id, "is_warm_peer": acc.is_warm_peer}
+
+
+@router.get("/peer-eligibility-audit")
+async def peer_eligibility_audit(db: AsyncSession = Depends(get_db)):
+    """V27 PART 3 — retroactively re-validate every currently-flagged warm peer against the
+    14-day age + clean-history rule. Reports failures only; never auto-unflags (the user
+    decides what to do about each, e.g. صالحی once recovered)."""
+    from app.services.warmup_peer_eligibility import audit_existing_peers
+    failing = await audit_existing_peers(db)
+    return {"failing_peers": failing, "count": len(failing)}
 
 
 # ── V17 PART 6 — mesh warm-up dashboard + per-number controls ────────────────
