@@ -97,19 +97,15 @@ async def list_senders(db: AsyncSession = Depends(get_db)):
         .group_by(WarmupHelper.sender_instance_id)
     )).all())
     disabled = await hs.enabled_sender_ids(db)   # V29 — set of explicitly-disabled senders
-    from app.services.warmup_warmth import warmth_for_account
-    out = []
-    for a in accts:
-        w = await warmth_for_account(db, a)      # V29 PART 8 — warmth score on sender selection
-        out.append({
-            "instance_id": a.instance_id, "name": a.name, "phone": a.phone,
-            "platform": getattr(a, "platform", "whatsapp") or "whatsapp",
-            "is_warm_peer": bool(getattr(a, "is_warm_peer", False)),
-            "contact_count": int(counts.get(a.instance_id, 0) or 0),
-            "team_enabled": a.instance_id not in disabled,
-            "warmth_score": w["score"], "warmth_level": w["level"],
-        })
-    return {"senders": out}
+    # NOTE: the per-sender warmth score (PART 8) is served by the dedicated GET /warmth endpoint
+    # and merged client-side, so this lightweight list stays cheap and its shape is unchanged.
+    return {"senders": [{
+        "instance_id": a.instance_id, "name": a.name, "phone": a.phone,
+        "platform": getattr(a, "platform", "whatsapp") or "whatsapp",
+        "is_warm_peer": bool(getattr(a, "is_warm_peer", False)),
+        "contact_count": int(counts.get(a.instance_id, 0) or 0),
+        "team_enabled": a.instance_id not in disabled,   # V29 per-sender «همکاری تیمی» toggle
+    } for a in accts]}
 
 
 @router.get("/warmth")
