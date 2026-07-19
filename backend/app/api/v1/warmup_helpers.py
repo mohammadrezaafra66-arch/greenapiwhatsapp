@@ -426,6 +426,28 @@ async def ack_thread_alert(alert_id: str, db: AsyncSession = Depends(get_db)):
     return {"acknowledged": True}
 
 
+@router.post("/thread-alerts/{alert_id}/resume")
+async def resume_thread_from_alert(alert_id: str, db: AsyncSession = Depends(get_db)):
+    """V30 PART 1 — the admin reviewed a safety-paused thread and decided it is a false positive:
+    acknowledge the alert AND set its thread back to `active` so «همکاری تیمی» continues on it.
+    A no-op resume (thread already active/gone) still acknowledges the alert."""
+    from app.models.warmup_helpers import WarmupThreadAlert, WarmupHelperThread
+    from app.services import warmup_helper_thread as wt
+    a = await db.get(WarmupThreadAlert, uuid.UUID(alert_id))
+    if a is None:
+        raise HTTPException(404, "هشدار یافت نشد")
+    a.acknowledged = True
+    resumed = False
+    if a.thread_id is not None:
+        thread = await db.get(WarmupHelperThread, a.thread_id)
+        if thread is not None and thread.status == wt.STATUS_PAUSED:
+            thread.status = wt.STATUS_ACTIVE
+            resumed = True
+    await db.commit()
+    return {"acknowledged": True, "resumed": resumed,
+            "thread_id": str(a.thread_id) if a.thread_id else None}
+
+
 class TeamEnrollBody(BaseModel):
     cold_instance_id: str
     enabled: bool

@@ -509,6 +509,8 @@ export const WarmupHelpersApi = {
   teamDashboard: () => http.get("/warmup-helpers/team-dashboard").then((r) => r.data),
   threadAlerts: () => http.get("/warmup-helpers/thread-alerts").then((r) => r.data),
   ackThreadAlert: (id) => http.post(`/warmup-helpers/thread-alerts/${id}/ack`).then((r) => r.data),
+  resumeThreadAlert: (id) => http.post(`/warmup-helpers/thread-alerts/${id}/resume`).then((r) => r.data),
+  teamLog: (params) => http.get("/warmup-helpers/log", { params: params || {} }).then((r) => r.data),
   generateThreadPreview: (senderInstanceId, coldInstanceId) =>
     http.post("/warmup-helpers/generate-thread-preview", { sender_instance_id: senderInstanceId, cold_instance_id: coldInstanceId }).then((r) => r.data),
 };
