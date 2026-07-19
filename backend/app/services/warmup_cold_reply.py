@@ -148,6 +148,12 @@ async def run_cold_reply_tick(db, now: datetime | None = None, *, client_factory
     now = now or datetime.now(TEHRAN).replace(tzinfo=None)
     r = rng or random
 
+    # V30 PART 3 — cold-account replies are «همکاری تیمی» sends too: never outside 09:00–19:00
+    # Tehran. Outside the window, leave every pending reply queued (deferred to the next window).
+    from app.services.warmup_team_hours import in_team_hours
+    if not in_team_hours(now):
+        return {"acted": 0, "in_team_hours": False}
+
     due = (await db.execute(
         select(WarmupHelperThread).where(
             WarmupHelperThread.awaiting_reply.is_(True),

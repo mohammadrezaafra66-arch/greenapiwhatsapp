@@ -127,6 +127,11 @@ async def run_team_schedule_tick(db, now: datetime | None = None, *, client_fact
     # Waking hours only — same window the mesh/helper flows use.
     if not in_active_hours(now):
         return {"acted": 0, "in_hours": False}
+    # V30 PART 3 — the narrower «همکاری تیمی»-specific window (09:00–19:00 Tehran). Outside it, no
+    # ask goes out; the tick simply defers to the next valid window.
+    from app.services.warmup_team_hours import in_team_hours
+    if not in_team_hours(now):
+        return {"acted": 0, "in_team_hours": False}
 
     enrolls = (await db.execute(
         select(WarmupTeamEnrollment).where(WarmupTeamEnrollment.is_enabled.is_(True))

@@ -204,12 +204,14 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
     active_helpers = [h for h in await hs.list_helpers(db) if h.is_active]
     created = await ensure_helper_tasks(db, cold_ids, active_helpers)
 
-    # Slow-send gate: waking hours + jittered rate. Outside a slot we still keep the freshly
-    # created pending rows, but send nothing (never a burst).
-    if not hs.can_ask_now(now, conf.next_ask_at, cfg):
+    # Slow-send gate: the jittered rate + waking hours, AND (V30 PART 3) the narrower «همکاری
+    # تیمی»-specific window (09:00–19:00 Tehran) that gates ask AND reminder alike. Outside any of
+    # these we keep the freshly created pending rows but send nothing (never a burst).
+    from app.services.warmup_team_hours import in_team_hours
+    if not in_team_hours(now) or not hs.can_ask_now(now, conf.next_ask_at, cfg):
         await db.commit()
         return {"enabled": True, "acted": 0, "created": created, "throttled": True,
-                "in_hours": in_active_hours(now, cfg)}
+                "in_hours": in_active_hours(now, cfg), "in_team_hours": in_team_hours(now)}
 
     # Pick the ONE main sending account (never a cold number).
     accounts = (await db.execute(
