@@ -841,6 +841,9 @@ async def lifespan(app: FastAPI):
             )""",
             "CREATE INDEX IF NOT EXISTS ix_warmup_helper_thread_helper ON warmup_helper_thread(helper_id)",
             "CREATE INDEX IF NOT EXISTS ix_warmup_helper_thread_cold ON warmup_helper_thread(cold_instance_id)",
+            # PART 5 — scheduled (never instant) cold-account auto-reply, gated on send.
+            "ALTER TABLE warmup_helper_thread ADD COLUMN IF NOT EXISTS awaiting_reply boolean NOT NULL DEFAULT false",
+            "ALTER TABLE warmup_helper_thread ADD COLUMN IF NOT EXISTS pending_reply_at timestamp",
             # PART 4 — admin alerts raised when a forbidden/sensitive word appears in a thread.
             """CREATE TABLE IF NOT EXISTS warmup_thread_alert (
                 id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -123,6 +123,11 @@ class WarmupHelperThread(Base):
     step_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     last_step_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # V29 PART 5 — a due cold-account auto-reply. When the contact's incoming is detected, the
+    # cold reply is SCHEDULED (never instant) for `pending_reply_at`; a tick sends it once the
+    # cold account is eligible (can_send_now + its 24h cooldown cleared + the shared pacer).
+    awaiting_reply: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    pending_reply_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

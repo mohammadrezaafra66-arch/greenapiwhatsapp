@@ -301,6 +301,33 @@ def task_process_helper_warmup():
     run_async(_run())
 
 
+@celery_app.task(name="tasks.process_cold_replies")
+def task_process_cold_replies():
+    """V29 «همکاری تیمی» PART 5 — send AT MOST one due cold-account contextual auto-reply per
+    tick, fully gated (can_send_now + the cold account's 24h cooldown + the shared pacer). A cold
+    account not yet eligible has its reply deferred. No-op when nothing is due."""
+    async def _run():
+        from app.database import AsyncSessionLocal
+        from app.services.warmup_cold_reply import run_cold_reply_tick
+        async with AsyncSessionLocal() as db:
+            await run_cold_reply_tick(db)
+    run_async(_run())
+
+
+@celery_app.task(name="tasks.process_team_schedule")
+def task_process_team_schedule():
+    """V29 «همکاری تیمی» PART 7 — advance each enrolled cold account's 10-day ask schedule,
+    creating due ask-steps (no two steps on one thread per day; waking hours; jittered). Gated on
+    the cold account's existing 24h post-authorization cooldown. No-op until a cold account is
+    enrolled and its cooldown has cleared."""
+    async def _run():
+        from app.database import AsyncSessionLocal
+        from app.services.warmup_team_schedule import run_team_schedule_tick
+        async with AsyncSessionLocal() as db:
+            await run_team_schedule_tick(db)
+    run_async(_run())
+
+
 @celery_app.task(name="tasks.process_group_warmup")
 def task_process_group_warmup():
     """V19 PART 4 — automatic group-placement tick (ADDITIVE to the message mesh; the mesh

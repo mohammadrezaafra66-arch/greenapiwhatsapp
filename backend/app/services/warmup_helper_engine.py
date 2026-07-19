@@ -347,6 +347,14 @@ async def handle_helper_incoming(db, cold_instance_id: str, sender_phone: str,
         alert = await safety.scan_and_flag(db, thread, message_text, safety.DIR_INBOUND)
         flagged = alert is not None
 
+    # V29 PART 5 — schedule the cold account's contextual auto-reply for a natural (never instant)
+    # delay. The reply is actually generated + sent by run_cold_reply_tick once the cold account is
+    # eligible (gated). A safety-paused thread gets NO scheduled reply.
+    if not flagged:
+        from app.services import warmup_cold_reply as ccr
+        thread.awaiting_reply = True
+        thread.pending_reply_at = ccr.cold_reply_due_at(now)
+
     # V28 — thank the contact FROM the same sender that asked them (their own
     # sender_instance_id), falling back to the main account for legacy rows. Generalized to the
     # (sender, contact, cold number) triple instead of one global helper pool. Skipped for a

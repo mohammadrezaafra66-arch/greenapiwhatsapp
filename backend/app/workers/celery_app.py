@@ -80,4 +80,8 @@ celery_app.conf.beat_schedule = {
     # MOST one helper-ask/reminder, gated by waking hours + the jittered rate limiter, so the
     # main account is never blasted. Default OFF (no-op until the toggle is enabled).
     "process-helper-warmup": {"task": "tasks.process_helper_warmup", "schedule": 180.0},
+    # V29 «همکاری تیمی» — cold-account contextual auto-reply tick + the 10-day ask scheduler.
+    # Both send AT MOST one gated/paced message per tick; default no-op until enrolled.
+    "process-cold-replies": {"task": "tasks.process_cold_replies", "schedule": 120.0},
+    "process-team-schedule": {"task": "tasks.process_team_schedule", "schedule": 300.0},
 }
