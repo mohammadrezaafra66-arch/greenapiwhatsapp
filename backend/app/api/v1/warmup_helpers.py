@@ -382,6 +382,40 @@ async def outreach_dashboard(db: AsyncSession = Depends(get_db)):
     return await hs.build_outreach_dashboard(db)
 
 
+@router.get("/thread-alerts")
+async def list_thread_alerts(only_open: bool = True, limit: int = 100,
+                             db: AsyncSession = Depends(get_db)):
+    """V29 PART 4 — admin alerts for safety-paused threads (forbidden/sensitive word). Read-only
+    surfacing; acknowledging one does NOT auto-resume the thread (admin decides)."""
+    from app.models.warmup_helpers import WarmupThreadAlert, WarmupHelper
+    q = select(WarmupThreadAlert)
+    if only_open:
+        q = q.where(WarmupThreadAlert.acknowledged.is_(False))
+    q = q.order_by(WarmupThreadAlert.created_at.desc()).limit(min(limit, 500))
+    rows = (await db.execute(q)).scalars().all()
+    helpers = {str(h.id): h for h in await hs.list_helpers(db)}
+    return {"alerts": [{
+        "id": str(a.id), "thread_id": str(a.thread_id),
+        "helper_id": str(a.helper_id) if a.helper_id else None,
+        "helper_name": (helpers.get(str(a.helper_id)).name if helpers.get(str(a.helper_id)) else None),
+        "cold_instance_id": a.cold_instance_id, "keyword": a.keyword,
+        "direction": a.direction, "message_excerpt": a.message_excerpt,
+        "acknowledged": a.acknowledged,
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+    } for a in rows]}
+
+
+@router.post("/thread-alerts/{alert_id}/ack")
+async def ack_thread_alert(alert_id: str, db: AsyncSession = Depends(get_db)):
+    from app.models.warmup_helpers import WarmupThreadAlert
+    a = await db.get(WarmupThreadAlert, uuid.UUID(alert_id))
+    if a is None:
+        raise HTTPException(404, "هشدار یافت نشد")
+    a.acknowledged = True
+    await db.commit()
+    return {"acknowledged": True}
+
+
 @router.get("/tasks")
 async def list_tasks(cold_instance_id: str | None = None, limit: int = 200,
                      db: AsyncSession = Depends(get_db)):

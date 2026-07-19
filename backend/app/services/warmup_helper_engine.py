@@ -293,10 +293,18 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
 
 
 async def handle_helper_incoming(db, cold_instance_id: str, sender_phone: str,
-                                 now: datetime | None = None, *, client_factory=None) -> dict | None:
-    """Webhook detection: a cold number received an INCOMING message from a helper's phone →
-    mark that helper's task `done` and auto-send the helper a Persian thank-you FROM the main
-    account. No-op (returns None) when the sender isn't a known helper or no open ask exists.
+                                 now: datetime | None = None, *, message_text: str | None = None,
+                                 client_factory=None) -> dict | None:
+    """Webhook detection: a cold number received an INCOMING message from a contact's phone →
+    mark that contact's task `done`, update the (contact × cold) THREAD, run the thread safety
+    scan on the incoming text, and auto-send the contact a Persian thank-you FROM their assigned
+    sender. No-op (returns None) when the sender isn't a known contact or no open ask exists.
+
+    V29 «همکاری تیمی»:
+      • matches on the contact's PRIMARY *or* «شماره کاری» secondary phone;
+      • records the incoming on the thread (stamps last_step_at) and marks the current step done;
+      • a forbidden/sensitive word in the incoming text PAUSES only that thread + alerts admin
+        (thank-you is skipped for a paused thread — the whole feature keeps running).
 
     Best-effort and self-contained: does NOT commit (the webhook's outer session commits), but
     sends the thank-you immediately. Guarded by the caller so it can never disrupt the webhook."""
@@ -306,8 +314,11 @@ async def handle_helper_incoming(db, cold_instance_id: str, sender_phone: str,
     if not digits:
         return None
 
+    # V29 — match the incoming phone against the contact's primary OR secondary («شماره کاری») number.
     helper = (await db.execute(
-        select(WarmupHelper).where(WarmupHelper.phone == digits).limit(1)
+        select(WarmupHelper).where(
+            (WarmupHelper.phone == digits) | (WarmupHelper.phone_secondary == digits)
+        ).limit(1)
     )).scalar_one_or_none()
     if helper is None:
         return None
@@ -325,18 +336,31 @@ async def handle_helper_incoming(db, cold_instance_id: str, sender_phone: str,
     task.status = hs.STATUS_DONE
     task.done_at = now
 
+    # V29 PART 3/4 — update the conversation thread: record activity (the contact acted) and run
+    # the safety scan on the incoming text. A forbidden word pauses THIS thread + raises an alert.
+    from app.services import warmup_helper_thread as wt
+    from app.services import warmup_thread_safety as safety
+    thread = await wt.get_or_create_thread(db, helper.id, cold_instance_id)
+    thread.last_step_at = now
+    flagged = False
+    if message_text:
+        alert = await safety.scan_and_flag(db, thread, message_text, safety.DIR_INBOUND)
+        flagged = alert is not None
+
     # V28 — thank the contact FROM the same sender that asked them (their own
     # sender_instance_id), falling back to the main account for legacy rows. Generalized to the
-    # (sender, contact, cold number) triple instead of one global helper pool.
+    # (sender, contact, cold number) triple instead of one global helper pool. Skipped for a
+    # safety-paused thread.
     enr_map = await _enrollment_states(db)
     accounts = (await db.execute(
         select(Account).where(Account.status == AccountStatus.active)
     )).scalars().all()
     sender = resolve_task_sender(accounts, helper, enr_map)
     sent = False
-    if sender is not None:
+    if sender is not None and not flagged:
         mid = await _send_from_main(sender, helper.phone, hs.build_thankyou_message(helper.name),
                                     client_factory)
         sent = bool(mid)
     return {"helper": helper.name, "cold_instance_id": cold_instance_id,
-            "sender_instance_id": getattr(sender, "instance_id", None), "thanked": sent}
+            "sender_instance_id": getattr(sender, "instance_id", None), "thanked": sent,
+            "thread_paused": flagged}

@@ -280,7 +280,8 @@ async def handle_incoming(instance_id: str, payload: dict):
         if not msg.is_group and sender_phone:
             try:
                 from app.services.warmup_helper_engine import handle_helper_incoming
-                await handle_helper_incoming(db, instance_id, sender_phone, datetime.utcnow())
+                await handle_helper_incoming(db, instance_id, sender_phone, datetime.utcnow(),
+                                             message_text=text)
             except Exception as e:
                 logger.warning("helper warm-up detection failed (non-fatal): %s", e)
 
