@@ -97,13 +97,27 @@ async def list_senders(db: AsyncSession = Depends(get_db)):
         .group_by(WarmupHelper.sender_instance_id)
     )).all())
     disabled = await hs.enabled_sender_ids(db)   # V29 — set of explicitly-disabled senders
-    return {"senders": [{
-        "instance_id": a.instance_id, "name": a.name, "phone": a.phone,
-        "platform": getattr(a, "platform", "whatsapp") or "whatsapp",
-        "is_warm_peer": bool(getattr(a, "is_warm_peer", False)),
-        "contact_count": int(counts.get(a.instance_id, 0) or 0),
-        "team_enabled": a.instance_id not in disabled,   # V29 per-sender «همکاری تیمی» toggle
-    } for a in accts]}
+    from app.services.warmup_warmth import warmth_for_account
+    out = []
+    for a in accts:
+        w = await warmth_for_account(db, a)      # V29 PART 8 — warmth score on sender selection
+        out.append({
+            "instance_id": a.instance_id, "name": a.name, "phone": a.phone,
+            "platform": getattr(a, "platform", "whatsapp") or "whatsapp",
+            "is_warm_peer": bool(getattr(a, "is_warm_peer", False)),
+            "contact_count": int(counts.get(a.instance_id, 0) or 0),
+            "team_enabled": a.instance_id not in disabled,
+            "warmth_score": w["score"], "warmth_level": w["level"],
+        })
+    return {"senders": out}
+
+
+@router.get("/warmth")
+async def warmth(db: AsyncSession = Depends(get_db)):
+    """V29 PART 8 — computed warmth score/level (کم/متوسط/بالا, 0–100) per candidate sender,
+    extending V27's binary warm-peer gate. Shown on sender selection + the dashboard."""
+    from app.services.warmup_warmth import warmth_for_all_senders
+    return {"senders": await warmth_for_all_senders(db)}
 
 
 @router.get("/")
