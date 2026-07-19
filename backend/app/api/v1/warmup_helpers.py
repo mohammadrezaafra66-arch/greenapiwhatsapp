@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.account import Account, AccountStatus
-from app.models.warmup_helpers import WarmupHelperTask, WarmupHelper
+from app.models.warmup_helpers import WarmupHelperTask, WarmupHelper, OutreachBrief
 from app.services import warmup_helper_service as hs
 
 router = APIRouter(prefix="/warmup-helpers", tags=["warmup-helpers"])
@@ -114,6 +114,47 @@ async def set_threshold(body: ThresholdBody, db: AsyncSession = Depends(get_db))
     """Set the soft-warning threshold (banner-only; never blocks)."""
     conf = await hs.set_soft_warning_threshold(db, body.threshold)
     return {"soft_warning_threshold": conf.soft_warning_threshold}
+
+
+class BriefBody(BaseModel):
+    sender_instance_id: str
+    brief_text: str
+    cold_instance_id: str        # the cold number the contacts are asked to greet
+    include_suggestion: bool = True
+
+
+@router.post("/generate-preview")
+async def generate_preview(body: BriefBody, db: AsyncSession = Depends(get_db)):
+    """V28 PART 3 — save the one-line brief and PREVIEW an AI-personalized message per contact
+    of the sender (does NOT send — PART 4's engine handles slow, gated sending). Each message
+    includes the contact's real name, leaks no identifier, and carries the wa.me link for the
+    cold number."""
+    from app.services.outreach_message import generate_outreach_batch, build_outreach_ai_fn
+    from app.services.warmup_helper_engine import _resolve_cold_phone, _default_client_factory
+
+    db.add(OutreachBrief(sender_instance_id=body.sender_instance_id, brief_text=body.brief_text))
+    contacts = [{"id": str(h.id), "name": h.name, "phone": h.phone}
+                for h in await hs.list_helpers_for_sender(db, body.sender_instance_id)
+                if h.is_active]
+
+    phone_digits, cold_acc = await _resolve_cold_phone(db, body.cold_instance_id, _default_client_factory)
+    sender_acc = (await db.execute(
+        select(Account).where(Account.instance_id == body.sender_instance_id))).scalar_one_or_none()
+    forbidden = tuple(v for v in (
+        body.sender_instance_id, getattr(sender_acc, "name", None),
+        body.cold_instance_id, getattr(cold_acc, "name", None),
+    ) if v)
+
+    results = await generate_outreach_batch(
+        brief=body.brief_text, contacts=contacts, cold_phone_digits=phone_digits,
+        ai_fn=build_outreach_ai_fn(), forbidden=forbidden,
+        include_suggestion=body.include_suggestion,
+    )
+    await db.commit()
+    return {"sender_instance_id": body.sender_instance_id, "cold_instance_id": body.cold_instance_id,
+            "count": len(results),
+            "previews": [{"contact_id": r["contact"]["id"], "name": r["contact"]["name"],
+                          "message": r["message"], "source": r["source"]} for r in results]}
 
 
 @router.put("/{helper_id}")
