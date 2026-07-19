@@ -93,3 +93,24 @@ export function askCountSentence(n) {
   const num = Number(n || 0);
   return `این درخواست شماره ${num} برای این مخاطب است`;
 }
+
+// PART 7 — the RUNNING per-contact ask number for each ask event (1 for the contact's first ask,
+// 2 for the second, …). Returns { eventId: runningNumber }. Events may arrive newest-first; we
+// number them in chronological (created_at) order so each row shows its true position in sequence.
+export function askRunningCounts(events) {
+  const withIdx = (events || []).map((e, i) => ({ e, i }));
+  withIdx.sort((a, b) => {
+    const ta = a.e.created_at || "", tb = b.e.created_at || "";
+    if (ta < tb) return -1;
+    if (ta > tb) return 1;
+    return a.i - b.i;   // stable tiebreak on original order
+  });
+  const perContact = {};
+  const out = {};
+  for (const { e } of withIdx) {
+    if (e.event_type !== "ask" || !e.helper_id) continue;
+    perContact[e.helper_id] = (perContact[e.helper_id] || 0) + 1;
+    out[e.id] = perContact[e.helper_id];
+  }
+  return out;
+}

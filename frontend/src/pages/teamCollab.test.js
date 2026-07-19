@@ -3,7 +3,7 @@ import assert from "node:assert";
 import {
   warmthBadge, canAssignCold, filterLogEvents, threadStatusSummary,
   dayInCycleLabel, askCountsByContact, askCountsBySender, askCountSentence,
-  MAX_COLD_PER_CONTACT,
+  askRunningCounts, MAX_COLD_PER_CONTACT,
 } from "./teamCollab.js";
 
 test("warmthBadge maps level string to class", () => {
@@ -79,4 +79,21 @@ test("askCountsBySender counts asks per sender", () => {
 
 test("askCountSentence", () => {
   assert.equal(askCountSentence(5), "این درخواست شماره 5 برای این مخاطب است");
+});
+
+test("askRunningCounts numbers a contact's asks in chronological order", () => {
+  // Provided newest-first; running number must still be 1,2,3 chronologically.
+  const evs = [
+    { id: "e3", event_type: "ask", helper_id: "H1", created_at: "2026-05-04T12:00:00" },
+    { id: "e2", event_type: "ask", helper_id: "H1", created_at: "2026-05-04T11:00:00" },
+    { id: "rem", event_type: "reminder", helper_id: "H1", created_at: "2026-05-04T10:30:00" },
+    { id: "e1", event_type: "ask", helper_id: "H1", created_at: "2026-05-04T10:00:00" },
+    { id: "x1", event_type: "ask", helper_id: "H2", created_at: "2026-05-04T10:15:00" },
+  ];
+  const r = askRunningCounts(evs);
+  assert.equal(r.e1, 1);
+  assert.equal(r.e2, 2);
+  assert.equal(r.e3, 3);
+  assert.equal(r.x1, 1);       // per-contact, independent of H1
+  assert.equal(r.rem, undefined); // reminders are not counted
 });

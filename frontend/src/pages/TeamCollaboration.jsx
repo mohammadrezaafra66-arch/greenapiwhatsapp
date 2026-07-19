@@ -9,7 +9,7 @@ import { useAsync, Spinner, Empty } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
 import {
   warmthBadge, canAssignCold, filterLogEvents, threadStatusSummary,
-  dayInCycleLabel, askCountsByContact, askCountSentence, MAX_COLD_PER_CONTACT,
+  dayInCycleLabel, askRunningCounts, askCountSentence, MAX_COLD_PER_CONTACT,
 } from "./teamCollab.js";
 
 const fa = (n) => (n == null ? "" : String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]));
@@ -360,7 +360,7 @@ function LogPanel() {
     return Object.entries(m);
   }, [events]);
   const filtered = filterLogEvents(events, { eventType: eventType || undefined, senderInstanceId: senderInstanceId || undefined });
-  const askCounts = askCountsByContact(events);   // PART 7 — running per-contact ask counter
+  const running = askRunningCounts(events);   // PART 7 — running per-contact ask number per event
 
   return (
     <div className="card space-y-3">
@@ -393,8 +393,8 @@ function LogPanel() {
               {(e.message_sent || e.message_received) && (
                 <p className="text-xs text-slate-400 mt-1 whitespace-pre-wrap">{e.message_sent || e.message_received}</p>
               )}
-              {e.event_type === "ask" && e.helper_id && askCounts[e.helper_id] != null && (
-                <p className="text-[11px] text-sky-300/80 mt-0.5">{askCountSentence(fa(askCounts[e.helper_id]))}</p>
+              {e.event_type === "ask" && running[e.id] != null && (
+                <p className="text-[11px] text-sky-300/80 mt-0.5">{askCountSentence(fa(running[e.id]))}</p>
               )}
             </div>
           ))}
