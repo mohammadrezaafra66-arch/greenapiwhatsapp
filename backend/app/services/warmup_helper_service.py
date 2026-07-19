@@ -55,7 +55,20 @@ def soft_warning_notice(count: int, threshold: int = DEFAULT_SOFT_WARNING_THRESH
 HELPER_ASK_MIN_GAP_SECONDS = 180   # 3 min floor between two helper-asks from the main account
 HELPER_ASK_MAX_GAP_SECONDS = 420   # 7 min ceiling — randomized within [min, max]
 # A helper is never re-asked for the same cold number more than: 1 ask + 1 reminder.
+# V29 «همکاری تیمی» — the single reminder fires ~45–60 min after the ask if the contact hasn't
+# acted. We fire at the top of that window (60 min) — one reminder per ask-STEP, never a second.
 REMINDER_AFTER_HOURS = 1
+REMINDER_WINDOW_MIN_MINUTES = 45
+REMINDER_WINDOW_MAX_MINUTES = 60
+REMINDER_AFTER_MINUTES = 60      # effective fire mark (within the 45–60 window)
+
+
+def reminder_due(asked_at, now, after_minutes: int = REMINDER_AFTER_MINUTES) -> bool:
+    """PURE. True when an ask-step is old enough (>= after_minutes) to warrant its ONE reminder.
+    None asked_at → not due (never asked yet)."""
+    if asked_at is None:
+        return False
+    return (now - asked_at).total_seconds() >= after_minutes * 60
 
 # Task lifecycle statuses.
 STATUS_PENDING = "pending"
