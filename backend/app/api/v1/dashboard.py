@@ -38,7 +38,13 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     )
     active_campaigns = camp_result.scalar()
 
-    sent_today = sum(a.sent_today for a in accounts)
+    # V30 PART 8 — "کل پیام‌های ارسالی امروز" must reflect ALL of today's real outbound sends
+    # (Tehran calendar day), not just the campaign counter. sum(a.sent_today) missed «همکاری تیمی»,
+    # mesh, and status sends entirely (they use their own ledgers), so a TC-only day showed 0.
+    from app.services.send_metrics import real_sent_today
+    sent_breakdown = await real_sent_today(db)
+    sent_today = sent_breakdown["total"]
+    campaign_sent_today = sum(a.sent_today for a in accounts)   # kept for the per-account view
     received_today = sum(a.received_today for a in accounts)
 
     current_hour = rate_limiter.get_tehran_hour()
@@ -79,7 +85,9 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
         },
         "campaigns": {"active": active_campaigns},
         "messages": {
-            "sent_today": sent_today,
+            "sent_today": sent_today,                       # V30 PART 8 — real cross-ledger total
+            "sent_today_breakdown": sent_breakdown,          # campaign / team_collaboration / mesh / status
+            "campaign_sent_today": campaign_sent_today,       # legacy campaign-counter sum (per-account view)
             "received_today": received_today,
             "inbox_24h": inbox_count,
             "unread": unread,
