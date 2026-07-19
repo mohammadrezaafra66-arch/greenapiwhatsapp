@@ -801,6 +801,95 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V28] {e}")
+        # ── V29 «همکاری تیمی» (Team Collaboration) — EXTENDS V28's warmup_helper* schema
+        #    (no parallel team_collab_* tables). Rich personnel profile on warmup_helper, a
+        #    real DB-level unique on the (contact × cold) pairing, per-sender enable flag, an
+        #    is_current brief flag, the conversation-thread table, per-cold-account enrollment,
+        #    and the dedicated Shamsi-dated event log. ──
+        ddl_v29 = [
+            # PART 1 — rich personnel profile (all nullable; never breaks legacy rows).
+            "ALTER TABLE warmup_helper ADD COLUMN IF NOT EXISTS job_title varchar(200)",
+            "ALTER TABLE warmup_helper ADD COLUMN IF NOT EXISTS years_experience integer",
+            "ALTER TABLE warmup_helper ADD COLUMN IF NOT EXISTS personal_benefit_note text",
+            "ALTER TABLE warmup_helper ADD COLUMN IF NOT EXISTS phone_secondary varchar(20)",
+            # PART 1 — promote the (helper, cold) pairing to a REAL unique constraint (was only
+            # app-enforced on tables created before the V25 CREATE included it). Idempotent via a
+            # unique INDEX so re-running startup never errors.
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_warmup_helper_task_pair "
+            "ON warmup_helper_task(helper_id, cold_instance_id)",
+            # PART 1 — is_current on the append-only brief (exactly one active per sender).
+            "ALTER TABLE outreach_brief ADD COLUMN IF NOT EXISTS is_current boolean NOT NULL DEFAULT true",
+            # PART 1 — per-sender enable flag (the global toggle stays the master switch).
+            """CREATE TABLE IF NOT EXISTS warmup_sender_config (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                sender_instance_id varchar(50) NOT NULL UNIQUE,
+                is_enabled boolean NOT NULL DEFAULT true,
+                updated_at timestamp DEFAULT now()
+            )""",
+            # PART 3 — conversation threads, keyed by (helper, cold_instance). One row per pair
+            # that ever had an ask-step; carries the running topic so follow-ups continue it.
+            """CREATE TABLE IF NOT EXISTS warmup_helper_thread (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                helper_id uuid NOT NULL,
+                cold_instance_id varchar(50) NOT NULL,
+                topic_summary text,
+                step_count integer NOT NULL DEFAULT 0,
+                status varchar(20) NOT NULL DEFAULT 'active',
+                last_step_at timestamp,
+                created_at timestamp DEFAULT now(),
+                UNIQUE (helper_id, cold_instance_id)
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_warmup_helper_thread_helper ON warmup_helper_thread(helper_id)",
+            "CREATE INDEX IF NOT EXISTS ix_warmup_helper_thread_cold ON warmup_helper_thread(cold_instance_id)",
+            # PART 4 — admin alerts raised when a forbidden/sensitive word appears in a thread.
+            """CREATE TABLE IF NOT EXISTS warmup_thread_alert (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                thread_id uuid NOT NULL,
+                helper_id uuid,
+                cold_instance_id varchar(50),
+                keyword varchar(120),
+                direction varchar(20),
+                message_excerpt text,
+                acknowledged boolean NOT NULL DEFAULT false,
+                created_at timestamp DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_warmup_thread_alert_thread ON warmup_thread_alert(thread_id)",
+            # PART 7 — per-cold-account «عضویت در همکاری تیمی» enrollment (distinct from the mesh
+            # warm-up enrollment), with its own 10-day cycle clock.
+            """CREATE TABLE IF NOT EXISTS warmup_team_enrollment (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                cold_instance_id varchar(50) NOT NULL UNIQUE,
+                is_enabled boolean NOT NULL DEFAULT false,
+                enrolled_at timestamp,
+                day_index integer NOT NULL DEFAULT 0,
+                created_at timestamp DEFAULT now(),
+                updated_at timestamp DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_warmup_team_enrollment_cold ON warmup_team_enrollment(cold_instance_id)",
+            # PART 9 — dedicated Team-Collaboration event log (parallel to inbox/send-queue).
+            """CREATE TABLE IF NOT EXISTS warmup_helper_log (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                event_type varchar(20) NOT NULL,
+                from_instance_id varchar(50),
+                to_phone varchar(20),
+                helper_id uuid,
+                sender_instance_id varchar(50),
+                cold_instance_id varchar(50),
+                thread_id uuid,
+                message_sent text,
+                message_received text,
+                created_at timestamp DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_warmup_helper_log_sender ON warmup_helper_log(sender_instance_id)",
+            "CREATE INDEX IF NOT EXISTS ix_warmup_helper_log_cold ON warmup_helper_log(cold_instance_id)",
+            "CREATE INDEX IF NOT EXISTS ix_warmup_helper_log_helper ON warmup_helper_log(helper_id)",
+            "CREATE INDEX IF NOT EXISTS ix_warmup_helper_log_created ON warmup_helper_log(created_at)",
+        ]
+        for stmt in ddl_v29:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V29] {e}")
         # ── V26 — group monitoring (listener) + voice transcription schema ──
         ddl_v26 = [
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_listener boolean DEFAULT false",

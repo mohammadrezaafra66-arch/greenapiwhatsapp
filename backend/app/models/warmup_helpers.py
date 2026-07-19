@@ -20,7 +20,7 @@ Tables:
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, Boolean, DateTime, Text
+from sqlalchemy import String, Integer, Boolean, DateTime, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 from app.database import Base
@@ -29,7 +29,10 @@ from app.database import Base
 class WarmupHelper(Base):
     """A known contact (name + phone) that ONE of the user's own sending accounts
     (`sender_instance_id`) may be asked to greet cold numbers through. Never auto-imported.
-    V28 — no hard count cap; `name` is mandatory; each contact belongs to exactly one sender."""
+    V28 — no hard count cap; `name` is mandatory; each contact belongs to exactly one sender.
+    V29 «همکاری تیمی» — enriched with the personnel profile the AI uses to explain to each
+    contact why helping is personally relevant (job/experience/benefit) + an optional work
+    number («شماره کاری») so ONE contact can talk to the SAME cold account from two numbers."""
     __tablename__ = "warmup_helper"
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
@@ -38,6 +41,11 @@ class WarmupHelper(Base):
     # backward-compat with V25 rows (backfilled to the main account); required for new rows.
     sender_instance_id: Mapped[str | None] = mapped_column(String(50), index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # V29 «همکاری تیمی» — rich personnel profile (all NULLABLE; never breaks legacy rows).
+    job_title: Mapped[str | None] = mapped_column(String(200))                 # سمت در آفراکالا
+    years_experience: Mapped[int | None] = mapped_column(Integer)              # سابقهٔ تخصصی (سال)
+    personal_benefit_note: Mapped[str | None] = mapped_column(Text)            # این سیستم چه سودی برای او دارد
+    phone_secondary: Mapped[str | None] = mapped_column(String(20))            # شماره کاری (اختیاری)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -52,6 +60,11 @@ class WarmupHelperTask(Base):
       • skipped  — abandoned (e.g. helper deactivated) — never messaged again.
     """
     __tablename__ = "warmup_helper_task"
+    # V29 — the (contact × cold-account) pairing is now a REAL DB-level unique constraint, not
+    # merely app-enforced. A contact may be assigned to AT MOST 2 cold accounts (ceiling enforced
+    # in the service), and never the same cold account twice.
+    __table_args__ = (UniqueConstraint("helper_id", "cold_instance_id",
+                                       name="uq_warmup_helper_task_pair"),)
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     helper_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     cold_instance_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
@@ -81,9 +94,27 @@ class WarmupHelperConfig(Base):
 
 class OutreachBrief(Base):
     """V28 — a short one-line instruction (e.g. «به شماره‌های جدید ما سلام بده») tied to a
-    sender, seeding AI-personalized per-contact outreach messages for a batch."""
+    sender, seeding AI-personalized per-contact outreach messages for a batch. Append-only
+    history: a new brief per edit. V29 adds `is_current` so the ACTIVE brief per sender is
+    known WITHOUT relying on created_at ordering (exactly one current row per sender)."""
     __tablename__ = "outreach_brief"
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     sender_instance_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     brief_text: Mapped[str] = mapped_column(Text, nullable=False)
+    # V29 — exactly one row per sender flagged current/active (app-enforced: setting one current
+    # clears the others for that sender). The engine's thread generation seeds from the current.
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class WarmupSenderConfig(Base):
+    """V29 «همکاری تیمی» — per-SENDER enable flag. The V25/V28 toggle
+    (WarmupHelperConfig.is_enabled) stays GLOBAL and still gates the whole helper-assist flow;
+    this adds a finer, per-sender switch (V29 is the first place a per-sender toggle is needed),
+    so one sender's «همکاری تیمی» can be paused without touching the others. Default ON — a
+    sender with contacts participates unless explicitly disabled; the global toggle is the master."""
+    __tablename__ = "warmup_sender_config"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sender_instance_id: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

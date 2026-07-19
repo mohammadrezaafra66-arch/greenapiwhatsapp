@@ -19,7 +19,9 @@ import re
 from datetime import datetime, timedelta
 from sqlalchemy import select, func
 
-from app.models.warmup_helpers import WarmupHelper, WarmupHelperTask, WarmupHelperConfig
+from app.models.warmup_helpers import (
+    WarmupHelper, WarmupHelperTask, WarmupHelperConfig, OutreachBrief, WarmupSenderConfig,
+)
 from app.services.warmup_scheduler import in_active_hours, to_tehran  # 09:00–21:00 Tehran
 from app.services.warmup_state import DEFAULT_WARMUP_CONFIG
 
@@ -175,6 +177,85 @@ async def set_soft_warning_threshold(db, threshold: int) -> WarmupHelperConfig:
     return cfg
 
 
+# ── V29: per-sender enable flag (finer than the global toggle) ───────────────
+async def get_sender_config(db, sender_instance_id: str) -> WarmupSenderConfig:
+    """Fetch (or lazily create, default ON) one sender's «همکاری تیمی» config row."""
+    cfg = (await db.execute(
+        select(WarmupSenderConfig).where(
+            WarmupSenderConfig.sender_instance_id == sender_instance_id).limit(1)
+    )).scalar_one_or_none()
+    if cfg is None:
+        cfg = WarmupSenderConfig(sender_instance_id=sender_instance_id, is_enabled=True)
+        db.add(cfg)
+        await db.flush()
+    return cfg
+
+
+async def set_sender_enabled(db, sender_instance_id: str, enabled: bool) -> WarmupSenderConfig:
+    """Flip ONE sender's «همکاری تیمی» toggle without touching the global master toggle. Commits."""
+    cfg = await get_sender_config(db, sender_instance_id)
+    cfg.is_enabled = bool(enabled)
+    await db.commit()
+    return cfg
+
+
+async def is_sender_enabled(db, sender_instance_id: str | None) -> bool:
+    """True when a sender may participate: a missing config row defaults to ON (opt-out model).
+    A None sender (legacy senderless contact) is treated as enabled — the global toggle governs it."""
+    if not sender_instance_id:
+        return True
+    cfg = (await db.execute(
+        select(WarmupSenderConfig).where(
+            WarmupSenderConfig.sender_instance_id == sender_instance_id).limit(1)
+    )).scalar_one_or_none()
+    return True if cfg is None else bool(cfg.is_enabled)
+
+
+async def enabled_sender_ids(db) -> set[str]:
+    """The set of sender instance_ids explicitly DISABLED, so callers can filter cheaply.
+    Returns disabled ids (absence → enabled). Small table; one query."""
+    rows = (await db.execute(
+        select(WarmupSenderConfig.sender_instance_id, WarmupSenderConfig.is_enabled)
+    )).all()
+    return {sid for sid, en in rows if not en}
+
+
+# ── V29: is_current brief (exactly one active per sender) ─────────────────────
+async def set_current_brief(db, sender_instance_id: str, brief_text: str) -> OutreachBrief:
+    """Append a new brief for a sender and mark it the ONLY current one (clears is_current on the
+    sender's older rows). Append-only history is preserved; `is_current` names the active brief
+    without relying on created_at ordering. Commits."""
+    from sqlalchemy import update as _update
+    await db.execute(
+        _update(OutreachBrief)
+        .where(OutreachBrief.sender_instance_id == sender_instance_id)
+        .values(is_current=False)
+    )
+    brief = OutreachBrief(sender_instance_id=sender_instance_id,
+                          brief_text=(brief_text or "").strip(), is_current=True)
+    db.add(brief)
+    await db.commit()
+    await db.refresh(brief)
+    return brief
+
+
+async def get_current_brief(db, sender_instance_id: str) -> OutreachBrief | None:
+    """The sender's active brief (is_current=true). Falls back to the most-recent row if no row
+    is flagged current yet (legacy pre-V29 briefs), so generation always has a seed if any exists."""
+    cur = (await db.execute(
+        select(OutreachBrief).where(
+            OutreachBrief.sender_instance_id == sender_instance_id,
+            OutreachBrief.is_current.is_(True),
+        ).order_by(OutreachBrief.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+    if cur is not None:
+        return cur
+    return (await db.execute(
+        select(OutreachBrief).where(OutreachBrief.sender_instance_id == sender_instance_id)
+        .order_by(OutreachBrief.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+
+
 async def resolve_main_sender_instance_id(db) -> str | None:
     """The default 'main' sending account used to backfill legacy (senderless) V25 contacts:
     the default account → first warm peer → first active account."""
@@ -225,36 +306,100 @@ async def list_helpers_for_sender(db, sender_instance_id: str) -> list[WarmupHel
     )).scalars().all())
 
 
+# V29 — the FULL name (first + last) is mandatory going forward. A single token (only a first
+# name, no space) is rejected so «همکاری تیمی» always has a real person's full name to use.
+FULL_NAME_REQUIRED_FA = "نام و نام خانوادگی (کامل) مخاطب لازم است."
+
+
+def _normalize_full_name(name: str | None) -> str:
+    """Collapse whitespace on a contact name. Returns '' when empty."""
+    return " ".join((name or "").split())
+
+
+def is_full_name(name: str | None) -> bool:
+    """PURE. True only when `name` looks like a full name (>= 2 whitespace-separated tokens,
+    each non-trivial). V29 requires first + last on every NEW/edited contact."""
+    n = _normalize_full_name(name)
+    if not n:
+        return False
+    parts = [p for p in n.split(" ") if len(p) >= 1]
+    return len(parts) >= 2
+
+
 async def add_helper(db, name: str, phone: str, is_active: bool = True,
-                     sender_instance_id: str | None = None) -> WarmupHelper:
-    """Add ONE known contact for a sender. V28 — NO hard count cap (pacing is the safety
-    rail). `name` is MANDATORY (rejected with a Persian error if empty). Never auto-imports."""
-    name = (name or "").strip()
+                     sender_instance_id: str | None = None, *,
+                     job_title: str | None = None, years_experience: int | None = None,
+                     personal_benefit_note: str | None = None,
+                     phone_secondary: str | None = None,
+                     require_full_name: bool = False) -> WarmupHelper:
+    """Add ONE known contact for a sender. V28 — NO hard count cap (pacing is the safety rail);
+    `name` is MANDATORY (rejected if empty). V29 — the «همکاری تیمی» API passes
+    `require_full_name=True` so NEW user-facing saves must carry a full name (first + last), plus
+    the optional rich personnel profile the AI uses for personalized asks. Never auto-imports.
+
+    (require_full_name defaults False so the V25/V28 service contract — a single-token name — is
+    preserved for existing callers/tests; the full-name guardrail is enforced at the V29 boundary.)"""
+    name = _normalize_full_name(name)
     digits = wa_me_digits(phone)
     if not name:
         raise ValueError("نام مخاطب لازم است")
+    if require_full_name and not is_full_name(name):
+        raise ValueError(FULL_NAME_REQUIRED_FA)
     if not digits:
         raise ValueError("شماره‌ی معتبر لازم است")
+    sec = wa_me_digits(phone_secondary) or None
+    yrs = _coerce_years(years_experience)
     helper = WarmupHelper(name=name, phone=digits, is_active=bool(is_active),
-                          sender_instance_id=sender_instance_id)
+                          sender_instance_id=sender_instance_id,
+                          job_title=(job_title or None) and job_title.strip() or None,
+                          years_experience=yrs,
+                          personal_benefit_note=(personal_benefit_note or None) and
+                          personal_benefit_note.strip() or None,
+                          phone_secondary=sec)
     db.add(helper)
     await db.commit()
     await db.refresh(helper)
     return helper
 
 
+def _coerce_years(v) -> int | None:
+    """Parse years_experience → non-negative int or None (accepts Persian digits). A negative
+    input is rejected (returns None) rather than silently flipped by digit-stripping."""
+    if v is None or v == "":
+        return None
+    if str(v).strip().startswith("-"):
+        return None
+    digits = wa_me_digits(str(v))
+    if not digits:
+        return None
+    try:
+        return int(digits)
+    except (ValueError, TypeError):
+        return None
+
+
+_UNSET = object()
+
+
 async def update_helper(db, helper_id, *, name=None, phone=None, is_active=None,
-                        sender_instance_id=None) -> WarmupHelper:
-    """Edit a contact. V28 — no cap on (re)activation; `name` stays mandatory when provided."""
+                        sender_instance_id=None, job_title=_UNSET, years_experience=_UNSET,
+                        personal_benefit_note=_UNSET, phone_secondary=_UNSET,
+                        require_full_name: bool = False) -> WarmupHelper:
+    """Edit a contact. V28 — no cap on (re)activation; `name` stays mandatory when provided.
+    V29 — the «همکاری تیمی» API passes `require_full_name=True` so an edited name must stay a
+    full name; the rich-profile fields are individually patchable (pass a value to set, omit to
+    leave unchanged, pass empty string to clear)."""
     helper = await db.get(WarmupHelper, helper_id)
     if helper is None:
         raise ValueError("مخاطب یافت نشد")
     if sender_instance_id is not None:
         helper.sender_instance_id = sender_instance_id
     if name is not None:
-        name = name.strip()
+        name = _normalize_full_name(name)
         if not name:
             raise ValueError("نام فرد کمک‌کننده لازم است")
+        if require_full_name and not is_full_name(name):
+            raise ValueError(FULL_NAME_REQUIRED_FA)
         helper.name = name
     if phone is not None:
         digits = wa_me_digits(phone)
@@ -263,6 +408,15 @@ async def update_helper(db, helper_id, *, name=None, phone=None, is_active=None,
         helper.phone = digits
     if is_active is not None:
         helper.is_active = bool(is_active)
+    if job_title is not _UNSET:
+        helper.job_title = (job_title or None) and str(job_title).strip() or None
+    if years_experience is not _UNSET:
+        helper.years_experience = _coerce_years(years_experience)
+    if personal_benefit_note is not _UNSET:
+        helper.personal_benefit_note = (personal_benefit_note or None) and \
+            str(personal_benefit_note).strip() or None
+    if phone_secondary is not _UNSET:
+        helper.phone_secondary = wa_me_digits(phone_secondary) or None
     await db.commit()
     await db.refresh(helper)
     return helper
