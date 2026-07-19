@@ -416,6 +416,42 @@ async def ack_thread_alert(alert_id: str, db: AsyncSession = Depends(get_db)):
     return {"acknowledged": True}
 
 
+class TeamEnrollBody(BaseModel):
+    cold_instance_id: str
+    enabled: bool
+
+
+@router.post("/team-enroll")
+async def team_enroll(body: TeamEnrollBody, db: AsyncSession = Depends(get_db)):
+    """V29 PART 7 — enroll/unenroll a COLD account in «همکاری تیمی». Enrolling starts the 10-day
+    cycle clock; ask-steps do not begin until the cold account's existing 24h cooldown clears."""
+    from app.services import warmup_team_schedule as ts
+    enr = await ts.set_team_enrolled(db, body.cold_instance_id, body.enabled)
+    return {"cold_instance_id": enr.cold_instance_id, "enabled": enr.is_enabled,
+            "enrolled_at": enr.enrolled_at.isoformat() if enr.enrolled_at else None,
+            "day_index": enr.day_index}
+
+
+@router.get("/team-enrollments")
+async def team_enrollments(db: AsyncSession = Depends(get_db)):
+    """V29 PART 7 — every cold account's «همکاری تیمی» enrollment status + day-in-cycle."""
+    from app.models.warmup_helpers import WarmupTeamEnrollment
+    from app.services import warmup_team_schedule as ts
+    from datetime import datetime as _dt
+    rows = (await db.execute(select(WarmupTeamEnrollment))).scalars().all()
+    accounts = (await db.execute(select(Account))).scalars().all()
+    name_by = {a.instance_id: a.name for a in accounts}
+    now = _dt.utcnow()
+    return {"enrollments": [{
+        "cold_instance_id": e.cold_instance_id,
+        "cold_name": name_by.get(e.cold_instance_id, e.cold_instance_id),
+        "enabled": e.is_enabled,
+        "enrolled_at": e.enrolled_at.isoformat() if e.enrolled_at else None,
+        "day_index": ts.team_day_index(e.enrolled_at, now) if e.enrolled_at else 0,
+        "cycle_days": ts.TEAM_CYCLE_DAYS,
+    } for e in rows]}
+
+
 @router.get("/tasks")
 async def list_tasks(cold_instance_id: str | None = None, limit: int = 200,
                      db: AsyncSession = Depends(get_db)):
