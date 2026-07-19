@@ -22,10 +22,40 @@ MAX_PEER_GAP_SECONDS = 15
 # instance_id -> earliest datetime that instance may send again.
 _peer_next_allowed: dict[str, datetime] = {}
 
+# V30 PART 5 — a SEPARATE thank-you-only floor per sender, so a burst of completions never fires
+# multiple thank-yous at once. Distinct from the shared send pacer above: a recent ASK/reminder must
+# NOT defer a courtesy thank-you (that would change V29's inline behavior), but a recent THANK-YOU
+# should defer the next one. reset() clears both.
+_thankyou_next_allowed: dict[str, datetime] = {}
+
 
 def reset() -> None:
-    """Test helper — clear all per-instance pacing state."""
+    """Test helper — clear all per-instance pacing state (send pacer + thank-you pacer)."""
     _peer_next_allowed.clear()
+    _thankyou_next_allowed.clear()
+
+
+def thankyou_ready(instance_id, now: datetime | None = None) -> bool:
+    """V30 PART 5. True if `instance_id` may send a thank-you now (its thank-you floor elapsed)."""
+    if not instance_id:
+        return True
+    now = now or datetime.utcnow()
+    nxt = _thankyou_next_allowed.get(str(instance_id))
+    return nxt is None or now >= nxt
+
+
+def record_thankyou(instance_id, now: datetime | None = None,
+                    rng: random.Random | None = None,
+                    min_gap: int = MIN_PEER_GAP_SECONDS,
+                    max_gap: int = MAX_PEER_GAP_SECONDS) -> datetime:
+    """V30 PART 5. Mark a thank-you just sent from `instance_id`: block its NEXT thank-you until
+    now + a jittered floor, so multiple thank-yous stagger instead of bursting."""
+    now = now or datetime.utcnow()
+    if not instance_id:
+        return now
+    nxt = now + timedelta(seconds=jittered_gap_seconds(rng, min_gap, max_gap))
+    _thankyou_next_allowed[str(instance_id)] = nxt
+    return nxt
 
 
 def jittered_gap_seconds(rng: random.Random | None = None,

@@ -314,6 +314,19 @@ def task_process_cold_replies():
     run_async(_run())
 
 
+@celery_app.task(name="tasks.process_thank_yous")
+def task_process_thank_yous():
+    """V30 PART 5 — send AT MOST one due, DEFERRED thank-you per tick (staggered overflow from a
+    burst of completions), gated by the 09:00–19:00 Tehran window + the sender health gate + the
+    shared per-instance pacer. The first completion is thanked inline; only overflow lands here."""
+    async def _run():
+        from app.database import AsyncSessionLocal
+        from app.services.warmup_thankyou import run_thankyou_tick
+        async with AsyncSessionLocal() as db:
+            await run_thankyou_tick(db)
+    run_async(_run())
+
+
 @celery_app.task(name="tasks.process_team_schedule")
 def task_process_team_schedule():
     """V29 «همکاری تیمی» PART 7 — advance each enrolled cold account's 10-day ask schedule,

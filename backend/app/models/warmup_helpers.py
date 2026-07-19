@@ -128,6 +128,12 @@ class WarmupHelperThread(Base):
     # cold account is eligible (can_send_now + its 24h cooldown cleared + the shared pacer).
     awaiting_reply: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     pending_reply_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # V30 PART 5 — a due, STAGGERED thank-you. When a completion is detected but the sender's
+    # per-instance pacer isn't ready (a burst of completions), the thank-you is scheduled here for
+    # `pending_thankyou_at` and sent later by run_thankyou_tick — paced + inside 09–19 Tehran — so
+    # multiple thank-yous never fire simultaneously.
+    awaiting_thankyou: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    pending_thankyou_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

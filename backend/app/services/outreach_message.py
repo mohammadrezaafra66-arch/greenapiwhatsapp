@@ -19,7 +19,7 @@ import logging
 import random
 
 from app.services.warmup_content import (
-    message_is_safe, is_near_duplicate, content_hash, looks_like_identifier,
+    message_is_safe, is_near_duplicate, content_hash, looks_like_identifier, has_emoji,
 )
 from app.services.warmup_helper_service import wa_me_link, wa_me_digits, SUGGESTED_TEXT
 
@@ -159,6 +159,8 @@ def _thread_system_prompt() -> str:
     return (
         "تو یک دستیار فارسی‌زبان هستی که پیام‌های کوتاه، دوستانه و کاملاً طبیعی و انسانی می‌نویسی. "
         "پیام باید مثل گفت‌وگوی واقعی بین دو همکار باشد، نه تبلیغاتی و نه رباتیک. "
+        "هر بار جمله را متفاوت بگو و هرگز تکراری/نزدیک‌به‌قبلی ننویس. "
+        "یکی دو ایموجی مناسب و طبیعی به‌کار ببر (نه زیاد و نه اسپم). "
         "هرگز شماره تلفن، عدد بلند، شناسه یا لینک ننویس — فقط متن کوتاه محاوره‌ای فارسی. "
         "همیشه مخاطب را با نام کاملش صدا بزن و اگر موضوع گفت‌وگو ادامه‌دار است، همان موضوع را دنبال کن."
     )
@@ -285,6 +287,11 @@ async def generate_thread_ask_message(*, brief: str | None, contact: dict, topic
         if body is None:
             body = _thread_fallback(name, topic, step_count, r)
         source = "fallback"
+
+    # V30 PART 5 — guarantee a natural emoji in every ask body (the AI prompt already requests one;
+    # this backstops an emoji-less AI reply without rejecting an otherwise-good, on-topic message).
+    if not has_emoji(body):
+        body = f"{body} 🙏"
 
     # Append up to 2 wa.me links (explicit ceiling). Each cold number's link is added AFTER body
     # validation because the link legitimately contains that cold number's digits.

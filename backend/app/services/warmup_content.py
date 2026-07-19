@@ -247,6 +247,20 @@ def _apply_variation(text: str, rng: random.Random) -> str:
     return text + rng.choice(tails)
 
 
+# V30 PART 5 — emoji presence check for ask/thank-you content (a natural amount is desired).
+# Covers the common Unicode emoji ranges (emoticons, symbols/pictographs, transport, supplemental,
+# dingbats, misc symbols) plus the frequently-used ✓/❤ variation-selector glyphs.
+_EMOJI_RE = re.compile(
+    "[\U0001F300-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF\U00002190-\U000021FF"
+    "\U00002B00-\U00002BFF\U0000FE00-\U0000FE0F\U00002700-\U000027BF]"
+)
+
+
+def has_emoji(text: str | None) -> bool:
+    """PURE. True if `text` contains at least one emoji/pictograph glyph."""
+    return bool(text) and bool(_EMOJI_RE.search(text))
+
+
 def _safe_name(name: str | None, rng: random.Random) -> str | None:
     """Guarantee any name used in a message is a realistic human first name — never an
     account number/label. If the caller passed an identifier-looking or unknown value,

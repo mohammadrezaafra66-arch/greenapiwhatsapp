@@ -84,4 +84,6 @@ celery_app.conf.beat_schedule = {
     # Both send AT MOST one gated/paced message per tick; default no-op until enrolled.
     "process-cold-replies": {"task": "tasks.process_cold_replies", "schedule": 120.0},
     "process-team-schedule": {"task": "tasks.process_team_schedule", "schedule": 300.0},
+    # V30 PART 5 — send deferred/staggered thank-yous (overflow from bursty completions).
+    "process-thank-yous": {"task": "tasks.process_thank_yous", "schedule": 120.0},
 }

@@ -403,14 +403,34 @@ async def handle_helper_incoming(db, cold_instance_id: str, sender_phone: str,
     )).scalars().all()
     sender = resolve_task_sender(accounts, helper, enr_map)
     sent = False
+    scheduled = False
     if sender is not None and not flagged:
-        ty_text = hs.build_thankyou_message(helper.name)
-        mid = await _send_from_main(sender, helper.phone, ty_text, client_factory)
-        sent = bool(mid)
-        tclog.record(db, event_type=tclog.EVENT_THANK_YOU, from_instance_id=sender.instance_id,
-                     to_phone=helper.phone, helper_id=helper.id,
-                     sender_instance_id=getattr(sender, "instance_id", None),
-                     cold_instance_id=cold_instance_id, thread_id=thread.id, message_sent=ty_text)
+        # V30 PART 5 — AI-generated, varied, emoji, leak-safe thank-you (was a static line). The
+        # FIRST completion sends inline immediately; a BURST of completions (sender pacer not ready)
+        # STAGGERS the overflow — schedule it for run_thankyou_tick so thank-yous never fire at once.
+        from app.services import peer_pacer
+        from app.services.warmup_thankyou import (
+            generate_thank_you, build_thankyou_ai_fn, thankyou_due_at,
+        )
+        forbidden = tuple(v for v in (cold_instance_id, getattr(sender, "name", None),
+                                      helper.sender_instance_id) if v)
+        # Gate on the THANK-YOU-only pacer (a recent ask/reminder must not defer this courtesy
+        # reply; a recent THANK-YOU should). First completion → inline; burst overflow → scheduled.
+        if peer_pacer.thankyou_ready(sender.instance_id, now):
+            ty_text, _src = await generate_thank_you(
+                contact_name=helper.name, ai_fn=build_thankyou_ai_fn(), forbidden=forbidden)
+            mid = await _send_from_main(sender, helper.phone, ty_text, client_factory)
+            sent = bool(mid)
+            if mid:
+                peer_pacer.record_thankyou(sender.instance_id, now)
+            tclog.record(db, event_type=tclog.EVENT_THANK_YOU, from_instance_id=sender.instance_id,
+                         to_phone=helper.phone, helper_id=helper.id,
+                         sender_instance_id=getattr(sender, "instance_id", None),
+                         cold_instance_id=cold_instance_id, thread_id=thread.id, message_sent=ty_text)
+        else:
+            thread.awaiting_thankyou = True
+            thread.pending_thankyou_at = thankyou_due_at(now)
+            scheduled = True
     return {"helper": helper.name, "cold_instance_id": cold_instance_id,
             "sender_instance_id": getattr(sender, "instance_id", None), "thanked": sent,
-            "thread_paused": flagged}
+            "thankyou_scheduled": scheduled, "thread_paused": flagged}

@@ -844,6 +844,9 @@ async def lifespan(app: FastAPI):
             # PART 5 — scheduled (never instant) cold-account auto-reply, gated on send.
             "ALTER TABLE warmup_helper_thread ADD COLUMN IF NOT EXISTS awaiting_reply boolean NOT NULL DEFAULT false",
             "ALTER TABLE warmup_helper_thread ADD COLUMN IF NOT EXISTS pending_reply_at timestamp",
+            # V30 PART 5 — scheduled, staggered thank-you (sent by run_thankyou_tick, not inline).
+            "ALTER TABLE warmup_helper_thread ADD COLUMN IF NOT EXISTS awaiting_thankyou boolean NOT NULL DEFAULT false",
+            "ALTER TABLE warmup_helper_thread ADD COLUMN IF NOT EXISTS pending_thankyou_at timestamp",
             # PART 4 — admin alerts raised when a forbidden/sensitive word appears in a thread.
             """CREATE TABLE IF NOT EXISTS warmup_thread_alert (
                 id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

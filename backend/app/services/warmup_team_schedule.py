@@ -213,13 +213,17 @@ async def run_team_schedule_tick(db, now: datetime | None = None, *, client_fact
                                 step_count=int(thread.step_count or 0))
         forbidden = tuple(v for v in (te.cold_instance_id, getattr(cold_acc, "name", None),
                                       helper.sender_instance_id, getattr(sender, "name", None)) if v)
+        # V30 PART 5 — stronger anti-repeat: seed the generator with this sender's recent ask bodies
+        # so consecutive asks (to the same OR different contacts) are never near-duplicates.
+        from app.services import warmup_helper_log as _tclog
+        recent_bodies = await _tclog.recent_ask_bodies(db, sender.instance_id)
         text, source = await generate_thread_ask_message(
             brief=brief_text,
             contact={"name": helper.name, "job_title": helper.job_title,
                      "years_experience": helper.years_experience,
                      "personal_benefit_note": helper.personal_benefit_note},
             topic=topic, step_count=int(thread.step_count or 0),
-            cold_phone_digits=[phone_digits],
+            cold_phone_digits=[phone_digits], recent=recent_bodies,
             ai_fn=ai_fn if ai_fn is not None else build_thread_ai_fn(), forbidden=forbidden)
 
         mid = await _send_from_main(sender, helper.phone, text, client_factory)
