@@ -505,6 +505,36 @@ async def assign_cold_account(db, helper_id, cold_instance_id: str) -> WarmupHel
     return task
 
 
+# ── V30 PART 4 — completion-based escalation ─────────────────────────────────
+# On a successful completion, GROW the relationship: assign up to this many NEW cold accounts
+# (from the enrolled roster, never already-assigned/completed ones) as the contact's next round.
+ESCALATION_BATCH = 2
+
+
+async def escalate_after_completion(db, helper_id, *, batch: int = ESCALATION_BATCH) -> list[str]:
+    """V30 PART 4. After a contact completes a task, assign up to `batch` NEW enrolled cold accounts
+    (not yet assigned to this contact) as their next round. Returns the newly-assigned cold ids
+    ([] when the roster is exhausted). Creates PENDING tasks only — the gated team tick decides WHEN
+    the next ask actually goes out (per-sender 20-min spacing + 09–19 window + pacer all still apply).
+
+    This deliberately BYPASSES the per-contact 2-ceiling of `assign_cold_account`: that ceiling caps
+    how many cold accounts a SINGLE message references, whereas escalation legitimately grows the
+    relationship ACROSS successful rounds. Already-completed cold accounts are never re-assigned
+    (they are filtered out via the contact's existing assignments)."""
+    from app.models.warmup_helpers import WarmupTeamEnrollment
+    assigned = set(await list_cold_accounts_for_helper(db, helper_id))
+    rows = (await db.execute(
+        select(WarmupTeamEnrollment).where(WarmupTeamEnrollment.is_enabled.is_(True))
+    )).scalars().all()
+    pool = [r.cold_instance_id for r in rows if r.cold_instance_id and r.cold_instance_id not in assigned]
+    new_ids = pool[:max(0, int(batch))]
+    for cid in new_ids:
+        db.add(WarmupHelperTask(helper_id=helper_id, cold_instance_id=cid, status=STATUS_PENDING))
+    if new_ids:
+        await db.flush()
+    return new_ids
+
+
 async def unassign_cold_account(db, helper_id, cold_instance_id: str) -> int:
     """Remove a contact↔cold-account assignment (delete its task rows). Returns rows removed."""
     tasks = (await db.execute(

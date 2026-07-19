@@ -355,6 +355,15 @@ async def handle_helper_incoming(db, cold_instance_id: str, sender_phone: str,
     task.status = hs.STATUS_DONE
     task.done_at = now
 
+    # V30 PART 4 — completion-based escalation: when a team-enrolled cold account's task completes,
+    # assign up to 2 NEW enrolled cold accounts to this contact as their next round (does nothing
+    # when the roster is exhausted). Only queues pending tasks; the gated team tick sends them later
+    # under the 20-min/09–19/pacer rails. Non-completion is unaffected (still one reminder).
+    from app.services import warmup_team_schedule as _ts
+    _te = await _ts.get_team_enrollment(db, cold_instance_id)
+    if _te is not None and _te.is_enabled:
+        await hs.escalate_after_completion(db, helper.id)
+
     # V29 PART 3/4 — update the conversation thread: record activity (the contact acted) and run
     # the safety scan on the incoming text. A forbidden word pauses THIS thread + raises an alert.
     from app.services import warmup_helper_thread as wt
