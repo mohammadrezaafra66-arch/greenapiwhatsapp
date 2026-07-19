@@ -505,6 +505,12 @@ export const WarmupHelpersApi = {
   teamEnroll: (coldInstanceId, enabled) =>
     http.post("/warmup-helpers/team-enroll", { cold_instance_id: coldInstanceId, enabled }).then((r) => r.data),
   teamEnrollments: () => http.get("/warmup-helpers/team-enrollments").then((r) => r.data),
+  // V29 PART 10 team dashboard + PART 4 alerts + PART 3 thread preview
+  teamDashboard: () => http.get("/warmup-helpers/team-dashboard").then((r) => r.data),
+  threadAlerts: () => http.get("/warmup-helpers/thread-alerts").then((r) => r.data),
+  ackThreadAlert: (id) => http.post(`/warmup-helpers/thread-alerts/${id}/ack`).then((r) => r.data),
+  generateThreadPreview: (senderInstanceId, coldInstanceId) =>
+    http.post("/warmup-helpers/generate-thread-preview", { sender_instance_id: senderInstanceId, cold_instance_id: coldInstanceId }).then((r) => r.data),
 };
 
 // ── Advertising links (V16 PART 3) ─────────────────────────

@@ -484,6 +484,67 @@ async def team_log(sender_instance_id: str | None = None, cold_instance_id: str 
     return {"count": len(events), "event_types": list(tclog.EVENT_TYPES), "events": events}
 
 
+@router.get("/team-dashboard")
+async def team_dashboard(db: AsyncSession = Depends(get_db)):
+    """V29 PART 10 — the «همکاری تیمی» control view. Per SENDER: warmth score/level, contact
+    count, and current brief. Per COLD account: enrollment status, day-in-cycle, and active /
+    paused / done thread counts."""
+    from app.models.warmup_helpers import (
+        WarmupHelperThread, WarmupTeamEnrollment, WarmupHelper as _WH,
+    )
+    from app.services.warmup_warmth import warmth_for_account
+    from app.services import warmup_team_schedule as ts
+    from app.services import warmup_helper_thread as wt
+    from datetime import datetime as _dt
+
+    now = _dt.utcnow()
+    accounts = (await db.execute(
+        select(Account).where(Account.status == AccountStatus.active).order_by(Account.created_at)
+    )).scalars().all()
+    counts = dict((await db.execute(
+        select(WarmupHelper.sender_instance_id, func.count()).group_by(WarmupHelper.sender_instance_id)
+    )).all())
+    disabled = await hs.enabled_sender_ids(db)
+
+    senders = []
+    for a in accounts:
+        w = await warmth_for_account(db, a, now)
+        brief = await hs.get_current_brief(db, a.instance_id)
+        senders.append({
+            "instance_id": a.instance_id, "name": a.name,
+            "is_warm_peer": bool(getattr(a, "is_warm_peer", False)),
+            "team_enabled": a.instance_id not in disabled,
+            "contact_count": int(counts.get(a.instance_id, 0) or 0),
+            "warmth_score": w["score"], "warmth_level": w["level"],
+            "warmth_eligible": w["eligible"],
+            "current_brief": brief.brief_text if brief else None,
+        })
+
+    # per cold account — enrollment + thread status counts
+    enrolls = (await db.execute(select(WarmupTeamEnrollment))).scalars().all()
+    threads = (await db.execute(select(WarmupHelperThread))).scalars().all()
+    threads_by_cold: dict[str, list] = {}
+    for t in threads:
+        threads_by_cold.setdefault(t.cold_instance_id, []).append(t)
+    name_by = {a.instance_id: a.name for a in accounts}
+    cold_accounts = []
+    for e in enrolls:
+        tl = threads_by_cold.get(e.cold_instance_id, [])
+        cold_accounts.append({
+            "cold_instance_id": e.cold_instance_id,
+            "cold_name": name_by.get(e.cold_instance_id, e.cold_instance_id),
+            "enabled": e.is_enabled,
+            "enrolled_at": e.enrolled_at.isoformat() if e.enrolled_at else None,
+            "day_index": ts.team_day_index(e.enrolled_at, now) if e.enrolled_at else 0,
+            "cycle_days": ts.TEAM_CYCLE_DAYS,
+            "threads_active": sum(1 for t in tl if t.status == wt.STATUS_ACTIVE),
+            "threads_paused": sum(1 for t in tl if t.status == wt.STATUS_PAUSED),
+            "threads_done": sum(1 for t in tl if t.status == wt.STATUS_DONE),
+        })
+    return {"senders": senders, "cold_accounts": cold_accounts,
+            "role_note": hs.SENDER_ROLE_NOTE}
+
+
 @router.get("/tasks")
 async def list_tasks(cold_instance_id: str | None = None, limit: int = 200,
                      db: AsyncSession = Depends(get_db)):
