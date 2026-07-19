@@ -1,16 +1,17 @@
-"""V25 PART 1 — API for the "human helpers" warm-up assist.
+"""V25 PART 1 / V28 — API for the outreach assistant «دستیار ارتباط شخصی‌سازی‌شده».
 
-CRUD over the capped (≤25) helper list, the single global toggle (default OFF), and a
-read-only view of the per-cold-number ask tasks + their status. All UI strings Persian."""
+V28 generalizes V25: any account can be an outreach SENDER, each with its OWN contact list
+(name + phone, name mandatory), no hard count cap (a non-blocking soft-warning banner instead),
+plus a per-cold-number task-status view. All UI strings Persian."""
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.account import Account
-from app.models.warmup_helpers import WarmupHelperTask
+from app.models.account import Account, AccountStatus
+from app.models.warmup_helpers import WarmupHelperTask, WarmupHelper
 from app.services import warmup_helper_service as hs
 
 router = APIRouter(prefix="/warmup-helpers", tags=["warmup-helpers"])
@@ -20,57 +21,110 @@ class HelperBody(BaseModel):
     name: str
     phone: str
     is_active: bool = True
+    sender_instance_id: str | None = None   # V28 — which of the user's accounts owns this contact
 
 
 class HelperUpdateBody(BaseModel):
     name: str | None = None
     phone: str | None = None
     is_active: bool | None = None
+    sender_instance_id: str | None = None
 
 
 class ToggleBody(BaseModel):
     enabled: bool
 
 
+class ThresholdBody(BaseModel):
+    threshold: int
+
+
+def _helper_dict(h) -> dict:
+    return {
+        "id": str(h.id), "name": h.name, "phone": h.phone,
+        "sender_instance_id": h.sender_instance_id,
+        "is_active": h.is_active,
+        "created_at": h.created_at.isoformat() if h.created_at else None,
+    }
+
+
+@router.get("/senders")
+async def list_senders(db: AsyncSession = Depends(get_db)):
+    """V28 — every account the user can pick as an outreach sender (ANY account, not just warm
+    peers), each with its current contact count. The sender role is INDEPENDENT of mesh
+    warm-peer status (an account can be both, or either)."""
+    accts = (await db.execute(
+        select(Account).where(Account.status == AccountStatus.active).order_by(Account.created_at)
+    )).scalars().all()
+    counts = dict((await db.execute(
+        select(WarmupHelper.sender_instance_id, func.count())
+        .group_by(WarmupHelper.sender_instance_id)
+    )).all())
+    return {"senders": [{
+        "instance_id": a.instance_id, "name": a.name, "phone": a.phone,
+        "platform": getattr(a, "platform", "whatsapp") or "whatsapp",
+        "is_warm_peer": bool(getattr(a, "is_warm_peer", False)),
+        "contact_count": int(counts.get(a.instance_id, 0) or 0),
+    } for a in accts]}
+
+
 @router.get("/")
-async def list_helpers(db: AsyncSession = Depends(get_db)):
-    """The helper list + the active count («۱۸ از ۲۵») + the global toggle state."""
-    helpers = await hs.list_helpers(db)
+async def list_helpers(sender_instance_id: str | None = None, db: AsyncSession = Depends(get_db)):
+    """One sender's OWN contact list (via ?sender_instance_id=), or all contacts when omitted.
+    Includes the live count, the soft-warning threshold, and the non-blocking banner text when
+    the sender's list is large (V28 — never a hard cap)."""
+    if sender_instance_id:
+        helpers = await hs.list_helpers_for_sender(db, sender_instance_id)
+    else:
+        helpers = await hs.list_helpers(db)
     active = sum(1 for h in helpers if h.is_active)
     conf = await hs.get_config(db)
+    threshold = int(getattr(conf, "soft_warning_threshold", None) or hs.DEFAULT_SOFT_WARNING_THRESHOLD)
     await db.commit()   # persist a lazily-created config row
     return {
         "enabled": conf.is_enabled,
+        "sender_instance_id": sender_instance_id,
         "active_count": active,
-        "max_active": hs.MAX_ACTIVE_HELPERS,
-        "helpers": [{
-            "id": str(h.id), "name": h.name, "phone": h.phone,
-            "is_active": h.is_active, "created_at": h.created_at.isoformat() if h.created_at else None,
-        } for h in helpers],
+        "count": len(helpers),
+        "soft_warning_threshold": threshold,
+        "soft_warning": hs.soft_warning_notice(active, threshold),   # None or Persian banner
+        "helpers": [_helper_dict(h) for h in helpers],
     }
 
 
 @router.post("/")
 async def create_helper(body: HelperBody, db: AsyncSession = Depends(get_db)):
+    """Add one contact to a sender's list. name is MANDATORY; there is NO hard count cap.
+    Returns the created contact plus a non-blocking soft-warning banner when the sender's list
+    is now over the threshold (the client shows it and still proceeds)."""
+    sender = body.sender_instance_id or await hs.resolve_main_sender_instance_id(db)
     try:
-        h = await hs.add_helper(db, body.name, body.phone, body.is_active)
-    except hs.HelperCapError as e:
-        raise HTTPException(400, str(e))
+        h = await hs.add_helper(db, body.name, body.phone, body.is_active, sender_instance_id=sender)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return {"id": str(h.id), "name": h.name, "phone": h.phone, "is_active": h.is_active}
+    banner = None
+    if sender:
+        count = await hs.count_helpers_for_sender(db, sender)
+        banner = hs.soft_warning_notice(count, await hs.get_soft_warning_threshold(db))
+    return {**_helper_dict(h), "soft_warning": banner}
+
+
+@router.post("/threshold")
+async def set_threshold(body: ThresholdBody, db: AsyncSession = Depends(get_db)):
+    """Set the soft-warning threshold (banner-only; never blocks)."""
+    conf = await hs.set_soft_warning_threshold(db, body.threshold)
+    return {"soft_warning_threshold": conf.soft_warning_threshold}
 
 
 @router.put("/{helper_id}")
 async def edit_helper(helper_id: str, body: HelperUpdateBody, db: AsyncSession = Depends(get_db)):
     try:
         h = await hs.update_helper(db, uuid.UUID(helper_id), name=body.name,
-                                   phone=body.phone, is_active=body.is_active)
-    except hs.HelperCapError as e:
-        raise HTTPException(400, str(e))
+                                   phone=body.phone, is_active=body.is_active,
+                                   sender_instance_id=body.sender_instance_id)
     except ValueError as e:
         raise HTTPException(404 if "یافت نشد" in str(e) else 400, str(e))
-    return {"id": str(h.id), "name": h.name, "phone": h.phone, "is_active": h.is_active}
+    return _helper_dict(h)
 
 
 @router.delete("/{helper_id}")
