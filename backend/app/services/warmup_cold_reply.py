@@ -195,6 +195,12 @@ async def run_cold_reply_tick(db, now: datetime | None = None, *, client_factory
         thread.awaiting_reply = False
         thread.pending_reply_at = None
         wt.advance_thread(thread, topic, now)      # count the cold reply as a step; keep topic
+        from app.services import warmup_helper_log as tclog
+        tclog.record(db, event_type=tclog.EVENT_COLD_REPLY, from_instance_id=cold.instance_id,
+                     to_phone=helper.phone, helper_id=helper.id,
+                     sender_instance_id=helper.sender_instance_id,
+                     cold_instance_id=thread.cold_instance_id, thread_id=thread.id,
+                     message_sent=text)
         if mid:
             peer_pacer.record_peer_send(cold.instance_id, pacer_now, r)
         await db.commit()

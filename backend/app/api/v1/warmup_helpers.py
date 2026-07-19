@@ -462,6 +462,28 @@ async def team_enrollments(db: AsyncSession = Depends(get_db)):
     } for e in rows]}
 
 
+@router.get("/log")
+async def team_log(sender_instance_id: str | None = None, cold_instance_id: str | None = None,
+                   helper_id: str | None = None, event_type: str | None = None,
+                   limit: int = 200, db: AsyncSession = Depends(get_db)):
+    """V29 PART 9 — the dedicated «همکاری تیمی» event log (parallel to the inbox/send-queue):
+    every ask / reminder / thank-you / cold-reply / incoming / safety event with Shamsi date +
+    exact time. Filter by sender, contact, cold account, or event type."""
+    from app.services import warmup_helper_log as tclog
+    hid = uuid.UUID(helper_id) if helper_id else None
+    events = await tclog.list_events(db, sender_instance_id=sender_instance_id,
+                                     cold_instance_id=cold_instance_id, helper_id=hid,
+                                     event_type=event_type, limit=limit)
+    accounts = (await db.execute(select(Account))).scalars().all()
+    name_by = {a.instance_id: a.name for a in accounts}
+    helpers = {str(h.id): h for h in await hs.list_helpers(db)}
+    for e in events:
+        e["from_name"] = name_by.get(e["from_instance_id"], e["from_instance_id"])
+        e["cold_name"] = name_by.get(e["cold_instance_id"], e["cold_instance_id"])
+        e["helper_name"] = (helpers.get(e["helper_id"]).name if helpers.get(e["helper_id"]) else None)
+    return {"count": len(events), "event_types": list(tclog.EVENT_TYPES), "events": events}
+
+
 @router.get("/tasks")
 async def list_tasks(cold_instance_id: str | None = None, limit: int = 200,
                      db: AsyncSession = Depends(get_db)):

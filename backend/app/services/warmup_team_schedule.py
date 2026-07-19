@@ -223,6 +223,11 @@ async def run_team_schedule_tick(db, now: datetime | None = None, *, client_fact
             task.asked_at = now
             task.attempts = int(task.attempts or 0) + 1
         wt.advance_thread(thread, topic, now)
+        from app.services import warmup_helper_log as tclog
+        tclog.record(db, event_type=tclog.EVENT_ASK, from_instance_id=sender.instance_id,
+                     to_phone=helper.phone, helper_id=helper.id,
+                     sender_instance_id=sender.instance_id, cold_instance_id=te.cold_instance_id,
+                     thread_id=thread.id, message_sent=text)
         if mid:
             peer_pacer.record_peer_send(sender.instance_id, pacer_now, r)
         await db.commit()

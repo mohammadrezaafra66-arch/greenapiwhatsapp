@@ -281,6 +281,13 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
         task.asked_at = now
     task.attempts = int(task.attempts or 0) + 1
 
+    # V29 PART 9 — record the ask/reminder in the dedicated «همکاری تیمی» log.
+    from app.services import warmup_helper_log as tclog
+    tclog.record(db, event_type=(tclog.EVENT_REMINDER if kind == "remind" else tclog.EVENT_ASK),
+                 from_instance_id=task_sender.instance_id, to_phone=helper.phone,
+                 helper_id=helper.id, sender_instance_id=task_sender.instance_id,
+                 cold_instance_id=task.cold_instance_id, message_sent=text)
+
     # Re-arm BOTH gates: the slow jittered ask-gate AND the shared per-instance pacer.
     conf.next_ask_at = hs.next_ask_at(now, r)
     if mid:
@@ -342,10 +349,20 @@ async def handle_helper_incoming(db, cold_instance_id: str, sender_phone: str,
     from app.services import warmup_thread_safety as safety
     thread = await wt.get_or_create_thread(db, helper.id, cold_instance_id)
     thread.last_step_at = now
+    from app.services import warmup_helper_log as tclog
+    tclog.record(db, event_type=tclog.EVENT_INCOMING, from_instance_id=None, to_phone=helper.phone,
+                 helper_id=helper.id, sender_instance_id=helper.sender_instance_id,
+                 cold_instance_id=cold_instance_id, thread_id=thread.id,
+                 message_received=message_text)
     flagged = False
     if message_text:
         alert = await safety.scan_and_flag(db, thread, message_text, safety.DIR_INBOUND)
         flagged = alert is not None
+        if flagged:
+            tclog.record(db, event_type=tclog.EVENT_SAFETY, helper_id=helper.id,
+                         sender_instance_id=helper.sender_instance_id,
+                         cold_instance_id=cold_instance_id, thread_id=thread.id,
+                         message_received=message_text)
 
     # V29 PART 5 — schedule the cold account's contextual auto-reply for a natural (never instant)
     # delay. The reply is actually generated + sent by run_cold_reply_tick once the cold account is
@@ -366,9 +383,13 @@ async def handle_helper_incoming(db, cold_instance_id: str, sender_phone: str,
     sender = resolve_task_sender(accounts, helper, enr_map)
     sent = False
     if sender is not None and not flagged:
-        mid = await _send_from_main(sender, helper.phone, hs.build_thankyou_message(helper.name),
-                                    client_factory)
+        ty_text = hs.build_thankyou_message(helper.name)
+        mid = await _send_from_main(sender, helper.phone, ty_text, client_factory)
         sent = bool(mid)
+        tclog.record(db, event_type=tclog.EVENT_THANK_YOU, from_instance_id=sender.instance_id,
+                     to_phone=helper.phone, helper_id=helper.id,
+                     sender_instance_id=getattr(sender, "instance_id", None),
+                     cold_instance_id=cold_instance_id, thread_id=thread.id, message_sent=ty_text)
     return {"helper": helper.name, "cold_instance_id": cold_instance_id,
             "sender_instance_id": getattr(sender, "instance_id", None), "thanked": sent,
             "thread_paused": flagged}
