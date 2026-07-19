@@ -124,22 +124,43 @@ async def cold_instances_being_warmed(db, enr_map: dict) -> list[str]:
 
 async def ensure_helper_tasks(db, cold_instance_ids: list[str],
                               active_helpers: list[WarmupHelper]) -> int:
-    """Create a `pending` task for every (active helper × cold number) pair that has none yet.
-    Idempotent — never duplicates. Returns how many new pending tasks were created. Rows are
-    cheap; the SENDS (not the rows) are what the slow rate gate throttles."""
+    """Create a `pending` task pairing active helpers with cold numbers being warmed, WITHOUT ever
+    pushing a contact past the per-contact cold ceiling. Idempotent — never duplicates. Returns how
+    many new pending tasks were created.
+
+    V33 PART 1 — the confirmed root cause of the pending-stall was this fan-out: it used to create a
+    task for EVERY (active helper × EVERY warmed cold), pinning every contact to all warmed colds at
+    once (31 contacts × 3 colds = 93 tasks). That (a) violated the intended ≤2-cold-per-contact
+    ceiling and (b) inflated the queue far past what the deliberately-slow, single-sender anti-ban
+    pacing (≤1 ask / 20 min) can ever drain — and it REGENERATED the excess every tick, so `pending`
+    was structurally undrainable and looked permanently stuck. The fan-out now honors the same
+    ceiling `assign_cold_account` enforces (PART 2): a contact is auto-paired only up to
+    `MAX_COLD_ACCOUNTS_PER_CONTACT` DISTINCT colds; existing pairings count toward that budget.
+    Rows are cheap; the SENDS (not the rows) are what the slow rate gate throttles."""
     if not cold_instance_ids or not active_helpers:
         return 0
     existing = (await db.execute(
         select(WarmupHelperTask.helper_id, WarmupHelperTask.cold_instance_id)
     )).all()
     have = {(str(hid), cid) for hid, cid in existing}
+    # Per-contact DISTINCT-cold budget: seed from what each contact is already paired to so the
+    # auto-fan-out tops up toward the ceiling but never past it (and never re-creates the stall).
+    colds_by_helper: dict[str, set[str]] = {}
+    for hid, cid in have:
+        colds_by_helper.setdefault(hid, set()).add(cid)
     created = 0
     for helper in active_helpers:
+        hid = str(helper.id)
+        colds = colds_by_helper.setdefault(hid, set())
         for cold in cold_instance_ids:
-            if (str(helper.id), cold) in have:
+            if (hid, cold) in have:
                 continue
+            if len(colds) >= hs.MAX_COLD_ACCOUNTS_PER_CONTACT:
+                break   # contact already at the ceiling — auto-pairing stops here (no stall inflation)
             db.add(WarmupHelperTask(helper_id=helper.id, cold_instance_id=cold,
                                     status=hs.STATUS_PENDING))
+            have.add((hid, cold))
+            colds.add(cold)
             created += 1
     if created:
         await db.flush()
