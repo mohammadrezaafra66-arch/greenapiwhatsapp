@@ -268,33 +268,31 @@ class FakeDB:
             self.helpers.remove(o)
 
 
-# ── 25-cap enforced (26th rejected) ──────────────────────────────────────────
+# ── V28 — the hard 25-cap was REMOVED by design (pacing is now the safety rail) ──────
 @pytest.mark.asyncio
-async def test_helper_cap_rejects_26th():
+async def test_no_hard_cap_allows_a_26th_and_beyond():
+    """V28: a 26th (and beyond) active contact is allowed — there is no hard count cap."""
     helpers = [WarmupHelper(name=f"h{i}", phone=f"9890000{i:04d}", is_active=True) for i in range(25)]
     for h in helpers:
         h.id = uuid.uuid4()
     db = FakeDB(helpers=helpers)
-    with pytest.raises(hs.HelperCapError):
-        await db_add_helper(db, "over", "989099999999")
-    # a 26th INACTIVE helper is fine (doesn't count toward the active cap)
-    inactive = await hs.add_helper(db, "backup", "989011112222", is_active=False)
-    assert inactive.is_active is False
-
-
-async def db_add_helper(db, name, phone):
-    return await hs.add_helper(db, name, phone)
+    over = await hs.add_helper(db, "over", "989099999999")
+    assert over.name == "over" and over.is_active is True   # not rejected
 
 
 @pytest.mark.asyncio
-async def test_helper_cap_allows_25():
-    helpers = [WarmupHelper(name=f"h{i}", phone=f"9890000{i:04d}", is_active=True) for i in range(24)]
-    for h in helpers:
-        h.id = uuid.uuid4()
-    db = FakeDB(helpers=helpers)
-    h25 = await hs.add_helper(db, "number25", "989025252525")
-    assert h25.name == "number25" and h25.phone == "989025252525"
-    assert db.commits >= 1
+async def test_add_helper_still_requires_name():
+    """V28: the MANDATORY safeguard that survives — a contact with no name is rejected."""
+    db = FakeDB(helpers=[])
+    with pytest.raises(ValueError):
+        await hs.add_helper(db, "   ", "989099999999")
+
+
+def test_soft_warning_notice_over_threshold():
+    """The soft-warning banner is informational (returns text over threshold, None under)."""
+    assert hs.soft_warning_notice(31, 30) is not None
+    assert hs.soft_warning_notice(30, 30) is None
+    assert hs.soft_warning_notice(5, 30) is None
 
 
 # ── toggle ON: creates tasks + sends ONE ask slowly (in hours), re-arms gate ──

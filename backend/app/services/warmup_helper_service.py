@@ -23,13 +23,29 @@ from app.models.warmup_helpers import WarmupHelper, WarmupHelperTask, WarmupHelp
 from app.services.warmup_scheduler import in_active_hours, to_tehran  # 09:00–21:00 Tehran
 from app.services.warmup_state import DEFAULT_WARMUP_CONFIG
 
-# ── Hard anti-spam boundary ──────────────────────────────────────────────────
-# The list is a FIXED, tiny set of known contacts — NEVER auto-imported, never > 25.
+# ── Soft anti-spam boundary (V28: NO hard cap) ───────────────────────────────
+# V25 hard-capped the list at 25. V28 removes that cap by design — the user chose it — and
+# replaces it with a NON-BLOCKING soft-warning banner once a sender's list grows past a
+# configurable threshold (default 30). The REAL safety rail is PACING (see warmup_helper_engine
+# + V27's health gate/pacer), which makes a large list simply take longer, never a burst.
+# Kept for backward-compat imports only (no longer enforced as a hard limit):
 MAX_ACTIVE_HELPERS = 25
 HELPER_CAP_NOTICE = (
     "حداکثر ۲۵ فرد کمک‌کننده مجاز است. برای افزودن فرد جدید، ابتدا یکی از افراد فعلی را "
     "غیرفعال یا حذف کنید."
 )
+DEFAULT_SOFT_WARNING_THRESHOLD = 30
+
+
+def soft_warning_notice(count: int, threshold: int = DEFAULT_SOFT_WARNING_THRESHOLD) -> str | None:
+    """PURE. The non-blocking Persian banner shown when a sender's contact list is large, or
+    None when it's within the normal range. NEVER blocks — informational only."""
+    if int(count) <= int(threshold):
+        return None
+    return (
+        "تعداد مخاطبان این فرستنده از حد معمول بیشتر است — چون سرعت ارسال محدود و ثابت است، "
+        "ارسال به همه ممکن است چند روز طول بکشد. ادامه می‌دهید؟"
+    )
 
 # ── Slow-send rate gate (protect the main account — MANDATORY) ───────────────
 # No more than ~1 helper-ask every few minutes, with randomized jitter, waking hours only.
@@ -145,45 +161,96 @@ async def set_enabled(db, enabled: bool) -> WarmupHelperConfig:
     return cfg
 
 
-# ── DB: helper CRUD (with the hard 25-cap) ───────────────────────────────────
+async def get_soft_warning_threshold(db) -> int:
+    """The current soft-warning threshold (default 30). Read-only convenience."""
+    cfg = await get_config(db)
+    return int(getattr(cfg, "soft_warning_threshold", None) or DEFAULT_SOFT_WARNING_THRESHOLD)
+
+
+async def set_soft_warning_threshold(db, threshold: int) -> WarmupHelperConfig:
+    """Set the soft-warning threshold (banner only — never blocks). Commits."""
+    cfg = await get_config(db)
+    cfg.soft_warning_threshold = max(1, int(threshold))
+    await db.commit()
+    return cfg
+
+
+async def resolve_main_sender_instance_id(db) -> str | None:
+    """The default 'main' sending account used to backfill legacy (senderless) V25 contacts:
+    the default account → first warm peer → first active account."""
+    from app.models.account import Account, AccountStatus
+    accts = (await db.execute(
+        select(Account).where(Account.status == AccountStatus.active).order_by(Account.created_at)
+    )).scalars().all()
+    if not accts:
+        return None
+    for a in accts:
+        if getattr(a, "is_default", False):
+            return a.instance_id
+    for a in accts:
+        if getattr(a, "is_warm_peer", False):
+            return a.instance_id
+    return accts[0].instance_id
+
+
+# ── DB: contact CRUD (V28 — NO hard cap; per-sender scoping) ──────────────────
 async def count_active_helpers(db) -> int:
+    """Global active count (all senders). Kept for backward-compat."""
     return int((await db.execute(
         select(func.count()).select_from(WarmupHelper).where(WarmupHelper.is_active.is_(True))
     )).scalar() or 0)
 
 
+async def count_helpers_for_sender(db, sender_instance_id: str, active_only: bool = True) -> int:
+    """How many contacts belong to one sender (drives the soft-warning banner)."""
+    q = select(func.count()).select_from(WarmupHelper).where(
+        WarmupHelper.sender_instance_id == sender_instance_id)
+    if active_only:
+        q = q.where(WarmupHelper.is_active.is_(True))
+    return int((await db.execute(q)).scalar() or 0)
+
+
 async def list_helpers(db) -> list[WarmupHelper]:
+    """All contacts across all senders (V25-compatible global list)."""
     return list((await db.execute(
         select(WarmupHelper).order_by(WarmupHelper.created_at)
     )).scalars().all())
 
 
-async def add_helper(db, name: str, phone: str, is_active: bool = True) -> WarmupHelper:
-    """Add ONE known helper. Enforces the hard 25-ACTIVE cap: adding a 26th active helper
-    raises HelperCapError (rejected with a Persian message at the API). Never auto-imports."""
+async def list_helpers_for_sender(db, sender_instance_id: str) -> list[WarmupHelper]:
+    """One sender's OWN contact list (lists never mix between senders)."""
+    return list((await db.execute(
+        select(WarmupHelper).where(WarmupHelper.sender_instance_id == sender_instance_id)
+        .order_by(WarmupHelper.created_at)
+    )).scalars().all())
+
+
+async def add_helper(db, name: str, phone: str, is_active: bool = True,
+                     sender_instance_id: str | None = None) -> WarmupHelper:
+    """Add ONE known contact for a sender. V28 — NO hard count cap (pacing is the safety
+    rail). `name` is MANDATORY (rejected with a Persian error if empty). Never auto-imports."""
     name = (name or "").strip()
     digits = wa_me_digits(phone)
     if not name:
-        raise ValueError("نام فرد کمک‌کننده لازم است")
+        raise ValueError("نام مخاطب لازم است")
     if not digits:
         raise ValueError("شماره‌ی معتبر لازم است")
-    if is_active and await count_active_helpers(db) >= MAX_ACTIVE_HELPERS:
-        raise HelperCapError(HELPER_CAP_NOTICE)
-    helper = WarmupHelper(name=name, phone=digits, is_active=bool(is_active))
+    helper = WarmupHelper(name=name, phone=digits, is_active=bool(is_active),
+                          sender_instance_id=sender_instance_id)
     db.add(helper)
     await db.commit()
     await db.refresh(helper)
     return helper
 
 
-async def update_helper(db, helper_id, *, name=None, phone=None, is_active=None) -> WarmupHelper:
-    """Edit a helper. Re-activating a helper is also gated by the 25-cap."""
+async def update_helper(db, helper_id, *, name=None, phone=None, is_active=None,
+                        sender_instance_id=None) -> WarmupHelper:
+    """Edit a contact. V28 — no cap on (re)activation; `name` stays mandatory when provided."""
     helper = await db.get(WarmupHelper, helper_id)
     if helper is None:
-        raise ValueError("فرد کمک‌کننده یافت نشد")
-    if is_active is True and not helper.is_active:
-        if await count_active_helpers(db) >= MAX_ACTIVE_HELPERS:
-            raise HelperCapError(HELPER_CAP_NOTICE)
+        raise ValueError("مخاطب یافت نشد")
+    if sender_instance_id is not None:
+        helper.sender_instance_id = sender_instance_id
     if name is not None:
         name = name.strip()
         if not name:

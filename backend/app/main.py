@@ -777,6 +777,30 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V25] {e}")
+        # ── V28 — generalize the helper assist into a multi-sender outreach assistant ──
+        ddl_v28 = [
+            "ALTER TABLE warmup_helper ADD COLUMN IF NOT EXISTS sender_instance_id varchar(50)",
+            "CREATE INDEX IF NOT EXISTS ix_warmup_helper_sender ON warmup_helper(sender_instance_id)",
+            "ALTER TABLE warmup_helper_config ADD COLUMN IF NOT EXISTS soft_warning_threshold integer NOT NULL DEFAULT 30",
+            """CREATE TABLE IF NOT EXISTS outreach_brief (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                sender_instance_id varchar(50) NOT NULL,
+                brief_text text NOT NULL,
+                created_at timestamp DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_outreach_brief_sender ON outreach_brief(sender_instance_id)",
+            # Backfill any pre-V28 helper rows to the main account (is_default → first active),
+            # so lists scoped by sender never silently drop legacy contacts. No-op when empty.
+            """UPDATE warmup_helper SET sender_instance_id = COALESCE(
+                   (SELECT instance_id FROM accounts WHERE is_default = true LIMIT 1),
+                   (SELECT instance_id FROM accounts WHERE status = 'active' ORDER BY created_at LIMIT 1)
+               ) WHERE sender_instance_id IS NULL""",
+        ]
+        for stmt in ddl_v28:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V28] {e}")
         # ── V26 — group monitoring (listener) + voice transcription schema ──
         ddl_v26 = [
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_listener boolean DEFAULT false",
