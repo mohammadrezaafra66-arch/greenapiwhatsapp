@@ -16,6 +16,7 @@ without the network, a DB, or the clock.
 from __future__ import annotations
 import logging
 import random
+import pytz
 from datetime import datetime, timedelta
 from sqlalchemy import select
 
@@ -60,6 +61,29 @@ def pick_main_sender(accounts: list, enr_map: dict):
         return graduated[0]
     others = [a for a in accounts if not _being_warmed(a)]
     return others[0] if others else None
+
+
+# ── V28 — send FROM the contact's OWN sender (fallback to the main sender for legacy rows) ──
+def resolve_task_sender(accounts: list, helper, enr_map: dict):
+    """The account that should send this contact's outreach ask: the contact's own
+    `sender_instance_id` account when set (V28 multi-sender), else the V25 main sender
+    (legacy rows with no sender). Any account may be a sender — NOT restricted to warm peers."""
+    sid = getattr(helper, "sender_instance_id", None)
+    if sid:
+        for a in accounts:
+            if a.instance_id == sid:
+                return a
+    return pick_main_sender(accounts, enr_map)
+
+
+def _to_utc_naive(tehran_naive: datetime) -> datetime:
+    """Convert the tick's Tehran-local naive time to a naive-UTC instant so the SHARED
+    per-instance pacer (peer_pacer, keyed in naive UTC like the mesh) compares apples to
+    apples — an outreach send and a mesh send from one instance stay >= the 10–15s floor apart."""
+    try:
+        return TEHRAN.localize(tehran_naive).astimezone(pytz.utc).replace(tzinfo=None)
+    except Exception:
+        return tehran_naive
 
 
 # ── pure: choose the ONE action this tick (reminder wins over a fresh ask) ────
@@ -221,6 +245,23 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
         await db.commit()
         return {"enabled": True, "acted": 0, "created": created}
 
+    # V28 — send FROM this contact's OWN sender (legacy senderless rows fall back to the main).
+    task_sender = resolve_task_sender(accounts, helper, enr_map)
+    if task_sender is None:
+        await db.commit()
+        return {"enabled": True, "acted": 0, "created": created, "no_sender": True}
+
+    # V28 PART 4 — HARD safety rail (non-configurable): the shared per-INSTANCE pacer (V27
+    # PART 2). Because a large contact list has NO count cap, this fixed floor is what keeps a
+    # sender slow — its outreach asks and its mesh sends share ONE pacer, so they can never
+    # interleave faster than the 10–15s floor. A big list simply spreads over many hours/days.
+    from app.services import peer_pacer
+    pacer_now = _to_utc_naive(now)
+    if not peer_pacer.peer_ready(task_sender.instance_id, pacer_now):
+        await db.commit()
+        return {"enabled": True, "acted": 0, "created": created, "paced": True,
+                "sender_instance_id": task_sender.instance_id}
+
     phone_digits, _cold_acc = await _resolve_cold_phone(db, task.cold_instance_id, client_factory)
     link = hs.wa_me_link(phone_digits)
 
@@ -229,7 +270,8 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
     else:
         text = hs.build_ask_message(helper.name, link)
 
-    mid = await _send_from_main(sender, helper.phone, text, client_factory)
+    # _send_from_main already applies V27 PART 1's live health gate on the sender.
+    mid = await _send_from_main(task_sender, helper.phone, text, client_factory)
 
     if kind == "remind":
         task.status = hs.STATUS_REMINDED
@@ -239,11 +281,14 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
         task.asked_at = now
     task.attempts = int(task.attempts or 0) + 1
 
-    # Re-arm the slow-send rate gate with fresh jitter.
+    # Re-arm BOTH gates: the slow jittered ask-gate AND the shared per-instance pacer.
     conf.next_ask_at = hs.next_ask_at(now, r)
+    if mid:
+        peer_pacer.record_peer_send(task_sender.instance_id, pacer_now, r)
     await db.commit()
     return {"enabled": True, "acted": 1, "created": created, "kind": kind,
             "helper": helper.name, "cold_instance_id": task.cold_instance_id,
+            "sender_instance_id": task_sender.instance_id,
             "sent": bool(mid), "next_ask_at": conf.next_ask_at.isoformat()}
 
 
@@ -280,15 +325,18 @@ async def handle_helper_incoming(db, cold_instance_id: str, sender_phone: str,
     task.status = hs.STATUS_DONE
     task.done_at = now
 
-    # Thank the helper from the main warm account (best-effort).
+    # V28 — thank the contact FROM the same sender that asked them (their own
+    # sender_instance_id), falling back to the main account for legacy rows. Generalized to the
+    # (sender, contact, cold number) triple instead of one global helper pool.
     enr_map = await _enrollment_states(db)
     accounts = (await db.execute(
         select(Account).where(Account.status == AccountStatus.active)
     )).scalars().all()
-    sender = pick_main_sender(accounts, enr_map)
+    sender = resolve_task_sender(accounts, helper, enr_map)
     sent = False
     if sender is not None:
         mid = await _send_from_main(sender, helper.phone, hs.build_thankyou_message(helper.name),
                                     client_factory)
         sent = bool(mid)
-    return {"helper": helper.name, "cold_instance_id": cold_instance_id, "thanked": sent}
+    return {"helper": helper.name, "cold_instance_id": cold_instance_id,
+            "sender_instance_id": getattr(sender, "instance_id", None), "thanked": sent}

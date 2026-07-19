@@ -20,7 +20,17 @@ from app.models.account import Account, AccountStatus
 from app.models.warmup_helpers import WarmupHelper, WarmupHelperTask, WarmupHelperConfig
 from app.services import warmup_helper_service as hs
 from app.services import warmup_helper_engine as he
+from app.services import peer_pacer
 from app.services.warmup_state import WarmupState, DEFAULT_WARMUP_CONFIG
+
+
+@pytest.fixture(autouse=True)
+def _reset_peer_pacer():
+    # V28 PART 4 — run_helper_tick now shares the per-instance pacer with the mesh; reset the
+    # process-global state between tests so a recorded send never leaks across cases.
+    peer_pacer.reset()
+    yield
+    peer_pacer.reset()
 
 
 # in_active_hours treats a NAIVE datetime as Tehran-local, so these are Tehran wall-clock.
