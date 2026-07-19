@@ -187,6 +187,13 @@ async def run_team_schedule_tick(db, now: datetime | None = None, *, client_fact
         sender = resolve_task_sender(accounts, helper, enr_map)
         if sender is None:
             continue
+        # Gate 2b (V30 PART 2) — per-sender 20-min ask spacing, layered ON TOP of the pacer.
+        # Skip THIS sender's ask if it asked within the window; another sender's enrollment may
+        # still proceed this tick (the constraint is per-sender, never across senders).
+        from app.services import warmup_ask_spacing as spacing
+        last_ask = await spacing.last_ask_at_for_sender(db, sender.instance_id)
+        if not spacing.ask_spacing_ok(last_ask, now):
+            continue
         pacer_now = _to_utc_naive(now)
         if not peer_pacer.peer_ready(sender.instance_id, pacer_now):
             continue

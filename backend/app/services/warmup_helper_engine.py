@@ -251,6 +251,16 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
         await db.commit()
         return {"enabled": True, "acted": 0, "created": created, "no_sender": True}
 
+    # V30 PART 2 — per-sender 20-min ask spacing (asks ONLY; the single reminder is exempt and
+    # governed by its own rule). Additional to, never a replacement for, the pacer below.
+    if kind == "ask":
+        from app.services import warmup_ask_spacing as spacing
+        last_ask = await spacing.last_ask_at_for_sender(db, task_sender.instance_id)
+        if not spacing.ask_spacing_ok(last_ask, now):
+            await db.commit()
+            return {"enabled": True, "acted": 0, "created": created, "ask_spacing": True,
+                    "sender_instance_id": task_sender.instance_id}
+
     # V28 PART 4 — HARD safety rail (non-configurable): the shared per-INSTANCE pacer (V27
     # PART 2). Because a large contact list has NO count cap, this fixed floor is what keeps a
     # sender slow — its outreach asks and its mesh sends share ONE pacer, so they can never
