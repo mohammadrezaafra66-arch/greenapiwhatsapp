@@ -182,8 +182,45 @@ async def _send_from_main(sender: Account, to_phone: str, text: str, client_fact
         return None
 
 
+async def _unified_ask_text(db, helper, task_sender, cold_acc, cold_instance_id, phone_digits,
+                            ai_fn=None) -> str:
+    """V31 — generate a mesh-warming ask through the SAME AI thread-aware generator the Team
+    Collaboration tick uses: varied, personalized (job/experience/benefit), emoji, and anti-repeat
+    seeded from the sender's recent ask bodies in the SHARED warmup_helper_log (so no two recent
+    asks — from EITHER path — are near-duplicates). Falls back to the static builder ONLY if
+    generation is impossible (e.g. an identifier-like/empty contact name) so the tick never breaks.
+    The wa.me link + copy/paste suggestion are still appended, exactly as before."""
+    from app.services.outreach_message import generate_thread_ask_message, build_thread_ai_fn
+    from app.services import warmup_helper_thread as wt
+    from app.services import warmup_helper_log as tclog
+    try:
+        brief = await hs.get_current_brief(db, helper.sender_instance_id) if helper.sender_instance_id else None
+        brief_text = brief.brief_text if brief else None
+        existing = await wt.get_thread(db, helper.id, cold_instance_id)
+        step_count = int(getattr(existing, "step_count", 0) or 0)
+        topic = wt.derive_topic(brief=brief_text, product=None,
+                                existing_topic=getattr(existing, "topic_summary", None),
+                                step_count=step_count)
+        recent = await tclog.recent_ask_bodies(db, task_sender.instance_id)
+        forbidden = tuple(v for v in (cold_instance_id, getattr(cold_acc, "name", None),
+                                      helper.sender_instance_id, getattr(task_sender, "name", None)) if v)
+        text, _src = await generate_thread_ask_message(
+            brief=brief_text,
+            contact={"name": helper.name, "job_title": getattr(helper, "job_title", None),
+                     "years_experience": getattr(helper, "years_experience", None),
+                     "personal_benefit_note": getattr(helper, "personal_benefit_note", None)},
+            topic=topic, step_count=step_count, cold_phone_digits=[phone_digits],
+            recent=recent, ai_fn=ai_fn if ai_fn is not None else build_thread_ai_fn(),
+            forbidden=forbidden)
+        return text
+    except Exception as e:
+        logger.info("V31 unified ask generation fell back to static builder: %s", e)
+        return hs.build_ask_message(helper.name, hs.wa_me_link(phone_digits))
+
+
 async def run_helper_tick(db, now: datetime | None = None, *, client_factory=None,
-                          rng: random.Random | None = None, cfg=DEFAULT_WARMUP_CONFIG) -> dict:
+                          rng: random.Random | None = None, cfg=DEFAULT_WARMUP_CONFIG,
+                          ai_fn=None) -> dict:
     """One tick of the helper-assist flow. Default OFF; webhook-only detection elsewhere.
 
     Sends AT MOST one helper-ask/reminder, gated by waking hours + the jittered rate limiter,
@@ -280,7 +317,9 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
     if kind == "remind":
         text = hs.build_reminder_message(helper.name, link)
     else:
-        text = hs.build_ask_message(helper.name, link)
+        # V31 — route the ASK through the unified AI thread-aware generator (was static template).
+        text = await _unified_ask_text(db, helper, task_sender, _cold_acc, task.cold_instance_id,
+                                       phone_digits, ai_fn)
 
     # _send_from_main already applies V27 PART 1's live health gate on the sender.
     mid = await _send_from_main(task_sender, helper.phone, text, client_factory)
