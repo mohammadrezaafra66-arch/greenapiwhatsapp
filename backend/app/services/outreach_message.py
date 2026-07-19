@@ -25,6 +25,9 @@ from app.services.warmup_helper_service import wa_me_link, wa_me_digits, SUGGEST
 
 logger = logging.getLogger("afrakala.outreach")
 
+# V29 «همکاری تیمی» — an ask-message references AT MOST 2 cold accounts (explicit ceiling).
+MAX_REFERENCED_COLD_ACCOUNTS = 2
+
 
 # ── name validation (real name, NOT restricted to a pool) ────────────────────
 def message_includes_name(text: str, name: str) -> bool:
@@ -146,6 +149,155 @@ async def generate_outreach_message(*, brief: str, contact_name: str,
     lines = [body]
     if link:
         lines.append(f"لینک مستقیم (یک لمس): {link}")
+    if include_suggestion:
+        lines.append(f"می‌تونی همین رو بفرستی: «{suggested}»")
+    return "\n".join(lines), source
+
+
+# ── V29 «همکاری تیمی» PART 3 — thread-aware, profile-personalized generation ──
+def _thread_system_prompt() -> str:
+    return (
+        "تو یک دستیار فارسی‌زبان هستی که پیام‌های کوتاه، دوستانه و کاملاً طبیعی و انسانی می‌نویسی. "
+        "پیام باید مثل گفت‌وگوی واقعی بین دو همکار باشد، نه تبلیغاتی و نه رباتیک. "
+        "هرگز شماره تلفن، عدد بلند، شناسه یا لینک ننویس — فقط متن کوتاه محاوره‌ای فارسی. "
+        "همیشه مخاطب را با نام کاملش صدا بزن و اگر موضوع گفت‌وگو ادامه‌دار است، همان موضوع را دنبال کن."
+    )
+
+
+def _profile_line(*, job_title, years_experience, personal_benefit_note) -> str:
+    """A short Persian hint the AI uses to make the ask personally relevant. Empty when no
+    profile data is present."""
+    bits = []
+    if job_title:
+        bits.append(f"سمت او: {str(job_title).strip()}")
+    if years_experience:
+        bits.append(f"سابقهٔ تخصصی: {years_experience} سال")
+    if personal_benefit_note:
+        bits.append(f"چرا کمک برای خودش هم مفید است: {str(personal_benefit_note).strip()}")
+    return "؛ ".join(bits)
+
+
+def _thread_user_prompt(*, name, topic, step_count, brief, profile_line) -> str:
+    cont = ("این ادامهٔ همان گفت‌وگوی قبلی است؛ موضوع را عوض نکن." if step_count > 0
+            else "این اولین پیام این گفت‌وگوست؛ یک شروع طبیعی و مرتبط با موضوع بنویس.")
+    lines = [
+        f"برای «{name}» یک پیام کوتاه و صمیمی فارسی بنویس که:",
+        f"- حتماً نام کامل «{name}» داخل پیام باشد،",
+        f"- موضوع گفت‌وگو: {topic}",
+        f"- {cont}",
+    ]
+    if profile_line:
+        lines.append(f"- با توجه به این نکات، ربط شخصی کمک را طبیعی برسان: {profile_line}")
+    if (brief or "").strip():
+        lines.append(f"- منظور کلی فرستنده: {brief.strip()}")
+    lines.append("- کوتاه (یک تا دو جمله)، بدون هیچ عدد یا لینک یا شماره. فقط متن پیام را بده.")
+    return "\n".join(lines)
+
+
+def build_thread_ai_fn(chat_fn=None):
+    """Return async `ai_fn(*, name, topic, step_count, brief, profile_line) -> str | None`
+    backed by the shared AI key pool (or an injected chat_fn for tests)."""
+    async def _ai(*, name, topic, step_count, brief, profile_line):
+        fn = chat_fn
+        if fn is None:
+            from app.services.gpt_service import _chat
+            fn = _chat
+        try:
+            return await fn(_thread_system_prompt(),
+                            _thread_user_prompt(name=name, topic=topic, step_count=step_count,
+                                                brief=brief, profile_line=profile_line),
+                            90, 0.9)
+        except Exception as e:  # pragma: no cover
+            logger.debug("thread AI chat failed, will fall back: %s", e)
+            return None
+    return _ai
+
+
+def _thread_fallback(name: str, topic: str, step_count: int, rng: random.Random) -> str:
+    """A safe, name-slotted templated ask that references the ongoing topic — used when AI is
+    unavailable. ALWAYS includes the real full name and stays on-topic."""
+    if step_count > 0:
+        tmpls = [
+            "سلام {name} جان، درمورد {topic} خواستم پیگیری کنم؛ اگه فرصت کردی یه پیام بده 🙏",
+            "{name} عزیز، همون {topic} رو می‌گم؛ ممنون میشم یه سر بزنی 🌹",
+            "سلام {name}، بازم درباره‌ی {topic} مزاحمت شدم، یه لطف کوچیک 👍",
+        ]
+    else:
+        tmpls = [
+            "سلام {name} جان، درباره‌ی {topic} یه زحمت کوچیک برات داشتم 🙏",
+            "{name} عزیز سلام، وقتت بخیر — درمورد {topic} یه کمک کوچیک می‌خواستم 🌹",
+            "سلام {name}، امیدوارم خوب باشی؛ راجع‌به {topic} یه لطف کوچیک ازت می‌خواستم 🙏",
+        ]
+    return rng.choice(tmpls).replace("{name}", (name or "").strip()).replace("{topic}", topic)
+
+
+async def generate_thread_ask_message(*, brief: str | None, contact: dict, topic: str,
+                                      step_count: int, cold_phone_digits: list[str],
+                                      ai_fn=None, recent: list[str] | None = None,
+                                      forbidden=(), rng: random.Random | None = None,
+                                      suggested: str = SUGGESTED_TEXT,
+                                      include_suggestion: bool = True,
+                                      max_ai_tries: int = 2) -> tuple[str, str]:
+    """Generate ONE thread-aware, profile-personalized ask-message. Returns (full_message, source).
+
+    • uses the contact's real FULL name (validated; regenerate once; safe templated fallback);
+    • references job_title/years_experience/personal_benefit_note where present;
+    • continues `topic` when step_count > 0 (never restarts on an unrelated subject);
+    • appends wa.me link(s) for the 1–2 assigned cold accounts (raw numbers never leak — the
+      link legitimately carries the cold number's digits, so links are added AFTER body
+      validation), capped at MAX_REFERENCED_COLD_ACCOUNTS;
+    • body passes V24's identifier-leak filter + the anti-repeat check."""
+    recent = recent or []
+    r = rng or random
+    name = (contact.get("name") or "").strip()
+    if not name_is_usable(name):
+        raise ValueError("نام مخاطب معتبر نیست (نباید عدد/شناسه باشد)")
+    profile_line = _profile_line(
+        job_title=contact.get("job_title"), years_experience=contact.get("years_experience"),
+        personal_benefit_note=contact.get("personal_benefit_note"))
+
+    body, source = None, "fallback"
+    if ai_fn is not None:
+        for _ in range(max_ai_tries):
+            try:
+                text = await ai_fn(name=name, topic=topic, step_count=step_count,
+                                   brief=brief, profile_line=profile_line)
+            except Exception:
+                break
+            text = (text or "").strip()
+            if not text:
+                continue
+            if not message_is_safe(text, forbidden):
+                continue
+            if not message_includes_name(text, name):
+                continue
+            if is_near_duplicate(text, recent):
+                continue
+            body, source = text, "ai"
+            break
+
+    if body is None:
+        for _ in range(6):
+            cand = _thread_fallback(name, topic, step_count, r)
+            if message_is_safe(cand, forbidden) and not is_near_duplicate(cand, recent):
+                body = cand
+                break
+        if body is None:
+            body = _thread_fallback(name, topic, step_count, r)
+        source = "fallback"
+
+    # Append up to 2 wa.me links (explicit ceiling). Each cold number's link is added AFTER body
+    # validation because the link legitimately contains that cold number's digits.
+    lines = [body]
+    digits_list = [d for d in (cold_phone_digits or []) if wa_me_digits(d)][:MAX_REFERENCED_COLD_ACCOUNTS]
+    links = [wa_me_link(d) for d in digits_list]
+    links = [ln for ln in links if ln]
+    if len(links) == 1:
+        lines.append(f"لینک مستقیم (یک لمس): {links[0]}")
+    elif len(links) >= 2:
+        lines.append("لینک‌های مستقیم (یک لمس):")
+        for ln in links:
+            lines.append(f"• {ln}")
     if include_suggestion:
         lines.append(f"می‌تونی همین رو بفرستی: «{suggested}»")
     return "\n".join(lines), source

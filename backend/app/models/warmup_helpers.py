@@ -107,6 +107,74 @@ class OutreachBrief(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class WarmupHelperThread(Base):
+    """V29 «همکاری تیمی» PART 3 — a running conversation thread between ONE contact (helper) and
+    ONE cold account. One row per (helper, cold_instance) pair that has ever had an ask-step.
+    Carries the thread's `topic_summary` so follow-up ask-steps CONTINUE the same topic (e.g.
+    "پیگیری ارسال تلویزیون") instead of a fresh random topic each time. `step_count` counts the
+    ask-steps taken; `status` is active/paused/done (paused = safety-flagged, PART 4)."""
+    __tablename__ = "warmup_helper_thread"
+    __table_args__ = (UniqueConstraint("helper_id", "cold_instance_id",
+                                       name="uq_warmup_helper_thread_pair"),)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    helper_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    cold_instance_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    topic_summary: Mapped[str | None] = mapped_column(Text)
+    step_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    last_step_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class WarmupThreadAlert(Base):
+    """V29 PART 4 — an admin alert raised when a forbidden/sensitive word appears in either
+    direction of a thread. Raising it PAUSES only that thread (status='paused'); the rest of
+    «همکاری تیمی» keeps running."""
+    __tablename__ = "warmup_thread_alert"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    thread_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    helper_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    cold_instance_id: Mapped[str | None] = mapped_column(String(50))
+    keyword: Mapped[str | None] = mapped_column(String(120))
+    direction: Mapped[str | None] = mapped_column(String(20))   # outbound_ask | inbound | cold_reply
+    message_excerpt: Mapped[str | None] = mapped_column(Text)
+    acknowledged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class WarmupTeamEnrollment(Base):
+    """V29 PART 7 — per-cold-account «عضویت در همکاری تیمی» enrollment, DISTINCT from the mesh
+    warm-up enrollment. Once enabled AND its existing 24h post-authorization cooldown has cleared,
+    its assigned contacts' ask-steps run automatically over a fixed 10-day window."""
+    __tablename__ = "warmup_team_enrollment"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    cold_instance_id: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    enrolled_at: Mapped[datetime | None] = mapped_column(DateTime)
+    day_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class WarmupHelperLog(Base):
+    """V29 PART 9 — dedicated «همکاری تیمی» event log, parallel to (never mixed with) the regular
+    inbox/send-queue. One row per event: ask / reminder / thank-you / cold-reply / incoming /
+    safety-flag, with the from/to accounts, the message sent, any message received, and the
+    thread. Displayed with Shamsi dates + exact times on its own page."""
+    __tablename__ = "warmup_helper_log"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    event_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    from_instance_id: Mapped[str | None] = mapped_column(String(50))
+    to_phone: Mapped[str | None] = mapped_column(String(20))
+    helper_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    sender_instance_id: Mapped[str | None] = mapped_column(String(50), index=True)
+    cold_instance_id: Mapped[str | None] = mapped_column(String(50), index=True)
+    thread_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    message_sent: Mapped[str | None] = mapped_column(Text)
+    message_received: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
 class WarmupSenderConfig(Base):
     """V29 «همکاری تیمی» — per-SENDER enable flag. The V25/V28 toggle
     (WarmupHelperConfig.is_enabled) stays GLOBAL and still gates the whole helper-assist flow;

@@ -41,7 +41,8 @@ from app.models.warmup_mesh import (
 )
 from app.models.warmup_helpers import (
     WarmupHelper, WarmupHelperTask, WarmupHelperConfig, OutreachBrief,
-    WarmupSenderConfig,
+    WarmupSenderConfig, WarmupHelperThread, WarmupThreadAlert,
+    WarmupTeamEnrollment, WarmupHelperLog,
 )
 from app.models.instance_state import InstanceLiveState
 from app.models.number_check import WhatsappNumberCheck
@@ -113,6 +114,10 @@ __all__ = [
     "WarmupHelperTask",
     "WarmupHelperConfig",
     "WarmupSenderConfig",
+    "WarmupHelperThread",
+    "WarmupThreadAlert",
+    "WarmupTeamEnrollment",
+    "WarmupHelperLog",
     "MonitoredGroup",
     "GroupMessage",
     "GroupKeyword",

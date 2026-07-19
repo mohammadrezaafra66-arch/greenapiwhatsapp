@@ -282,6 +282,84 @@ async def get_current_brief(sender_instance_id: str, db: AsyncSession = Depends(
             "brief_text": brief.brief_text, "is_current": brief.is_current}
 
 
+class ThreadPreviewBody(BaseModel):
+    sender_instance_id: str
+    cold_instance_id: str
+    include_suggestion: bool = True
+
+
+@router.post("/generate-thread-preview")
+async def generate_thread_preview(body: ThreadPreviewBody, db: AsyncSession = Depends(get_db)):
+    """V29 PART 3 — PREVIEW a thread-aware, profile-personalized ask per contact assigned to a
+    cold account. Seeds from the sender's CURRENT brief, continues each thread's topic when it
+    has prior steps, grounds step-0 topics in a REAL product from the live price feed, references
+    the cold account only via its wa.me link, and never leaks identifiers. Does NOT send or
+    advance threads (PART 7's engine does that)."""
+    from app.services.outreach_message import generate_thread_ask_message, build_thread_ai_fn
+    from app.services.warmup_helper_engine import _resolve_cold_phone, _default_client_factory
+    from app.services import warmup_helper_thread as wt
+
+    brief = await hs.get_current_brief(db, body.sender_instance_id)
+    brief_text = brief.brief_text if brief else None
+    product = await _pick_real_product()
+
+    phone_digits, cold_acc = await _resolve_cold_phone(db, body.cold_instance_id, _default_client_factory)
+    sender_acc = (await db.execute(
+        select(Account).where(Account.instance_id == body.sender_instance_id))).scalar_one_or_none()
+    forbidden = tuple(v for v in (
+        body.sender_instance_id, getattr(sender_acc, "name", None),
+        body.cold_instance_id, getattr(cold_acc, "name", None),
+    ) if v)
+
+    ai_fn = build_thread_ai_fn()
+    recent: list[str] = []
+    previews = []
+    for h in await hs.list_helpers_for_sender(db, body.sender_instance_id):
+        if not h.is_active:
+            continue
+        # only contacts actually assigned to this cold account
+        cold_ids = await hs.list_cold_accounts_for_helper(db, h.id)
+        if body.cold_instance_id not in cold_ids:
+            continue
+        thread = await wt.get_thread(db, h.id, body.cold_instance_id)
+        step_count = int(getattr(thread, "step_count", 0) or 0)
+        existing_topic = getattr(thread, "topic_summary", None)
+        topic = wt.derive_topic(brief=brief_text, product=product,
+                                existing_topic=existing_topic, step_count=step_count)
+        # secondary work number lets ONE contact reach the SAME cold account from two numbers,
+        # but this is still ONE cold account (the wa.me link is the cold number's).
+        msg, source = await generate_thread_ask_message(
+            brief=brief_text,
+            contact={"name": h.name, "job_title": h.job_title,
+                     "years_experience": h.years_experience,
+                     "personal_benefit_note": h.personal_benefit_note},
+            topic=topic, step_count=step_count, cold_phone_digits=[phone_digits],
+            ai_fn=ai_fn, recent=recent, forbidden=forbidden,
+            include_suggestion=body.include_suggestion)
+        recent.append(msg.split("\n", 1)[0])
+        previews.append({"contact_id": str(h.id), "name": h.name, "topic": topic,
+                         "step_count": step_count, "message": msg, "source": source})
+    await db.commit()
+    return {"sender_instance_id": body.sender_instance_id,
+            "cold_instance_id": body.cold_instance_id, "product": product,
+            "count": len(previews), "previews": previews}
+
+
+async def _pick_real_product() -> str | None:
+    """One REAL current product name from the live Supabase price feed, for step-0 topic
+    grounding. Best-effort — returns None if the feed is unavailable (topic falls back to brief)."""
+    try:
+        from app.services.price_service import get_products
+        products = await get_products(50)
+        for p in products or []:
+            name = (p.get("name") if isinstance(p, dict) else None) or ""
+            if name.strip():
+                return name.strip()
+    except Exception:
+        return None
+    return None
+
+
 @router.delete("/{helper_id}")
 async def remove_helper(helper_id: str, db: AsyncSession = Depends(get_db)):
     ok = await hs.delete_helper(db, uuid.UUID(helper_id))
