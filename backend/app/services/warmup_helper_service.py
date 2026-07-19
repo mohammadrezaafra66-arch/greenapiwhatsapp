@@ -275,3 +275,73 @@ async def delete_helper(db, helper_id) -> bool:
     await db.delete(helper)
     await db.commit()
     return True
+
+
+# ── V28 PART 5 — outreach dashboard aggregation ──────────────────────────────
+# The sender role is INDEPENDENT of mesh warm-peer status (an account can be both, either, or
+# neither). This note is surfaced per sender so the two roles are never conflated in the UI.
+SENDER_ROLE_NOTE = "نقش «فرستنده‌ی ارتباط» مستقل از وضعیت «اکانت گرم مرجع» است؛ یک اکانت می‌تواند هر دو یا فقط یکی باشد."
+
+
+def _iso(dt):
+    return dt.isoformat() if dt else None
+
+
+def assemble_outreach_dashboard(accounts, helpers, tasks,
+                                threshold: int = DEFAULT_SOFT_WARNING_THRESHOLD) -> list[dict]:
+    """PURE — build the per-sender dashboard from already-loaded rows. Each sender shows its
+    contact count (+ soft-warning banner when large), a per-status task summary, and every
+    contact with its task statuses per cold number. `accounts` need instance_id/name/is_warm_peer;
+    `helpers` need id/name/phone/sender_instance_id/is_active; `tasks` need helper_id/
+    cold_instance_id/status/asked_at/reminded_at/done_at."""
+    tasks_by_helper: dict[str, list] = {}
+    for t in tasks:
+        tasks_by_helper.setdefault(str(t.helper_id), []).append(t)
+    helpers_by_sender: dict = {}
+    for h in helpers:
+        helpers_by_sender.setdefault(h.sender_instance_id, []).append(h)
+
+    out = []
+    for a in accounts:
+        own = helpers_by_sender.get(a.instance_id, [])
+        active = sum(1 for h in own if h.is_active)
+        status_summary = {STATUS_PENDING: 0, STATUS_ASKED: 0, STATUS_REMINDED: 0,
+                          STATUS_DONE: 0, STATUS_SKIPPED: 0}
+        contacts = []
+        for h in own:
+            htasks = tasks_by_helper.get(str(h.id), [])
+            for t in htasks:
+                if t.status in status_summary:
+                    status_summary[t.status] += 1
+            contacts.append({
+                "id": str(h.id), "name": h.name, "phone": h.phone, "is_active": h.is_active,
+                "tasks": [{
+                    "cold_instance_id": t.cold_instance_id, "status": t.status,
+                    "asked_at": _iso(getattr(t, "asked_at", None)),
+                    "reminded_at": _iso(getattr(t, "reminded_at", None)),
+                    "done_at": _iso(getattr(t, "done_at", None)),
+                } for t in htasks],
+            })
+        out.append({
+            "instance_id": a.instance_id, "name": a.name,
+            "is_warm_peer": bool(getattr(a, "is_warm_peer", False)),
+            "role_note": SENDER_ROLE_NOTE,
+            "contact_count": active,
+            "soft_warning": soft_warning_notice(active, threshold),
+            "status_summary": status_summary,
+            "contacts": contacts,
+        })
+    return out
+
+
+async def build_outreach_dashboard(db) -> dict:
+    """Load senders + contacts + tasks and assemble the per-sender dashboard."""
+    from app.models.account import Account, AccountStatus
+    accounts = (await db.execute(
+        select(Account).where(Account.status == AccountStatus.active).order_by(Account.created_at)
+    )).scalars().all()
+    helpers = await list_helpers(db)
+    tasks = (await db.execute(select(WarmupHelperTask))).scalars().all()
+    threshold = await get_soft_warning_threshold(db)
+    return {"threshold": threshold,
+            "senders": assemble_outreach_dashboard(accounts, helpers, tasks, threshold)}

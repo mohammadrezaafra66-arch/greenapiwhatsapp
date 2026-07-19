@@ -181,6 +181,15 @@ async def toggle(body: ToggleBody, db: AsyncSession = Depends(get_db)):
     return {"enabled": conf.is_enabled}
 
 
+@router.get("/dashboard")
+async def outreach_dashboard(db: AsyncSession = Depends(get_db)):
+    """V28 PART 5 — per-sender outreach dashboard: each sender's contact count (+ soft-warning
+    banner when large), a per-status task summary, and every contact with its task statuses per
+    cold number. Each sender is labeled so its outreach-sender role is not confused with mesh
+    warm-peer status."""
+    return await hs.build_outreach_dashboard(db)
+
+
 @router.get("/tasks")
 async def list_tasks(cold_instance_id: str | None = None, limit: int = 200,
                      db: AsyncSession = Depends(get_db)):
