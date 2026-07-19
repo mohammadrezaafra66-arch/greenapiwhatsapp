@@ -399,29 +399,42 @@ const HELPER_STATUS_FA = {
   skipped: { fa: "رد‌شده", cls: "bg-slate-700 text-slate-400 border-slate-600" },
 };
 
+const EMPTY_HELPER_FORM = {
+  name: "", phone: "", job_title: "", years_experience: "",
+  personal_benefit_note: "", phone_secondary: "",
+};
+
 function HumanHelpers() {
   const { data, loading, reload } = useAsync(() => WarmupHelpersApi.list(), []);
   const tasksAsync = useAsync(() => WarmupHelpersApi.tasks(), []);
-  const [form, setForm] = React.useState({ name: "", phone: "" });
+  const [form, setForm] = React.useState(EMPTY_HELPER_FORM);
   const [showTasks, setShowTasks] = React.useState(false);
+  const [showProfile, setShowProfile] = React.useState(false);
 
   const enabled = data?.enabled;
   const active = data?.active_count ?? 0;
-  const max = data?.max_active ?? 25;
+  const softWarning = data?.soft_warning;   // V28 non-blocking banner (no hard cap in V29)
   const helpers = data?.helpers || [];
 
   async function toggle() {
     try {
       const r = await WarmupHelpersApi.toggle(!enabled);
-      toast.success(r.enabled ? "کمک‌گیری از افراد واقعی روشن شد" : "خاموش شد");
+      toast.success(r.enabled ? "«همکاری تیمی» روشن شد" : "خاموش شد");
       reload();
     } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
   }
   async function add() {
     if (!form.name.trim() || !form.phone.trim()) return toast.error("نام و شماره لازم است");
     try {
-      await WarmupHelpersApi.create({ name: form.name.trim(), phone: form.phone.trim() });
-      setForm({ name: "", phone: "" });
+      await WarmupHelpersApi.create({
+        name: form.name.trim(), phone: form.phone.trim(),
+        job_title: form.job_title.trim() || null,
+        years_experience: form.years_experience === "" ? null : Number(form.years_experience),
+        personal_benefit_note: form.personal_benefit_note.trim() || null,
+        phone_secondary: form.phone_secondary.trim() || null,
+        require_full_name: true,   // V29 «همکاری تیمی» — full name (first + last) mandatory
+      });
+      setForm(EMPTY_HELPER_FORM);
       reload();
     } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
   }
@@ -435,16 +448,15 @@ function HumanHelpers() {
     catch (e) { toast.error(e?.response?.data?.detail || e.message); }
   }
 
-  const atCap = active >= max;
-
   return (
     <div className="card space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h3 className="text-lg font-bold">👥 افراد کمک‌کننده (گرم‌سازی)</h3>
+          <h3 className="text-lg font-bold">🤝 همکاری تیمی (گرم‌سازی با افراد واقعی)</h3>
           <p className="text-xs text-slate-400 mt-1">
-            لیست کوچکی از افراد واقعی و آشنا (حداکثر ۲۵ نفر) که شماره‌ی شما را دارند. اکانت اصلی گرم شما
-            به‌آرامی از آن‌ها می‌خواهد به شماره‌های جدید یک پیام کوتاه بدهند تا ترافیک انسانی واقعی ایجاد شود.
+            هر فرستنده مجموعه‌ی مخاطبان مخصوص خودش را دارد. برای هر مخاطب نام کامل (اجباری) و در صورت تمایل
+            سمت شغلی، سابقهٔ تخصصی و توضیح «چه سودی برایش دارد» را ثبت کنید تا پیام‌ها شخصی‌سازی شوند.
+            ارسال‌ها آهسته و کنترل‌شده است (بدون سقف تعداد، اما با محدودیت سرعت).
           </p>
         </div>
         <button className={`text-sm px-3 py-1.5 rounded font-bold border ${enabled
@@ -454,24 +466,39 @@ function HumanHelpers() {
         </button>
       </div>
 
-      <div className="flex items-center gap-2 text-sm">
-        <span className={`badge ${atCap ? "bg-amber-500/20 text-amber-300 border-amber-500/40" : "bg-slate-700 text-slate-300 border-slate-600"}`}>
-          {fa(active)} از {fa(max)}
-        </span>
-        {atCap && <span className="text-xs text-amber-300">به سقف ۲۵ نفر رسیدید — برای افزودن، یک نفر را حذف/غیرفعال کنید.</span>}
+      <div className="flex items-center gap-2 text-sm flex-wrap">
+        <span className="badge bg-slate-700 text-slate-300 border-slate-600">{fa(active)} مخاطب فعال</span>
+        {softWarning && <span className="text-xs text-amber-300">{softWarning}</span>}
       </div>
 
-      <div className="flex gap-2 flex-wrap">
-        <input className="input flex-1 min-w-[120px]" placeholder="نام" value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        <input className="input flex-1 min-w-[140px]" placeholder="شماره (مثل ۹۸۹۱۲…)" value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: e.target.value })}
-          onKeyDown={(e) => e.key === "Enter" && add()} />
-        <button className="btn-primary" onClick={add} disabled={atCap}>افزودن</button>
+      <div className="space-y-2">
+        <div className="flex gap-2 flex-wrap">
+          <input className="input flex-1 min-w-[140px]" placeholder="نام و نام خانوادگی (اجباری)" value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <input className="input flex-1 min-w-[140px]" placeholder="شماره (مثل ۹۸۹۱۲…)" value={form.phone}
+            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            onKeyDown={(e) => e.key === "Enter" && add()} />
+          <button className="btn-secondary text-xs" onClick={() => setShowProfile((s) => !s)}>
+            {showProfile ? "بستن مشخصات" : "مشخصات بیشتر"}
+          </button>
+          <button className="btn-primary" onClick={add}>افزودن</button>
+        </div>
+        {showProfile && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input className="input" placeholder="سمت در آفراکالا" value={form.job_title}
+              onChange={(e) => setForm({ ...form, job_title: e.target.value })} />
+            <input className="input" placeholder="سابقهٔ تخصصی (سال)" value={form.years_experience}
+              onChange={(e) => setForm({ ...form, years_experience: e.target.value.replace(/[^0-9۰-۹]/g, "") })} />
+            <input className="input" placeholder="شماره کاری (اختیاری)" value={form.phone_secondary}
+              onChange={(e) => setForm({ ...form, phone_secondary: e.target.value })} />
+            <input className="input" placeholder="این سیستم چه سودی برای او دارد؟" value={form.personal_benefit_note}
+              onChange={(e) => setForm({ ...form, personal_benefit_note: e.target.value })} />
+          </div>
+        )}
       </div>
 
       {loading ? <Spinner /> : helpers.length === 0 ? (
-        <Empty label="هنوز فرد کمک‌کننده‌ای اضافه نشده." />
+        <Empty label="هنوز مخاطبی اضافه نشده." />
       ) : (
         <div className="divide-y divide-slate-800">
           {helpers.map((h) => (
@@ -479,6 +506,9 @@ function HumanHelpers() {
               <div>
                 <span className={h.is_active ? "font-bold" : "text-slate-500 line-through"}>{h.name}</span>
                 <span className="text-xs text-slate-500 font-mono mr-2">{fa(h.phone)}</span>
+                {h.job_title && <span className="text-xs text-sky-300 mr-2">{h.job_title}</span>}
+                {h.years_experience != null && <span className="text-xs text-slate-400 mr-1">({fa(h.years_experience)} سال)</span>}
+                {h.phone_secondary && <span className="text-xs text-slate-500 font-mono mr-2">کاری: {fa(h.phone_secondary)}</span>}
               </div>
               <div className="flex gap-1">
                 <button className={`badge ${h.is_active ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-slate-600/30 text-slate-400 border-slate-600"}`}

@@ -16,12 +16,23 @@ from app.services import warmup_helper_service as hs
 
 router = APIRouter(prefix="/warmup-helpers", tags=["warmup-helpers"])
 
+# V29 «همکاری تیمی» sentinel so a PATCH can distinguish "omit" from "clear to null".
+_UNSET = "__unset__"
+
 
 class HelperBody(BaseModel):
     name: str
     phone: str
     is_active: bool = True
     sender_instance_id: str | None = None   # V28 — which of the user's accounts owns this contact
+    # V29 «همکاری تیمی» — rich personnel profile (optional).
+    job_title: str | None = None
+    years_experience: int | None = None
+    personal_benefit_note: str | None = None
+    phone_secondary: str | None = None      # «شماره کاری»
+    # V29 — the «همکاری تیمی» UI sends this true so NEW saves must carry a full name (first +
+    # last). Default False keeps the V25/V28 API contract (single-token names) intact.
+    require_full_name: bool = False
 
 
 class HelperUpdateBody(BaseModel):
@@ -29,6 +40,12 @@ class HelperUpdateBody(BaseModel):
     phone: str | None = None
     is_active: bool | None = None
     sender_instance_id: str | None = None
+    # V29 — rich-profile patch fields (default sentinel → "leave unchanged").
+    job_title: str | None = _UNSET
+    years_experience: int | None = _UNSET
+    personal_benefit_note: str | None = _UNSET
+    phone_secondary: str | None = _UNSET
+    require_full_name: bool = False
 
 
 class ToggleBody(BaseModel):
@@ -39,11 +56,30 @@ class ThresholdBody(BaseModel):
     threshold: int
 
 
+class SenderToggleBody(BaseModel):
+    sender_instance_id: str
+    enabled: bool
+
+
+class ColdAssignBody(BaseModel):
+    cold_instance_id: str
+
+
+class CurrentBriefBody(BaseModel):
+    sender_instance_id: str
+    brief_text: str
+
+
 def _helper_dict(h) -> dict:
     return {
         "id": str(h.id), "name": h.name, "phone": h.phone,
         "sender_instance_id": h.sender_instance_id,
         "is_active": h.is_active,
+        # V29 rich profile
+        "job_title": getattr(h, "job_title", None),
+        "years_experience": getattr(h, "years_experience", None),
+        "personal_benefit_note": getattr(h, "personal_benefit_note", None),
+        "phone_secondary": getattr(h, "phone_secondary", None),
         "created_at": h.created_at.isoformat() if h.created_at else None,
     }
 
@@ -60,11 +96,13 @@ async def list_senders(db: AsyncSession = Depends(get_db)):
         select(WarmupHelper.sender_instance_id, func.count())
         .group_by(WarmupHelper.sender_instance_id)
     )).all())
+    disabled = await hs.enabled_sender_ids(db)   # V29 — set of explicitly-disabled senders
     return {"senders": [{
         "instance_id": a.instance_id, "name": a.name, "phone": a.phone,
         "platform": getattr(a, "platform", "whatsapp") or "whatsapp",
         "is_warm_peer": bool(getattr(a, "is_warm_peer", False)),
         "contact_count": int(counts.get(a.instance_id, 0) or 0),
+        "team_enabled": a.instance_id not in disabled,   # V29 per-sender «همکاری تیمی» toggle
     } for a in accts]}
 
 
@@ -99,7 +137,12 @@ async def create_helper(body: HelperBody, db: AsyncSession = Depends(get_db)):
     is now over the threshold (the client shows it and still proceeds)."""
     sender = body.sender_instance_id or await hs.resolve_main_sender_instance_id(db)
     try:
-        h = await hs.add_helper(db, body.name, body.phone, body.is_active, sender_instance_id=sender)
+        h = await hs.add_helper(
+            db, body.name, body.phone, body.is_active, sender_instance_id=sender,
+            job_title=body.job_title, years_experience=body.years_experience,
+            personal_benefit_note=body.personal_benefit_note, phone_secondary=body.phone_secondary,
+            require_full_name=body.require_full_name,   # V29 «همکاری تیمی» UI sends true
+        )
     except ValueError as e:
         raise HTTPException(400, str(e))
     banner = None
@@ -159,13 +202,84 @@ async def generate_preview(body: BriefBody, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{helper_id}")
 async def edit_helper(helper_id: str, body: HelperUpdateBody, db: AsyncSession = Depends(get_db)):
+    # Translate the _UNSET sentinel back into the service's own _UNSET (omit → leave unchanged).
+    patch = {}
+    for f in ("job_title", "years_experience", "personal_benefit_note", "phone_secondary"):
+        v = getattr(body, f)
+        if v != _UNSET:
+            patch[f] = v
     try:
         h = await hs.update_helper(db, uuid.UUID(helper_id), name=body.name,
                                    phone=body.phone, is_active=body.is_active,
-                                   sender_instance_id=body.sender_instance_id)
+                                   sender_instance_id=body.sender_instance_id,
+                                   require_full_name=body.require_full_name, **patch)
     except ValueError as e:
         raise HTTPException(404 if "یافت نشد" in str(e) else 400, str(e))
     return _helper_dict(h)
+
+
+# ── V29 «همکاری تیمی» — cold-account assignment (a contact's path; ceiling of 2) ──
+@router.get("/{helper_id}/cold-accounts")
+async def list_cold_accounts(helper_id: str, db: AsyncSession = Depends(get_db)):
+    """The cold accounts a contact is assigned to (1 preferred, up to 2)."""
+    cold_ids = await hs.list_cold_accounts_for_helper(db, uuid.UUID(helper_id))
+    accounts = (await db.execute(select(Account))).scalars().all()
+    name_by = {a.instance_id: a.name for a in accounts}
+    return {"helper_id": helper_id, "max": hs.MAX_COLD_ACCOUNTS_PER_CONTACT,
+            "hint": hs.COLD_ASSIGN_HINT_FA,
+            "cold_accounts": [{"cold_instance_id": c, "name": name_by.get(c, c)} for c in cold_ids]}
+
+
+@router.post("/{helper_id}/cold-accounts")
+async def add_cold_account(helper_id: str, body: ColdAssignBody, db: AsyncSession = Depends(get_db)):
+    """Assign a contact to a cold account. Rejected (400 + Persian) beyond the ceiling of 2."""
+    try:
+        task = await hs.assign_cold_account(db, uuid.UUID(helper_id), body.cold_instance_id)
+    except ValueError as e:
+        raise HTTPException(404 if "یافت نشد" in str(e) else 400, str(e))
+    count = await hs.count_cold_accounts_for_helper(db, uuid.UUID(helper_id))
+    return {"assigned": True, "task_id": str(task.id), "cold_instance_id": task.cold_instance_id,
+            "count": count, "hint": hs.COLD_ASSIGN_HINT_FA}
+
+
+@router.delete("/{helper_id}/cold-accounts/{cold_instance_id}")
+async def remove_cold_account(helper_id: str, cold_instance_id: str,
+                              db: AsyncSession = Depends(get_db)):
+    removed = await hs.unassign_cold_account(db, uuid.UUID(helper_id), cold_instance_id)
+    return {"removed": removed}
+
+
+# ── V29 — per-sender «همکاری تیمی» toggle (finer than the global one) ──────────
+@router.post("/sender-toggle")
+async def sender_toggle(body: SenderToggleBody, db: AsyncSession = Depends(get_db)):
+    """Enable/disable «همکاری تیمی» for ONE sender without touching the global master toggle."""
+    cfg = await hs.set_sender_enabled(db, body.sender_instance_id, body.enabled)
+    return {"sender_instance_id": cfg.sender_instance_id, "enabled": cfg.is_enabled}
+
+
+@router.get("/sender-config")
+async def sender_config(sender_instance_id: str, db: AsyncSession = Depends(get_db)):
+    enabled = await hs.is_sender_enabled(db, sender_instance_id)
+    await db.commit()
+    return {"sender_instance_id": sender_instance_id, "enabled": enabled}
+
+
+# ── V29 — current brief (exactly one active per sender) ───────────────────────
+@router.post("/current-brief")
+async def set_current_brief(body: CurrentBriefBody, db: AsyncSession = Depends(get_db)):
+    """Set the sender's ACTIVE brief (append-only history + is_current flag)."""
+    brief = await hs.set_current_brief(db, body.sender_instance_id, body.brief_text)
+    return {"id": str(brief.id), "sender_instance_id": brief.sender_instance_id,
+            "brief_text": brief.brief_text, "is_current": brief.is_current}
+
+
+@router.get("/current-brief")
+async def get_current_brief(sender_instance_id: str, db: AsyncSession = Depends(get_db)):
+    brief = await hs.get_current_brief(db, sender_instance_id)
+    if brief is None:
+        return {"sender_instance_id": sender_instance_id, "brief_text": None, "is_current": None}
+    return {"id": str(brief.id), "sender_instance_id": brief.sender_instance_id,
+            "brief_text": brief.brief_text, "is_current": brief.is_current}
 
 
 @router.delete("/{helper_id}")

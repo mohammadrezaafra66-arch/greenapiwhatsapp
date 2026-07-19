@@ -431,6 +431,81 @@ async def delete_helper(db, helper_id) -> bool:
     return True
 
 
+# ── V29: cold-account assignment (a contact's "path"; ceiling of 2) ──────────
+# Each ask-message references AT MOST 2 cold accounts. Preferably ONE fixed cold account per
+# contact (optionally reached from both the personal and «شماره کاری» work number). 2 is an
+# explicit ceiling, NOT a default target. The (helper × cold) pairing is warmup_helper_task.
+MAX_COLD_ACCOUNTS_PER_CONTACT = 2
+COLD_CEILING_FA = (
+    "هر مخاطب حداکثر می‌تواند به ۲ اکانت سرد اختصاص یابد. برای سادگی و طبیعی‌تربودن، "
+    "ترجیحاً هر مخاطب را فقط به یک اکانت سرد اختصاص دهید."
+)
+COLD_ASSIGN_HINT_FA = (
+    "برای سادگی و طبیعی‌تربودن، ترجیحاً هر مخاطب را فقط به یک اکانت سرد اختصاص دهید."
+)
+
+
+async def list_cold_accounts_for_helper(db, helper_id) -> list[str]:
+    """The distinct cold-account instance_ids currently assigned to a contact (via its tasks)."""
+    rows = (await db.execute(
+        select(WarmupHelperTask.cold_instance_id).where(WarmupHelperTask.helper_id == helper_id)
+    )).all()
+    seen, out = set(), []
+    for (cid,) in rows:
+        if cid not in seen:
+            seen.add(cid)
+            out.append(cid)
+    return out
+
+
+async def count_cold_accounts_for_helper(db, helper_id) -> int:
+    """How many DISTINCT cold accounts a contact is assigned to (the ceiling is 2)."""
+    return len(await list_cold_accounts_for_helper(db, helper_id))
+
+
+async def assign_cold_account(db, helper_id, cold_instance_id: str) -> WarmupHelperTask:
+    """Assign a contact to a cold account (creates the pending (helper × cold) task). Idempotent
+    for an existing pair; rejects with a Persian error once the contact already has 2 DISTINCT
+    cold accounts. The DB-level UNIQUE also backstops accidental duplicates."""
+    helper = await db.get(WarmupHelper, helper_id)
+    if helper is None:
+        raise ValueError("مخاطب یافت نشد")
+    if not (cold_instance_id or "").strip():
+        raise ValueError("اکانت سرد نامعتبر است")
+    existing = await list_cold_accounts_for_helper(db, helper_id)
+    if cold_instance_id in existing:
+        # already assigned — return the existing task (idempotent), never a duplicate
+        task = (await db.execute(
+            select(WarmupHelperTask).where(
+                WarmupHelperTask.helper_id == helper_id,
+                WarmupHelperTask.cold_instance_id == cold_instance_id).limit(1)
+        )).scalar_one_or_none()
+        if task is not None:
+            return task
+    elif len(existing) >= MAX_COLD_ACCOUNTS_PER_CONTACT:
+        raise ValueError(COLD_CEILING_FA)
+    task = WarmupHelperTask(helper_id=helper.id, cold_instance_id=cold_instance_id,
+                            status=STATUS_PENDING)
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+async def unassign_cold_account(db, helper_id, cold_instance_id: str) -> int:
+    """Remove a contact↔cold-account assignment (delete its task rows). Returns rows removed."""
+    tasks = (await db.execute(
+        select(WarmupHelperTask).where(
+            WarmupHelperTask.helper_id == helper_id,
+            WarmupHelperTask.cold_instance_id == cold_instance_id)
+    )).scalars().all()
+    for t in tasks:
+        await db.delete(t)
+    if tasks:
+        await db.commit()
+    return len(tasks)
+
+
 # ── V28 PART 5 — outreach dashboard aggregation ──────────────────────────────
 # The sender role is INDEPENDENT of mesh warm-peer status (an account can be both, either, or
 # neither). This note is surfaced per sender so the two roles are never conflated in the UI.

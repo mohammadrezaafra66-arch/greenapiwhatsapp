@@ -474,13 +474,37 @@ export const WarmupApi = {
 
 // ── Warm-up "human helpers" assist (V25 PART 1) ────────────
 export const WarmupHelpersApi = {
-  list: () => http.get("/warmup-helpers/").then((r) => r.data),
+  list: (senderInstanceId) =>
+    http.get("/warmup-helpers/", { params: senderInstanceId ? { sender_instance_id: senderInstanceId } : {} }).then((r) => r.data),
   create: (body) => http.post("/warmup-helpers/", body).then((r) => r.data),
   update: (id, body) => http.put(`/warmup-helpers/${id}`, body).then((r) => r.data),
   remove: (id) => http.delete(`/warmup-helpers/${id}`).then((r) => r.data),
   toggle: (enabled) => http.post("/warmup-helpers/toggle", { enabled }).then((r) => r.data),
   tasks: (coldInstanceId) =>
     http.get("/warmup-helpers/tasks", { params: coldInstanceId ? { cold_instance_id: coldInstanceId } : {} }).then((r) => r.data),
+  // V28/V29 «همکاری تیمی»
+  senders: () => http.get("/warmup-helpers/senders").then((r) => r.data),
+  dashboard: () => http.get("/warmup-helpers/dashboard").then((r) => r.data),
+  senderToggle: (senderInstanceId, enabled) =>
+    http.post("/warmup-helpers/sender-toggle", { sender_instance_id: senderInstanceId, enabled }).then((r) => r.data),
+  senderConfig: (senderInstanceId) =>
+    http.get("/warmup-helpers/sender-config", { params: { sender_instance_id: senderInstanceId } }).then((r) => r.data),
+  coldAccounts: (helperId) => http.get(`/warmup-helpers/${helperId}/cold-accounts`).then((r) => r.data),
+  assignCold: (helperId, coldInstanceId) =>
+    http.post(`/warmup-helpers/${helperId}/cold-accounts`, { cold_instance_id: coldInstanceId }).then((r) => r.data),
+  unassignCold: (helperId, coldInstanceId) =>
+    http.delete(`/warmup-helpers/${helperId}/cold-accounts/${coldInstanceId}`).then((r) => r.data),
+  setCurrentBrief: (senderInstanceId, briefText) =>
+    http.post("/warmup-helpers/current-brief", { sender_instance_id: senderInstanceId, brief_text: briefText }).then((r) => r.data),
+  getCurrentBrief: (senderInstanceId) =>
+    http.get("/warmup-helpers/current-brief", { params: { sender_instance_id: senderInstanceId } }).then((r) => r.data),
+  // V29 PART 8 warmth + PART 9 log
+  warmth: () => http.get("/warmup-helpers/warmth").then((r) => r.data),
+  log: (params) => http.get("/warmup-helpers/log", { params: params || {} }).then((r) => r.data),
+  // V29 PART 7 cold-account team enrollment
+  teamEnroll: (coldInstanceId, enabled) =>
+    http.post("/warmup-helpers/team-enroll", { cold_instance_id: coldInstanceId, enabled }).then((r) => r.data),
+  teamEnrollments: () => http.get("/warmup-helpers/team-enrollments").then((r) => r.data),
 };
 
 // ── Advertising links (V16 PART 3) ─────────────────────────
