@@ -105,6 +105,43 @@ def wa_me_link(phone: str | None) -> str | None:
     return f"https://wa.me/{d}" if d else None
 
 
+def normalize_intl_phone(phone: str | None) -> str:
+    """Canonical INTERNATIONAL digits for a phone. Starts from `wa_me_digits` (Persian/Arabic
+    numerals → ASCII, strip everything non-digit and any @c.us suffix), then applies the SAME
+    local→international rule `GreenAPIClient._normalize` uses: a local Iranian 0XXXXXXXXXX (11
+    digits) → 98XXXXXXXXX, and a bare 9XXXXXXXXX (10) → 98XXXXXXXXX. Idempotent (an already-98
+    number is returned unchanged); '' when empty.
+
+    V36 PART 3 fix — a WhatsApp chatId ALWAYS arrives international (98…), so a contact saved in
+    local 09… format would never match on a raw-digit equality compare. Both a stored contact
+    phone and an incoming sender phone MUST pass through this before any equality check."""
+    d = wa_me_digits(phone)
+    if not d:
+        return ""
+    if d.startswith("0") and len(d) == 11:
+        return "98" + d[1:]
+    if len(d) == 10 and d.startswith("9"):
+        return "98" + d
+    return d
+
+
+def phone_match_forms(phone: str | None) -> list[str]:
+    """Every equivalent stored digit-form of a number, so an incoming sender matches a contact
+    saved in ANY historical format — international (98…), local (0…), or bare national (9…). The
+    canonical international form is always included. Used by the incoming matcher so we never
+    compare raw digits that might be in different formats."""
+    d = wa_me_digits(phone)
+    if not d:
+        return []
+    intl = normalize_intl_phone(d)
+    forms = {d, intl}
+    if intl.startswith("98") and len(intl) > 2:
+        national = intl[2:]          # the significant number after the 98 country code
+        forms.add(national)          # bare 9…
+        forms.add("0" + national)    # local 0…
+    return [f for f in forms if f]
+
+
 # ── pure: Persian message builders ───────────────────────────────────────────
 # A short copy/paste suggestion the helper can send to the new number.
 SUGGESTED_TEXT = "سلام، خوبی؟"
@@ -374,14 +411,16 @@ async def add_helper(db, name: str, phone: str, is_active: bool = True,
     (require_full_name defaults False so the V25/V28 service contract — a single-token name — is
     preserved for existing callers/tests; the full-name guardrail is enforced at the V29 boundary.)"""
     name = _normalize_full_name(name)
-    digits = wa_me_digits(phone)
+    # V36 PART 3 — store the canonical INTERNATIONAL form (0…→98…) so contacts are always matchable
+    # against incoming WhatsApp chatIds (which are always international).
+    digits = normalize_intl_phone(phone)
     if not name:
         raise ValueError("نام مخاطب لازم است")
     if require_full_name and not is_full_name(name):
         raise ValueError(FULL_NAME_REQUIRED_FA)
     if not digits:
         raise ValueError("شماره‌ی معتبر لازم است")
-    sec = wa_me_digits(phone_secondary) or None
+    sec = normalize_intl_phone(phone_secondary) or None
     yrs = _coerce_years(years_experience)
     helper = WarmupHelper(name=name, phone=digits, is_active=bool(is_active),
                           sender_instance_id=sender_instance_id,
@@ -396,6 +435,32 @@ async def add_helper(db, name: str, phone: str, is_active: bool = True,
     await db.commit()
     await db.refresh(helper)
     return helper
+
+
+async def backfill_helper_phone_formats(db, *, commit: bool = True) -> dict:
+    """V36 PART 3 one-off: normalize EVERY existing warmup_helper.phone / phone_secondary to the
+    canonical INTERNATIONAL form (0…→98…), so contacts saved in local format become matchable
+    against incoming WhatsApp chatIds. ONLY the digit string is rewritten — no rows added/removed,
+    no other columns touched, and an already-international number is left unchanged (idempotent).
+    Returns a change summary. `commit=False` lets tests inspect the mutation without persisting."""
+    rows = (await db.execute(select(WarmupHelper))).scalars().all()
+    changes = []
+    for h in rows:
+        if h.phone:
+            new_p = normalize_intl_phone(h.phone)
+            if new_p and new_p != h.phone:
+                changes.append({"id": str(getattr(h, "id", "")), "name": h.name,
+                                "field": "phone", "old": h.phone, "new": new_p})
+                h.phone = new_p
+        if h.phone_secondary:
+            new_s = normalize_intl_phone(h.phone_secondary)
+            if new_s and new_s != h.phone_secondary:
+                changes.append({"id": str(getattr(h, "id", "")), "name": h.name,
+                                "field": "phone_secondary", "old": h.phone_secondary, "new": new_s})
+                h.phone_secondary = new_s
+    if commit:
+        await db.commit()
+    return {"total": len(rows), "changed": len(changes), "changes": changes}
 
 
 def _coerce_years(v) -> int | None:
@@ -439,7 +504,7 @@ async def update_helper(db, helper_id, *, name=None, phone=None, is_active=None,
             raise ValueError(FULL_NAME_REQUIRED_FA)
         helper.name = name
     if phone is not None:
-        digits = wa_me_digits(phone)
+        digits = normalize_intl_phone(phone)   # V36 PART 3 — store canonical international form
         if not digits:
             raise ValueError("شماره‌ی معتبر لازم است")
         helper.phone = digits
@@ -453,7 +518,7 @@ async def update_helper(db, helper_id, *, name=None, phone=None, is_active=None,
         helper.personal_benefit_note = (personal_benefit_note or None) and \
             str(personal_benefit_note).strip() or None
     if phone_secondary is not _UNSET:
-        helper.phone_secondary = wa_me_digits(phone_secondary) or None
+        helper.phone_secondary = normalize_intl_phone(phone_secondary) or None
     if relationship is not _UNSET:
         helper.relationship = _coerce_relationship(relationship)
     if referral_note is not _UNSET:

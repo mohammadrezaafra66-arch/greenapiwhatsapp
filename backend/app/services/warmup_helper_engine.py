@@ -508,14 +508,18 @@ async def handle_helper_incoming(db, cold_instance_id: str, sender_phone: str,
     sends the thank-you immediately. Guarded by the caller so it can never disrupt the webhook."""
     client_factory = client_factory or _default_client_factory
     now = now or datetime.utcnow()
-    digits = hs.wa_me_digits(sender_phone)
-    if not digits:
+    # V36 PART 3 — canonicalize BOTH sides before comparing. A WhatsApp chatId always arrives
+    # international (98…); a contact may be stored international, local (0…), or bare (9…). Match
+    # against every equivalent form so a 09… contact is no longer silently missed (the completion
+    # bug). New/backfilled rows are canonical international, so this is an exact index hit in practice.
+    forms = hs.phone_match_forms(sender_phone)
+    if not forms:
         return None
 
     # V29 — match the incoming phone against the contact's primary OR secondary («شماره کاری») number.
     helper = (await db.execute(
         select(WarmupHelper).where(
-            (WarmupHelper.phone == digits) | (WarmupHelper.phone_secondary == digits)
+            WarmupHelper.phone.in_(forms) | WarmupHelper.phone_secondary.in_(forms)
         ).limit(1)
     )).scalar_one_or_none()
     if helper is None:
