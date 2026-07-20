@@ -46,6 +46,7 @@ const NAV = [
   },
   {
     label: "شماره‌ها", icon: "📱", children: [
+      { to: "/onboarding", label: "راه‌اندازی شمارهٔ جدید" },
       { to: "/accounts", label: "حساب‌های واتساپ" },
       { to: "/telegram-accounts", label: "حساب‌های تلگرام" },
       { to: "/account-schedules", label: "زمان‌بندی حساب‌ها" },
@@ -98,6 +99,7 @@ const PAGES = [
   { to: "/group-monitoring", label: "پایش گروه‌ها", syn: "group monitor listener voice whisper شنونده صوتی رونویسی کلمه کلیدی ممنوعه" },
   { to: "/telegram-accounts", label: "حساب‌های تلگرام", syn: "telegram تلگرام اکانت qr اتصال" },
   { to: "/calls", label: "تماس‌ها", syn: "calls تماس بی‌پاسخ hot lead" },
+  { to: "/onboarding", label: "راه‌اندازی شمارهٔ جدید", syn: "onboarding راه اندازی سیم کارت setup wizard گام به گام گرم کردن شماره جدید anti-ban" },
   { to: "/accounts", label: "حساب‌های واتساپ", syn: "accounts شماره پروفایل" },
   { to: "/account-schedules", label: "زمان‌بندی حساب‌ها", syn: "schedule" },
   { to: "/protection", label: "محافظت و سلامت", syn: "yellowcard کارت زرد امنیت سلامت incident" },

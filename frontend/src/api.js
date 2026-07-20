@@ -515,6 +515,16 @@ export const WarmupHelpersApi = {
     http.post("/warmup-helpers/generate-thread-preview", { sender_instance_id: senderInstanceId, cold_instance_id: coldInstanceId }).then((r) => r.data),
 };
 
+// ── Onboarding wizard «راه‌اندازی» (V35 PART 4) ────────────
+export const OnboardingApi = {
+  list: () => http.get("/onboarding").then((r) => r.data),
+  get: (id) => http.get(`/onboarding/${id}`).then((r) => r.data),
+  create: (body) => http.post("/onboarding", body).then((r) => r.data),
+  confirmWhatsapp: (id) => http.post(`/onboarding/${id}/confirm-whatsapp`).then((r) => r.data),
+  confirmGreenApi: (id) => http.post(`/onboarding/${id}/confirm-green-api`).then((r) => r.data),
+  remove: (id) => http.delete(`/onboarding/${id}`).then((r) => r.data),
+};
+
 // ── Advertising links (V16 PART 3) ─────────────────────────
 export const AdLinksApi = {
   list: () => http.get("/advertising-links/").then((r) => r.data),

@@ -51,8 +51,10 @@ from app.models.group_monitor import (
     MonitoredGroup, GroupMessage, GroupKeyword, GroupPredefinedReply, GroupForbiddenAlert,
 )
 from app.models.telegram import TelegramChatIdCache
+from app.models.account_onboarding import AccountOnboarding
 
 __all__ = [
+    "AccountOnboarding",
     "InstanceLiveState",
     "WhatsappNumberCheck",
     "CampaignMediaSend",

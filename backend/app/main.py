@@ -23,7 +23,7 @@ from app.api.v1 import (
     partner, messages, incidents, calls,
     capabilities as capabilities_router,
     adlinks, warmup, warmup_helpers,
-    group_monitor, telegram,
+    group_monitor, telegram, onboarding,
 )
 
 @asynccontextmanager
@@ -1068,6 +1068,19 @@ async def lifespan(app: FastAPI):
         ddl_v35 = [
             "ALTER TABLE warmup_helper ADD COLUMN IF NOT EXISTS relationship varchar(20)",
             "ALTER TABLE warmup_helper ADD COLUMN IF NOT EXISTS referral_note text",
+            # V35 PART 4 — guided onboarding wizard «راه‌اندازی» (SIM → WhatsApp → Green API).
+            """CREATE TABLE IF NOT EXISTS account_onboarding (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                phone_number varchar(30) NOT NULL,
+                phone_make_model varchar(120),
+                sim_inserted_at timestamp,
+                whatsapp_activated_at timestamp,
+                green_api_login_prompted_at timestamp,
+                green_api_connected_at timestamp,
+                current_step integer NOT NULL DEFAULT 1,
+                created_at timestamp DEFAULT now()
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_account_onboarding_phone ON account_onboarding(phone_number)",
         ]
         for stmt in ddl_v35:
             try:
@@ -1131,6 +1144,7 @@ for router in [
     partner.router, messages.router, incidents.router, calls.router,
     capabilities_router.router, adlinks.router, warmup.router,
     warmup_helpers.router, group_monitor.router, telegram.router,
+    onboarding.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 
