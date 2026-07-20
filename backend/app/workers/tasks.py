@@ -751,17 +751,17 @@ def task_reset_daily_counters():
 
 @celery_app.task(name="tasks.warmup_accounts")
 def task_warmup_accounts():
+    # V35 PART 1 — the automatic daily WhatsApp Status post has been REMOVED. This task
+    # previously auto-posted a public status at 10:00 Tehran every day (the unwanted
+    # behaviour, and a ban risk). It now ONLY advances the legacy warm-up day counter
+    # (days_active), which feeds the send-limit formula. It must never post any status.
     async def _w():
         from app.database import AsyncSessionLocal
         from app.models.account import Account, AccountStatus
-        from app.services.green_api import GreenAPIClient
-        from app.services.warmup_service import post_daily_status
         from sqlalchemy import select
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(Account).where(Account.status == AccountStatus.active, Account.warmup_enabled == True))
             for account in result.scalars().all():
-                client = GreenAPIClient(account.instance_id, account.api_token)
-                await post_daily_status(client)
                 account.days_active += 1
             await db.commit()
     run_async(_w())

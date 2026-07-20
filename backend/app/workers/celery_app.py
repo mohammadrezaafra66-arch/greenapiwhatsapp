@@ -34,7 +34,8 @@ celery_app.conf.beat_schedule = {
     # Fires at 00:00 Tehran (app timezone is Asia/Tehran) — resilient to worker
     # restarts, unlike a plain 86400s interval whose timer resets on each restart.
     "reset-daily-counters": {"task": "tasks.reset_daily_counters", "schedule": crontab(hour=0, minute=0)},
-    # Daily status post + warm-up increment at 10:00 Tehran (once per day)
+    # V35 PART 1 — daily automatic status posting REMOVED. This entry now only advances the
+    # legacy warm-up day counter (days_active) at 10:00 Tehran; it no longer posts any status.
     "warmup-accounts": {"task": "tasks.warmup_accounts", "schedule": crontab(hour=10, minute=0)},
     "sync-account-states": {"task": "tasks.sync_account_states", "schedule": 300.0},
     "poll-accounts": {"task": "tasks.poll_accounts", "schedule": 10.0},
