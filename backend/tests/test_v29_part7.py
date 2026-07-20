@@ -119,8 +119,9 @@ class FakeDB:
         if "warmup_helper_thread" in sql:
             return FakeResult(scalars=list(self.threads))
         if "warmup_helper_task" in sql:
-            if "helper_id" in sql and "cold_instance_id" in sql and "status" not in sql \
-               and "select warmup_helper_task.helper_id" in sql:
+            # the team-scheduler pairs query selects ONLY helper_id (V33 PART 4 adds a status !=
+            # no_response filter in the WHERE, so don't key on "status not in sql" any more).
+            if "select warmup_helper_task.helper_id" in sql and "cold_instance_id" in sql:
                 return FakeResult(rows=[(t.helper_id,) for t in self.tasks])
             return FakeResult(scalars=list(self.tasks))
         if "warmup_helper" in sql:

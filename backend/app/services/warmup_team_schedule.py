@@ -163,10 +163,14 @@ async def run_team_schedule_tick(db, now: datetime | None = None, *, client_fact
             te.is_enabled = False if day_index >= TEAM_CYCLE_DAYS else te.is_enabled
             continue
 
-        # Contacts assigned to THIS cold account (via their tasks) → their threads.
+        # Contacts assigned to THIS cold account (via their tasks) → their threads. V33 PART 4 —
+        # exclude tasks that went terminal `no_response`, so a closed-out (contact, cold) pairing is
+        # never re-asked by the 10-day scheduler (belt-and-suspenders with expire marking the thread
+        # done; this also covers a no_response task that never had a thread yet).
         pairs = (await db.execute(
             select(WarmupHelperTask.helper_id).where(
-                WarmupHelperTask.cold_instance_id == te.cold_instance_id)
+                WarmupHelperTask.cold_instance_id == te.cold_instance_id,
+                WarmupHelperTask.status != hs.STATUS_NO_RESPONSE)
         )).all()
         helper_ids = {hid for (hid,) in pairs}
         if not helper_ids:
