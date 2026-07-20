@@ -11,6 +11,33 @@ from app.services import rate_limiter
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
+# V35 PART 5 — soft-deleted accounts must never appear on the per-account chart (a stale duplicate
+# row, same display name + status=deleted, was polluting the x-axis).
+def account_in_chart(a) -> bool:
+    """True if this account belongs on the dashboard's per-account chart/detail list."""
+    return getattr(a, "status", None) != AccountStatus.deleted
+
+
+def account_detail_row(a, per_account_sent: dict) -> dict:
+    """Build one detail row. `sent_today`/`real_sent_today` carry the cross-ledger real count
+    (campaign + team + mesh + status) for THIS account; `campaign_sent_today` keeps the legacy
+    campaign-only counter for reference."""
+    real = (per_account_sent.get(getattr(a, "instance_id", None)) or {}).get("total", 0)
+    return {
+        "id": str(a.id),
+        "name": a.name,
+        "phone": a.phone,
+        "status": a.status,
+        "campaign_sent_today": a.sent_today,
+        "real_sent_today": real,
+        "sent_today": real,
+        "received_today": a.received_today,
+        "daily_limit": a.computed_daily_limit,
+        "warmup_enabled": a.warmup_enabled,
+        "quota_exceeded_at": str(a.quota_exceeded_at) if a.quota_exceeded_at else None,
+    }
+
+
 @router.get("/stats")
 async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     """Real-time dashboard statistics."""
@@ -41,10 +68,13 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     # V30 PART 8 — "کل پیام‌های ارسالی امروز" must reflect ALL of today's real outbound sends
     # (Tehran calendar day), not just the campaign counter. sum(a.sent_today) missed «همکاری تیمی»,
     # mesh, and status sends entirely (they use their own ledgers), so a TC-only day showed 0.
-    from app.services.send_metrics import real_sent_today
+    from app.services.send_metrics import real_sent_today, real_sent_today_by_account
     sent_breakdown = await real_sent_today(db)
     sent_today = sent_breakdown["total"]
     campaign_sent_today = sum(a.sent_today for a in accounts)   # kept for the per-account view
+    # V35 PART 5 — per-account cross-ledger "sent today" (campaign + team + mesh + status), so the
+    # per-account chart reflects ALL of an account's real activity, not just the campaign counter.
+    per_account_sent = await real_sent_today_by_account(db)
     received_today = sum(a.received_today for a in accounts)
 
     current_hour = rate_limiter.get_tehran_hour()
@@ -68,20 +98,11 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
             "total": len(accounts),
             "active": sum(1 for a in accounts if a.status == AccountStatus.active),
             "banned": sum(1 for a in accounts if a.status == AccountStatus.banned),
-            "detail": [
-                {
-                    "id": str(a.id),
-                    "name": a.name,
-                    "phone": a.phone,
-                    "status": a.status,
-                    "sent_today": a.sent_today,
-                    "received_today": a.received_today,
-                    "daily_limit": a.computed_daily_limit,
-                    "warmup_enabled": a.warmup_enabled,
-                    "quota_exceeded_at": str(a.quota_exceeded_at) if a.quota_exceeded_at else None,
-                }
-                for a in accounts
-            ]
+            # V35 PART 5 — exclude soft-deleted accounts so a stale duplicate row (same display
+            # name, status=deleted) can no longer appear on the per-account chart's x-axis; each
+            # remaining row carries the cross-ledger real "sent today" (not just the campaign counter).
+            "detail": [account_detail_row(a, per_account_sent)
+                       for a in accounts if account_in_chart(a)]
         },
         "campaigns": {"active": active_campaigns},
         "messages": {

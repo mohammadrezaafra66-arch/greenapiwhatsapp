@@ -71,3 +71,72 @@ async def real_sent_today(db, now_utc: datetime | None = None) -> dict:
         "status": status,
         "since_utc": start.isoformat(),
     }
+
+
+async def real_sent_today_by_account(db, now_utc: datetime | None = None) -> dict:
+    """V35 PART 5 — the SAME cross-ledger 'sent today' as real_sent_today(), but computed PER
+    ACCOUNT (keyed by instance_id) instead of only the global sum. The per-account dashboard chart
+    ("ارسال امروز به تفکیک حساب") previously read only accounts.sent_today (the legacy campaign-only
+    counter), so an account whose today's activity was Team-Collaboration / mesh / status showed 0.
+
+    Returns {instance_id: {campaign, team_collaboration, mesh, status, total}}. Ledgers attribute a
+    send to an account differently, so each is grouped by its own account key and mapped to the
+    account's instance_id:
+      • campaign     — CampaignContact.account_id  → instance_id (via the accounts table)
+      • team-collab  — WarmupHelperLog.from_instance_id (the sender of the ask/reminder/thank-you)
+      • mesh         — WarmupEventLog.enrollment_id → WarmupEnrollment.instance_id
+      • status       — StatusSend.instance_id
+    """
+    from collections import defaultdict
+    from app.models.campaign import CampaignContact
+    from app.models.warmup_helpers import WarmupHelperLog
+    from app.models.warmup_mesh import WarmupEventLog, WarmupEnrollment
+    from app.models.status_send import StatusSend
+    from app.models.account import Account
+
+    start = tehran_today_start_utc(now_utc)
+    out: dict[str, dict] = defaultdict(
+        lambda: {"campaign": 0, "team_collaboration": 0, "mesh": 0, "status": 0, "total": 0})
+
+    # account_id → instance_id, so campaign sends (keyed by account_id) can be attributed.
+    id_to_instance = {aid: inst for aid, inst in
+                      (await db.execute(select(Account.id, Account.instance_id))).all()}
+
+    campaign_rows = (await db.execute(
+        select(CampaignContact.account_id, func.count())
+        .where(CampaignContact.sent_at.isnot(None), CampaignContact.sent_at >= start)
+        .group_by(CampaignContact.account_id))).all()
+    for account_id, cnt in campaign_rows:
+        inst = id_to_instance.get(account_id)
+        if inst:
+            out[inst]["campaign"] += int(cnt or 0)
+
+    team_rows = (await db.execute(
+        select(WarmupHelperLog.from_instance_id, func.count())
+        .where(WarmupHelperLog.message_sent.isnot(None), WarmupHelperLog.created_at >= start)
+        .group_by(WarmupHelperLog.from_instance_id))).all()
+    for inst, cnt in team_rows:
+        if inst:
+            out[inst]["team_collaboration"] += int(cnt or 0)
+
+    mesh_rows = (await db.execute(
+        select(WarmupEnrollment.instance_id, func.count())
+        .select_from(WarmupEventLog)
+        .join(WarmupEnrollment, WarmupEnrollment.id == WarmupEventLog.enrollment_id)
+        .where(WarmupEventLog.event_type == "send", WarmupEventLog.created_at >= start)
+        .group_by(WarmupEnrollment.instance_id))).all()
+    for inst, cnt in mesh_rows:
+        if inst:
+            out[inst]["mesh"] += int(cnt or 0)
+
+    status_rows = (await db.execute(
+        select(StatusSend.instance_id, func.count())
+        .where(StatusSend.created_at >= start)
+        .group_by(StatusSend.instance_id))).all()
+    for inst, cnt in status_rows:
+        if inst:
+            out[inst]["status"] += int(cnt or 0)
+
+    for d in out.values():
+        d["total"] = d["campaign"] + d["team_collaboration"] + d["mesh"] + d["status"]
+    return dict(out)

@@ -227,7 +227,11 @@ export default function Dashboard() {
   const totalCount = stats.accounts.total ?? 0;
 
   // charts data
-  const barData = detail.map((a) => ({ name: a.name, sent: a.sent_today || 0 }));
+  // V35 PART 5 — the per-account chart uses the cross-ledger real count (campaign + team + mesh +
+  // status), falling back to the legacy field if an older backend is serving. Soft-deleted accounts
+  // are already excluded server-side, so no stale duplicate row appears on the x-axis.
+  const sentOf = (a) => (a.real_sent_today ?? a.sent_today ?? 0);
+  const barData = detail.map((a) => ({ name: a.name, sent: sentOf(a) }));
   const statusCounts = detail.reduce((m, a) => ((m[a.status] = (m[a.status] || 0) + 1), m), {});
   const pieData = [
     { name: "فعال", value: statusCounts.active || 0, color: "#10b981" },
@@ -261,7 +265,7 @@ export default function Dashboard() {
   // banned accounts + total sent today (Feature 32 — multi-account dashboard)
   const bannedAccounts = detail.filter((a) => a.status === "banned");
   const disconnectedAccounts = detail.filter((a) => a.status === "disconnected");
-  const totalSentToday = detail.reduce((s, a) => s + (a.sent_today || 0), 0);
+  const totalSentToday = detail.reduce((s, a) => s + sentOf(a), 0);
 
   return (
     <div className="space-y-6">
@@ -629,12 +633,12 @@ export default function Dashboard() {
                     <p className="text-xs text-slate-500 mb-2">{a.phone || "بدون شماره"}</p>
                     <div className="flex justify-between text-xs mb-1">
                       <span className="text-slate-400">ارسال امروز</span>
-                      <span className="font-bold"><AnimatedNumber value={a.sent_today} /> / {fa(a.daily_limit)}</span>
+                      <span className="font-bold"><AnimatedNumber value={sentOf(a)} /> / {fa(a.daily_limit)}</span>
                     </div>
                     <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
                       <div
                         className="bg-emerald-500 h-2 rounded-full transition-all duration-700"
-                        style={{ width: `${a.daily_limit > 0 ? Math.min(100, (a.sent_today / a.daily_limit) * 100) : 0}%` }}
+                        style={{ width: `${a.daily_limit > 0 ? Math.min(100, (sentOf(a) / a.daily_limit) * 100) : 0}%` }}
                       />
                     </div>
                   </div>
