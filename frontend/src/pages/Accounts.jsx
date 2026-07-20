@@ -166,6 +166,15 @@ export default function Accounts() {
               </div>
               <Badge status={a.status} />
             </div>
+            {/* V36 — instance deleted upstream in Green API: clear message + prominent remove action */}
+            {a.status === "green_api_deleted" && (
+              <div className="card bg-red-500/10 border-red-500/30 text-red-200 text-xs flex items-center justify-between gap-2 flex-wrap">
+                <span>🗑️ این اینستنس در Green API دیگر وجود ندارد — دیگر قابل اتصال نیست.</span>
+                <button className="btn-danger text-xs whitespace-nowrap" disabled={busy === a.id} onClick={async () => {
+                  if (await confirmDialog("این حساب از پلتفرم حذف شود؟ (در Green API از قبل حذف شده است)")) act(() => Api.remove(a.id), a.id);
+                }}>حذف از پلتفرم</button>
+              </div>
+            )}
             <div className="text-sm text-slate-400 space-y-0.5">
               <p>شناسه (idInstance): {a.instance_id}<HelpTip text={TIPS.idInstance} /></p>
               <p>شماره واتساپ: {a.phone || "—"}<HelpTip text={TIPS.phone} /></p>

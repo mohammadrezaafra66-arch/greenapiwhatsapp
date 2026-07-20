@@ -26,6 +26,25 @@ class GreenQuotaExceeded(Exception):
     """Raised when a Green API call returns 466 (tariff/quota limit). A BILLING condition,
     deliberately distinct from a ban/yellowCard so the admin alert can tell them apart."""
 
+
+class GreenInstanceDeleted(Exception):
+    """Raised when a Green API call targets an instance that no longer exists in the Green API
+    console (the user deleted it there). Green API answers such calls with HTTP 400 and a plain
+    body like «Instance is deleted» / «Instance is not found». This is a TERMINAL, unrecoverable
+    condition (unlike a transient network error or a ban), so callers catch it to mark the local
+    account row `green_api_deleted` and stop probing it — never a raw 500."""
+
+
+def _looks_deleted(status_code: int, body: str) -> bool:
+    """True when a Green API HTTP error clearly means «this instance no longer exists there».
+    Precise on purpose: requires the word 'instance' plus a deleted/not-found marker, so ordinary
+    400 validation errors (e.g. «'company' is not allowed») are NOT misclassified."""
+    if status_code not in (400, 401, 403, 404):
+        return False
+    b = (body or "").lower()
+    return "instance" in b and ("delet" in b or "not found" in b or "is not found" in b)
+
+
 _semaphores: dict = {}   # (instance_id, loop_id) -> asyncio.Semaphore
 _cb_errors: dict = {}    # instance_id -> consecutive error count
 _cb_until: dict = {}     # instance_id -> monotonic time until which it is skipped
@@ -94,6 +113,13 @@ class GreenAPIClient:
                 if r.status_code == QUOTA_STATUS_CODE:
                     raise GreenQuotaExceeded(
                         f"Green API tariff/quota limit (466) for instance {self.instance_id}")
+                # A deleted/non-existent instance answers with HTTP 400 «Instance is deleted».
+                # Surface it as a typed, terminal signal so callers degrade gracefully (mark the
+                # account green_api_deleted) instead of bubbling a raw HTTPStatusError → 500.
+                if _looks_deleted(r.status_code, getattr(r, "text", "")):
+                    raise GreenInstanceDeleted(
+                        f"Green API instance {self.instance_id} no longer exists "
+                        f"(HTTP {r.status_code}: {getattr(r, 'text', '')[:80]})")
                 try:
                     r.raise_for_status()
                 except Exception:

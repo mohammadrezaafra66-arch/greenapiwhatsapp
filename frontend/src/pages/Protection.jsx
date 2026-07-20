@@ -1,5 +1,5 @@
 import React from "react";
-import { IncidentsApi } from "../api.js";
+import { IncidentsApi, Accounts as AccountsApi } from "../api.js";
 import { useAsync, Spinner, Empty, Progress } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
 import HelpTip, { TIPS } from "../components/HelpTip.jsx";
@@ -32,38 +32,56 @@ export default function Protection() {
       {/* Per-account health cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {(prot.data?.accounts || []).map((a) => (
-          <div key={a.account_id} className={`card space-y-2 ${a.in_cooldown ? "border-red-500/50 bg-red-500/5" : ""}`}>
+          <div key={a.account_id} className={`card space-y-2 ${a.green_api_deleted ? "border-red-500/50 bg-red-500/10" : a.in_cooldown ? "border-red-500/50 bg-red-500/5" : ""}`}>
             <div className="flex items-center justify-between">
               <span className="font-bold">{a.name}</span>
-              {a.in_cooldown && <span className="badge bg-red-500/20 text-red-300 border-red-500/40">در خنک‌سازی تا {a.cooldown_until}</span>}
-              {!a.in_cooldown && a.throttle_factor < 1 && <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40">کاهش سرعت ({pct(a.throttle_factor)})</span>}
+              {a.green_api_deleted
+                ? <span className="badge bg-red-500/20 text-red-300 border-red-500/40">حذف‌شده در Green API 🗑️</span>
+                : a.in_cooldown ? <span className="badge bg-red-500/20 text-red-300 border-red-500/40">در خنک‌سازی تا {a.cooldown_until}</span>
+                : a.throttle_factor < 1 ? <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40">کاهش سرعت ({pct(a.throttle_factor)})</span>
+                : null}
             </div>
-            <div className="text-xs text-slate-400">امتیاز سلامت<HelpTip text={TIPS.health} /></div>
-            <Progress value={Math.round((a.health_score || 0) * 100)} max={100} color={a.health_score > 0.6 ? "bg-emerald-500" : a.health_score > 0.3 ? "bg-amber-500" : "bg-red-500"} />
-            <div className="grid grid-cols-2 gap-1 text-xs text-slate-400">
-              <span>ارسال امروز: {fa(a.sent_today)} / {fa(a.effective_cap)}</span>
-              <span>کارت زرد ۷ روز: {pct(a.yellow_card_rate_7d)}</span>
-              <span>نرخ پاسخ ۷ روز: {pct(a.reply_rate_7d)}</span>
-              <span>رویداد ۷ روز: {fa(a.incident_count_7d)}</span>
-            </div>
-            {a.reply_rate_7d != null && a.reply_rate_7d < 0.2 && (
-              <p className="text-xs text-amber-300">⚠️ نرخ پاسخ پایین است — خطر مسدود شدن بالا می‌رود، حجم ارسال را کم کنید.</p>
+            {/* V36 — instance deleted upstream: terminal state + remove action ONLY (no health widgets) */}
+            {a.green_api_deleted ? (
+              <div className="space-y-2 text-sm">
+                <p className="text-red-200 text-xs">{a.green_api_deleted_message || "این اینستنس در Green API دیگر وجود ندارد"} — دیگر بررسی/اتصال ممکن نیست.</p>
+                <button className="btn-danger text-xs" onClick={async () => {
+                  if (await confirmDialog("این حساب از پلتفرم حذف شود؟ (در Green API از قبل حذف شده است)")) {
+                    try { await AccountsApi.remove(a.account_id); toast.success("حذف شد"); reload(); }
+                    catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+                  }
+                }}>حذف از پلتفرم</button>
+              </div>
+            ) : (
+              <>
+                <div className="text-xs text-slate-400">امتیاز سلامت<HelpTip text={TIPS.health} /></div>
+                <Progress value={Math.round((a.health_score || 0) * 100)} max={100} color={a.health_score > 0.6 ? "bg-emerald-500" : a.health_score > 0.3 ? "bg-amber-500" : "bg-red-500"} />
+                <div className="grid grid-cols-2 gap-1 text-xs text-slate-400">
+                  <span>ارسال امروز: {fa(a.sent_today)} / {fa(a.effective_cap)}</span>
+                  <span>کارت زرد ۷ روز: {pct(a.yellow_card_rate_7d)}</span>
+                  <span>نرخ پاسخ ۷ روز: {pct(a.reply_rate_7d)}</span>
+                  <span>رویداد ۷ روز: {fa(a.incident_count_7d)}</span>
+                </div>
+                {a.reply_rate_7d != null && a.reply_rate_7d < 0.2 && (
+                  <p className="text-xs text-amber-300">⚠️ نرخ پاسخ پایین است — خطر مسدود شدن بالا می‌رود، حجم ارسال را کم کنید.</p>
+                )}
+                <div className="flex flex-wrap gap-1 pt-1">
+                  <button className="btn-secondary text-xs" disabled={a.in_cooldown}
+                    title={a.in_cooldown ? "در دوره خنک‌سازی غیرفعال است" : ""}
+                    onClick={async () => { if (await confirmDialog("⚠️ ری‌بوت، صف را از سر می‌گیرد ولی کارت زرد را پاک نمی‌کند. اگر بلافاصله دوباره ارسال کنید، کارت زرد برمی‌گردد.")) { try { await IncidentsApi.reboot(a.account_id); toast.success("ری‌بوت شد"); } catch (e) { toast.error(e?.response?.data?.detail || e.message); } } }}>
+                    ری‌بوت شماره
+                  </button>
+                  <button className="btn-secondary text-xs" disabled={a.in_cooldown}
+                    onClick={async () => { try { const r = await IncidentsApi.resume(a.account_id); toast.success(`${fa(r.resumed)} کمپین ادامه یافت — ${r.note || ""}`); reload(); } catch (e) { toast.error(e?.response?.data?.detail || e.message); } }}>
+                    ادامه ارسال
+                  </button>
+                  <button className="btn-secondary text-xs"
+                    onClick={async () => { if (await confirmDialog("خروج از حساب برای اتصال مجدد با QR؟")) { try { await IncidentsApi.reconnect(a.account_id); toast.success("خارج شد — از صفحه حساب‌ها QR بگیرید"); reload(); } catch (e) { toast.error(e?.response?.data?.detail || e.message); } } }}>
+                    اتصال مجدد
+                  </button>
+                </div>
+              </>
             )}
-            <div className="flex flex-wrap gap-1 pt-1">
-              <button className="btn-secondary text-xs" disabled={a.in_cooldown}
-                title={a.in_cooldown ? "در دوره خنک‌سازی غیرفعال است" : ""}
-                onClick={async () => { if (await confirmDialog("⚠️ ری‌بوت، صف را از سر می‌گیرد ولی کارت زرد را پاک نمی‌کند. اگر بلافاصله دوباره ارسال کنید، کارت زرد برمی‌گردد.")) { try { await IncidentsApi.reboot(a.account_id); toast.success("ری‌بوت شد"); } catch (e) { toast.error(e?.response?.data?.detail || e.message); } } }}>
-                ری‌بوت شماره
-              </button>
-              <button className="btn-secondary text-xs" disabled={a.in_cooldown}
-                onClick={async () => { try { const r = await IncidentsApi.resume(a.account_id); toast.success(`${fa(r.resumed)} کمپین ادامه یافت — ${r.note || ""}`); reload(); } catch (e) { toast.error(e?.response?.data?.detail || e.message); } }}>
-                ادامه ارسال
-              </button>
-              <button className="btn-secondary text-xs"
-                onClick={async () => { if (await confirmDialog("خروج از حساب برای اتصال مجدد با QR؟")) { try { await IncidentsApi.reconnect(a.account_id); toast.success("خارج شد — از صفحه حساب‌ها QR بگیرید"); reload(); } catch (e) { toast.error(e?.response?.data?.detail || e.message); } } }}>
-                اتصال مجدد
-              </button>
-            </div>
           </div>
         ))}
       </div>

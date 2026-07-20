@@ -790,7 +790,7 @@ def task_sync_account_states():
     async def _s():
         from app.database import AsyncSessionLocal
         from app.models.account import Account, AccountStatus
-        from app.services.green_api import GreenAPIClient
+        from app.services.green_api import GreenAPIClient, GreenInstanceDeleted
         from sqlalchemy import select
         async with AsyncSessionLocal() as db:
             newly_active = []  # V11.3 — accounts that just became authorized
@@ -808,6 +808,12 @@ def task_sync_account_states():
                         account.status = AccountStatus.banned
                     elif state == "notAuthorized":
                         account.status = AccountStatus.disconnected
+                except GreenInstanceDeleted:
+                    # V36 — the instance was deleted in the Green API console. Auto-transition to a
+                    # terminal, clearly-labeled status so the dashboard stops showing a stale red
+                    # «disconnected» banner and instead offers «حذف از پلتفرم».
+                    if account.status != AccountStatus.green_api_deleted:
+                        account.status = AccountStatus.green_api_deleted
                 except Exception:
                     pass
             await db.commit()

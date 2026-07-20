@@ -30,6 +30,9 @@ from app.api.v1 import (
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # V36 — create_all never ALTERs an existing PG enum, so add the new account status value
+        # idempotently (PG 15 allows ADD VALUE inside this transaction as long as it isn't used here).
+        await conn.execute(text("ALTER TYPE accountstatus ADD VALUE IF NOT EXISTS 'green_api_deleted'"))
         await conn.execute(text("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS polling_enabled boolean DEFAULT false"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS is_deleted boolean DEFAULT false"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS edited_text text"))
@@ -1147,6 +1150,22 @@ for router in [
     onboarding.router,
 ]:
     app.include_router(router, prefix="/api/v1")
+
+from app.services.green_api import GreenInstanceDeleted
+
+
+@app.exception_handler(GreenInstanceDeleted)
+async def green_instance_deleted_handler(request: Request, exc: GreenInstanceDeleted):
+    """V36 — a Green API call hit an instance the user deleted in the Green API console.
+    Return a clean 409 with a Persian message instead of a raw 500, so EVERY endpoint that
+    touches such an instance (status/reboot/qr/send/…) degrades gracefully. Endpoints that want
+    to also mutate the account row (mark it green_api_deleted) catch it locally first."""
+    logger.info("Green API instance gone on %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse(status_code=409, content={
+        "detail": "این اینستنس در Green API دیگر وجود ندارد",
+        "code": "green_api_deleted",
+    })
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

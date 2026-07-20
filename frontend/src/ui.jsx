@@ -5,6 +5,8 @@ export const STATUS_FA = {
   banned: "مسدود 🚫",
   disconnected: "قطع 🔌",
   pending: "در انتظار اتصال ⏳",
+  // V36 — instance removed from the Green API console (terminal, unrecoverable).
+  green_api_deleted: "حذف‌شده در Green API 🗑️",
   draft: "پیش‌نویس",
   running: "در حال اجرا",
   paused: "متوقف",
@@ -17,6 +19,7 @@ const STATUS_COLOR = {
   banned: "bg-red-500/20 text-red-300 border-red-500/40",
   disconnected: "bg-slate-500/20 text-slate-300 border-slate-500/40",
   pending: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+  green_api_deleted: "bg-red-500/20 text-red-300 border-red-500/40",
   running: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
   paused: "bg-amber-500/20 text-amber-300 border-amber-500/40",
   completed: "bg-sky-500/20 text-sky-300 border-sky-500/40",

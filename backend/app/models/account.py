@@ -12,6 +12,11 @@ class AccountStatus(str, enum.Enum):
     pending = "pending"
     deleted = "deleted"   # V14 F2 — soft-delete after partner deleteInstanceAccount
     suspended = "suspended"  # TG — Telegram spam-restriction state (Green API 2026)
+    # V36 — the instance was deleted in the Green API console (upstream 400 «Instance is
+    # deleted»). Distinct from `disconnected` (recoverable via re-scan) and `deleted` (our own
+    # soft-delete): it means the number can never come back without re-creating the instance, so
+    # the UI shows «این اینستنس در Green API دیگر وجود ندارد» + a «حذف از پلتفرم» action.
+    green_api_deleted = "green_api_deleted"
 
 class Account(Base):
     __tablename__ = "accounts"

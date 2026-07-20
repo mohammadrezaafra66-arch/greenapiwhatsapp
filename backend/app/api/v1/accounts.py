@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models.account import Account, AccountStatus
 from app.models.contact import Contact
-from app.services.green_api import GreenAPIClient
+from app.services.green_api import GreenAPIClient, GreenInstanceDeleted
 from app.services.warmup_auto import (
     warmup_day as _warmup_day, warmup_daily_limit as _warmup_daily_limit,
     WARMUP_TOTAL_DAYS as _WARMUP_TOTAL,
@@ -205,11 +205,22 @@ async def update_account_limits(account_id: str, body: AccountLimitsUpdate, db: 
     return {"updated": True, "effective_limit": account.computed_daily_limit}
 
 
+GREEN_API_DELETED_MSG = "این اینستنس در Green API دیگر وجود ندارد"
+
+
 @router.get("/{account_id}/status")
 async def check_account_status(account_id: str, db: AsyncSession = Depends(get_db)):
     account = await _get_account(account_id, db)
     client = GreenAPIClient(account.instance_id, account.api_token)
-    state = await client.get_state()
+    try:
+        state = await client.get_state()
+    except GreenInstanceDeleted:
+        # V36 — the instance was removed from the Green API console. Mark it clearly and return a
+        # friendly Persian state instead of a raw 500. The UI shows a «حذف از پلتفرم» button.
+        account.status = AccountStatus.green_api_deleted
+        await db.commit()
+        return {"state": "green_api_deleted", "status": account.status,
+                "message": GREEN_API_DELETED_MSG}
     if state == "authorized":
         account.status = AccountStatus.active
     elif state == "blocked":

@@ -60,10 +60,16 @@ async def protection(db: AsyncSession = Depends(get_db)):
             CampaignContact.replied.is_(True)))).scalar() or 0
         reply_rate = round(replied / total, 3) if total else None
         cd = governors.in_cooldown(a)
+        status_val = a.status.value if hasattr(a.status, "value") else a.status
+        # V36 — an instance deleted upstream in Green API is terminal: don't dress it up as a
+        # cooldown/health problem, flag it so the card offers «حذف از پلتفرم».
+        green_api_deleted = status_val == AccountStatus.green_api_deleted.value
         out.append({
             "account_id": str(a.id),
             "name": a.name,
-            "status": a.status.value if hasattr(a.status, "value") else a.status,
+            "status": status_val,
+            "green_api_deleted": green_api_deleted,
+            "green_api_deleted_message": "این اینستنس در Green API دیگر وجود ندارد" if green_api_deleted else None,
             "health_score": 0.0 if cd else hb["score"],
             "sent_today": hb["sent_today"],
             "effective_cap": governors.effective_daily_cap(a),
