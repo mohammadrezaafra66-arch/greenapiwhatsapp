@@ -896,6 +896,37 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V29] {e}")
+        # ── V33 PART 2 — DB-level backstop for the 2-distinct-cold-per-contact ceiling. The
+        #    service layer (assign_cold_account / ensure_helper_tasks / escalate_after_completion)
+        #    already refuses a 3rd distinct cold; this trigger makes the invariant hold at the DB so no
+        #    path (or future code) can ever pair one contact to more than 2 distinct cold accounts.
+        #    The UNIQUE(helper_id, cold_instance_id) index still blocks exact-duplicate pairs. ──
+        ddl_v33 = [
+            """CREATE OR REPLACE FUNCTION enforce_warmup_cold_ceiling() RETURNS trigger AS $$
+            DECLARE
+                distinct_colds integer;
+            BEGIN
+                SELECT count(DISTINCT cold_instance_id) INTO distinct_colds
+                FROM warmup_helper_task
+                WHERE helper_id = NEW.helper_id
+                  AND cold_instance_id <> NEW.cold_instance_id;
+                IF distinct_colds >= 2 THEN
+                    RAISE EXCEPTION 'warmup_helper_task cold ceiling: contact % already assigned to 2 distinct cold accounts', NEW.helper_id
+                        USING ERRCODE = 'check_violation';
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql""",
+            "DROP TRIGGER IF EXISTS trg_warmup_cold_ceiling ON warmup_helper_task",
+            """CREATE TRIGGER trg_warmup_cold_ceiling
+                BEFORE INSERT ON warmup_helper_task
+                FOR EACH ROW EXECUTE FUNCTION enforce_warmup_cold_ceiling()""",
+        ]
+        for stmt in ddl_v33:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V33] {e}")
         # ── V26 — group monitoring (listener) + voice transcription schema ──
         ddl_v26 = [
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_listener boolean DEFAULT false",

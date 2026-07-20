@@ -48,23 +48,26 @@ class _EscDB:
     async def flush(self): self.flushes += 1
 
 
+# V33 PART 2 — escalation now RESPECTS the hard 2-distinct-cold ceiling (was: bypassed it). A
+# contact with 1 cold can gain at most 1 more (to reach the ceiling of 2); a contact already at 2
+# gains nothing. `min(batch, roster_remaining, ceiling_remaining)`.
 @pytest.mark.asyncio
-async def test_escalate_assigns_two_new_when_available():
+async def test_escalate_assigns_only_up_to_ceiling_when_available():
     hid = uuid.uuid4()
     db = _EscDB(assigned=["C1"], enrolled=["C1", "C2", "C3", "C4"])
     new_ids = await hs.escalate_after_completion(db, hid)
-    assert new_ids == ["C2", "C3"]                      # exactly 2 new, in roster order
+    assert new_ids == ["C2"]                            # only 1 more → reaches the 2-cold ceiling
     added = [o for o in db.added if isinstance(o, WarmupHelperTask)]
-    assert {t.cold_instance_id for t in added} == {"C2", "C3"}
+    assert {t.cold_instance_id for t in added} == {"C2"}
     assert all(t.status == hs.STATUS_PENDING for t in added)   # only queues pending
 
 
 @pytest.mark.asyncio
-async def test_escalate_assigns_only_remaining_when_fewer_than_two():
+async def test_escalate_noop_when_contact_already_at_ceiling():
     hid = uuid.uuid4()
     db = _EscDB(assigned=["C1", "C2", "C3"], enrolled=["C1", "C2", "C3", "C4"])
     new_ids = await hs.escalate_after_completion(db, hid)
-    assert new_ids == ["C4"]
+    assert new_ids == []                                # already at (past) the ceiling → no growth
 
 
 @pytest.mark.asyncio

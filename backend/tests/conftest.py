@@ -14,3 +14,22 @@ def _reset_pacers():
     peer_pacer.reset()
     yield
     peer_pacer.reset()
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_ai(monkeypatch):
+    """V33 — keep unit tests hermetic & deterministic.
+
+    The test database carries a real AI key, so the DEFAULT «همکاری تیمی» content generators
+    (thank-you / thread-ask) reached the live API and returned varied text — which made word-level
+    assertions (e.g. «ممنون» in the auto thank-you) pass or fail nondeterministically run-to-run, the
+    failure floating between whichever completion-path test the RNG landed on. Tests that deliberately
+    exercise the AI path inject their OWN ai_fn and are unaffected; forcing the DEFAULT builders to
+    return None makes everything else use the deterministic templated fallback. Production is unchanged.
+    """
+    def _no_ai(*_a, **_k):
+        return None
+    for target in ("app.services.warmup_thankyou.build_thankyou_ai_fn",
+                   "app.services.outreach_message.build_thread_ai_fn"):
+        monkeypatch.setattr(target, _no_ai)
+    yield

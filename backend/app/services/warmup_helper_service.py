@@ -514,25 +514,108 @@ ESCALATION_BATCH = 2
 async def escalate_after_completion(db, helper_id, *, batch: int = ESCALATION_BATCH) -> list[str]:
     """V30 PART 4. After a contact completes a task, assign up to `batch` NEW enrolled cold accounts
     (not yet assigned to this contact) as their next round. Returns the newly-assigned cold ids
-    ([] when the roster is exhausted). Creates PENDING tasks only — the gated team tick decides WHEN
-    the next ask actually goes out (per-sender 20-min spacing + 09–19 window + pacer all still apply).
+    ([] when the roster is exhausted OR the contact is already at the cold ceiling). Creates PENDING
+    tasks only — the gated team tick decides WHEN the next ask actually goes out (per-sender 20-min
+    spacing + 09–19 window + pacer all still apply).
 
-    This deliberately BYPASSES the per-contact 2-ceiling of `assign_cold_account`: that ceiling caps
-    how many cold accounts a SINGLE message references, whereas escalation legitimately grows the
-    relationship ACROSS successful rounds. Already-completed cold accounts are never re-assigned
-    (they are filtered out via the contact's existing assignments)."""
+    V33 PART 2 — escalation now RESPECTS the hard `MAX_COLD_ACCOUNTS_PER_CONTACT` ceiling (per V33
+    PART 5.2): it never grows a contact past 2 DISTINCT cold accounts. The number actually assigned is
+    `min(batch, roster_remaining, ceiling_remaining)`. A contact already at the ceiling escalates to
+    nothing. (This supersedes V30's deliberate ceiling-bypass — the ceiling is now an absolute
+    invariant, also backstopped by a DB trigger; already-completed cold accounts still count toward
+    the 2 distinct and are never re-assigned.)"""
     from app.models.warmup_helpers import WarmupTeamEnrollment
     assigned = set(await list_cold_accounts_for_helper(db, helper_id))
+    ceiling_remaining = max(0, MAX_COLD_ACCOUNTS_PER_CONTACT - len(assigned))
+    if ceiling_remaining <= 0:
+        return []
     rows = (await db.execute(
         select(WarmupTeamEnrollment).where(WarmupTeamEnrollment.is_enabled.is_(True))
     )).scalars().all()
     pool = [r.cold_instance_id for r in rows if r.cold_instance_id and r.cold_instance_id not in assigned]
-    new_ids = pool[:max(0, int(batch))]
+    new_ids = pool[:min(max(0, int(batch)), ceiling_remaining)]
     for cid in new_ids:
         db.add(WarmupHelperTask(helper_id=helper_id, cold_instance_id=cid, status=STATUS_PENDING))
     if new_ids:
         await db.flush()
     return new_ids
+
+
+# ── V33 PART 2 — reconcile existing contacts paired to > 2 distinct cold accounts ──
+# Rule: keep the 2 MOST-ADVANCED / MOST-RECENTLY-ACTIVE pairings, drop the least-active one(s).
+# "Advancement" ranks by task status (a completed/late-stage pairing is worth more than an untouched
+# one), tie-broken by the most recent activity timestamp. A dropped pairing's THREAD is PAUSED
+# (never deleted) when it carries any progress, so no conversation history is silently lost.
+_STATUS_RANK = {STATUS_DONE: 4, STATUS_REMINDED: 3, STATUS_ASKED: 2, STATUS_PENDING: 1,
+                STATUS_SKIPPED: 0}
+
+
+def _pairing_progress_key(task):
+    """PURE. Sort key (status_rank, latest_activity_ts) — higher = more advanced/kept."""
+    rank = _STATUS_RANK.get(getattr(task, "status", None), 0)
+    stamps = [t for t in (getattr(task, "done_at", None), getattr(task, "reminded_at", None),
+                          getattr(task, "asked_at", None), getattr(task, "created_at", None))
+              if t is not None]
+    return (rank, max(stamps) if stamps else datetime.min)
+
+
+def select_cold_pairings_to_drop(tasks, ceiling: int = MAX_COLD_ACCOUNTS_PER_CONTACT) -> list[str]:
+    """PURE. Given ONE contact's task rows, return the cold_instance_ids to DROP so only the
+    `ceiling` most-advanced/most-recent distinct-cold pairings remain. Returns [] when already
+    within the ceiling. Deterministic: ties break on the activity timestamp, then never drops
+    a higher-ranked pairing before a lower-ranked one."""
+    by_cold: dict[str, object] = {}
+    for t in tasks:
+        cid = t.cold_instance_id
+        if cid not in by_cold or _pairing_progress_key(t) > _pairing_progress_key(by_cold[cid]):
+            by_cold[cid] = t
+    if len(by_cold) <= ceiling:
+        return []
+    ranked = sorted(by_cold.values(), key=_pairing_progress_key, reverse=True)
+    return [t.cold_instance_id for t in ranked[ceiling:]]
+
+
+async def reconcile_cold_ceiling(db, *, apply: bool = True,
+                                 ceiling: int = MAX_COLD_ACCOUNTS_PER_CONTACT) -> list[dict]:
+    """Bring every contact down to at most `ceiling` DISTINCT cold accounts, dropping the
+    least-advanced pairing(s). Returns a per-drop report [{helper_id, cold_instance_id, status,
+    had_active_thread, thread_paused}]. With apply=False it's a dry run (reports, changes nothing).
+    Deletes only the dropped (contact × cold) task rows; a dropped pairing's thread with any progress
+    is PAUSED (status → paused), never deleted, so history survives for later review."""
+    from app.models.warmup_helpers import WarmupHelperThread
+    from app.services import warmup_helper_thread as wt
+    tasks = (await db.execute(select(WarmupHelperTask))).scalars().all()
+    by_helper: dict = {}
+    for t in tasks:
+        by_helper.setdefault(t.helper_id, []).append(t)
+    report: list[dict] = []
+    for helper_id, htasks in by_helper.items():
+        for cold in select_cold_pairings_to_drop(htasks, ceiling):
+            pair_tasks = [t for t in htasks if t.cold_instance_id == cold]
+            rep = max(pair_tasks, key=_pairing_progress_key) if pair_tasks else None
+            thread = (await db.execute(
+                select(WarmupHelperThread).where(
+                    WarmupHelperThread.helper_id == helper_id,
+                    WarmupHelperThread.cold_instance_id == cold).limit(1)
+            )).scalar_one_or_none()
+            had_progress = thread is not None and (
+                int(getattr(thread, "step_count", 0) or 0) > 0
+                or getattr(thread, "awaiting_reply", False)
+                or getattr(thread, "awaiting_thankyou", False)
+                or getattr(thread, "status", wt.STATUS_ACTIVE) != wt.STATUS_ACTIVE)
+            entry = {"helper_id": str(helper_id), "cold_instance_id": cold,
+                     "status": getattr(rep, "status", None), "had_active_thread": bool(had_progress),
+                     "thread_paused": False}
+            if apply:
+                for t in pair_tasks:
+                    await db.delete(t)
+                if thread is not None and had_progress and getattr(thread, "status", None) == wt.STATUS_ACTIVE:
+                    thread.status = wt.STATUS_PAUSED
+                    entry["thread_paused"] = True
+            report.append(entry)
+    if apply and report:
+        await db.commit()
+    return report
 
 
 async def unassign_cold_account(db, helper_id, cold_instance_id: str) -> int:
