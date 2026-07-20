@@ -391,7 +391,27 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
     pending = [t for t in tasks if t.status == hs.STATUS_PENDING]
     awaiting = [t for t in tasks if t.status in (hs.STATUS_ASKED, hs.STATUS_REMINDED)]
 
-    action = select_action(pending, awaiting, now)
+    # V36 PART 2 — guaranteed daily VARIETY: ask up to 10 DISTINCT contacts/day per sender,
+    # least-recently-asked first (round-robin). Reduce ask history from the already-loaded task
+    # rows (no extra query — keeps the mock-DB test harnesses working) into per-sender/-helper maps.
+    # The rows are the non-terminal tasks (pending/asked/reminded), so a contact whose ask already
+    # completed (done) or expired (no_response) frees its daily slot — the queue keeps flowing.
+    from app.services import warmup_daily_variety as variety
+    helper_sender = {}
+    for h in active_helpers:
+        ts = resolve_task_sender(accounts, h, enr_map)
+        helper_sender[str(h.id)] = ts.instance_id if ts is not None else None
+    ask_hist_rows = [(t.helper_id, helper_sender.get(str(t.helper_id)), t.asked_at)
+                     for t in all_tasks]
+    asked_today_by_sender = variety.distinct_asked_today_by_sender(ask_hist_rows, now)
+    last_ask = variety.last_ask_by_helper(ask_hist_rows)
+    pending = variety.eligible_pending_ordered(
+        pending, helper_sender=helper_sender, last_ask=last_ask,
+        asked_today_by_sender=asked_today_by_sender)
+
+    # select_action keeps reminder-priority (finish what we started); `pending` is now variety
+    # -ordered, so pass only its best candidate — select_action's own created_at sort is then a no-op.
+    action = select_action(pending[:1] if pending else [], awaiting, now)
     if action is None:
         await db.commit()
         return {"enabled": True, "acted": 0, "created": created, "nothing_due": True}

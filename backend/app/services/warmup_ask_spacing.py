@@ -1,9 +1,15 @@
-"""V30 PART 2 — per-SENDER minimum 20-minute spacing between «همکاری تیمی» ASK-requests.
+"""V30 PART 2 — per-SENDER minimum spacing between «همکاری تیمی» ASK-requests.
 
 An ADDITIONAL, extra-conservative constraint layered ON TOP of the existing rails (the V27
 per-instance `peer_pacer` 10–15s floor, the V27 health gate, waking hours). It applies ONLY to
 ask-requests (not reminders / thank-yous / cold-replies, which have their own rules): a given
-SENDER instance may emit at most one ask every 20 minutes.
+SENDER instance may emit at most one ask per spacing window.
+
+V36 PART 2 — the floor was raised from 20 → 55 minutes. Rationale: the «همکاری تیمی» ask window
+is 09:00–19:00 Tehran = 600 minutes. With the companion 10-distinct-contacts/day cap
+(warmup_daily_variety), a 55-minute floor lets those 10 asks spread naturally across the whole
+working day (9 gaps × 55 min ≈ 8.25h, comfortably inside the 10h window) instead of clustering in
+the first couple of hours — noticeably more human, same safety rails, no bursts.
 
 Design (consistent with V27's peer-level philosophy): the constraint is keyed on the SENDER
 instance, so different senders are never rate-limited against each other by THIS rule — only the
@@ -19,8 +25,8 @@ from sqlalchemy import select
 
 from app.models.warmup_helpers import WarmupHelperTask, WarmupHelper
 
-# The minimum gap between two ask-requests FROM THE SAME SENDER.
-ASK_MIN_SPACING_MINUTES = 20
+# The minimum gap between two ask-requests FROM THE SAME SENDER (V36 PART 2: 20 → 55 min).
+ASK_MIN_SPACING_MINUTES = 55
 
 
 def ask_spacing_ok(last_ask_at: datetime | None, now: datetime,

@@ -4,7 +4,7 @@ Proves the new rules are wired together on the LIVE team-schedule ask path and t
 schedule registers every «همکاری تیمی» tick, including the new thank-you tick:
   • the beat schedule registers process-team-schedule (300s), process-cold-replies (120s),
     process-thank-yous (120s), process-helper-warmup;
-  • an ask fires ONLY inside 09:00–19:00 Tehran, ONLY when the sender's 20-min spacing has elapsed,
+  • an ask fires ONLY inside 09:00–19:00 Tehran, ONLY when the sender's 55-min spacing has elapsed,
     and the sent text is varied and carries an emoji + the cold account's wa.me link — all in one run.
 """
 import uuid
@@ -155,7 +155,7 @@ async def test_no_ask_when_spacing_not_elapsed(monkeypatch):
 async def test_all_rules_together_ask_fires_varied_emoji_in_window(monkeypatch):
     monkeypatch.setattr("app.services.typing_sim.asyncio.sleep", AsyncMock())
     monkeypatch.setattr(spacing, "last_ask_at_for_sender",
-                        AsyncMock(return_value=IN_WINDOW - timedelta(minutes=25)))   # spacing OK
+                        AsyncMock(return_value=IN_WINDOW - timedelta(minutes=60)))   # spacing OK (>55m)
     db, thread = _setup()
     store = {}
     res = await ts.run_team_schedule_tick(db, now=IN_WINDOW, client_factory=_factory(store),

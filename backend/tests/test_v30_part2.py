@@ -1,9 +1,9 @@
-"""V30 PART 2 — per-sender minimum 20-minute spacing between ASK-requests.
+"""V30 PART 2 / V36 PART 2 — per-sender minimum spacing between ASK-requests (now 55 minutes).
 
 Proves:
-  • pure `ask_spacing_ok`: no prior ask → allowed; < 20 min → blocked; >= 20 min → allowed;
+  • pure `ask_spacing_ok`: no prior ask → allowed; < 55 min → blocked; >= 55 min → allowed;
   • the constraint is keyed per SENDER (last_ask_at_for_sender short-circuits on a missing id);
-  • wired into the live team-schedule ask path: a sender that asked < 20 min ago is skipped
+  • wired into the live team-schedule ask path: a sender that asked < 55 min ago is skipped
     (no send), while the same tick sends once the spacing has elapsed (or the sender never asked);
   • different senders are NOT rate-limited against each other by this rule.
 
@@ -40,18 +40,18 @@ def _reset():
 def test_ask_spacing_ok_thresholds():
     assert spacing.ask_spacing_ok(None, NOW) is True                       # never asked
     assert spacing.ask_spacing_ok(NOW - timedelta(minutes=5), NOW) is False
-    assert spacing.ask_spacing_ok(NOW - timedelta(minutes=19, seconds=59), NOW) is False
-    assert spacing.ask_spacing_ok(NOW - timedelta(minutes=20), NOW) is True
-    assert spacing.ask_spacing_ok(NOW - timedelta(minutes=45), NOW) is True
-    assert spacing.ASK_MIN_SPACING_MINUTES == 20
+    assert spacing.ask_spacing_ok(NOW - timedelta(minutes=54, seconds=59), NOW) is False
+    assert spacing.ask_spacing_ok(NOW - timedelta(minutes=55), NOW) is True
+    assert spacing.ask_spacing_ok(NOW - timedelta(minutes=90), NOW) is True
+    assert spacing.ASK_MIN_SPACING_MINUTES == 55
 
 
-def test_two_asks_same_sender_are_20min_apart():
-    # First ask allowed at NOW; the next is blocked until NOW+20m, allowed at/after it.
+def test_two_asks_same_sender_are_55min_apart():
+    # First ask allowed at NOW; the next is blocked until NOW+55m, allowed at/after it.
     first = NOW
     assert spacing.ask_spacing_ok(None, first) is True
-    assert spacing.ask_spacing_ok(first, first + timedelta(minutes=10)) is False
-    assert spacing.ask_spacing_ok(first, first + timedelta(minutes=20)) is True
+    assert spacing.ask_spacing_ok(first, first + timedelta(minutes=30)) is False
+    assert spacing.ask_spacing_ok(first, first + timedelta(minutes=55)) is True
 
 
 def test_different_senders_independent_pure():
@@ -163,7 +163,7 @@ async def _ai(*, name, topic, step_count, brief, profile_line):
 
 
 @pytest.mark.asyncio
-async def test_team_tick_blocks_ask_within_20min(monkeypatch):
+async def test_team_tick_blocks_ask_within_spacing(monkeypatch):
     monkeypatch.setattr("app.services.typing_sim.asyncio.sleep", AsyncMock())
     monkeypatch.setattr(spacing, "last_ask_at_for_sender",
                         AsyncMock(return_value=NOW - timedelta(minutes=5)))
@@ -177,10 +177,10 @@ async def test_team_tick_blocks_ask_within_20min(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_team_tick_sends_after_20min(monkeypatch):
+async def test_team_tick_sends_after_55min(monkeypatch):
     monkeypatch.setattr("app.services.typing_sim.asyncio.sleep", AsyncMock())
     monkeypatch.setattr(spacing, "last_ask_at_for_sender",
-                        AsyncMock(return_value=NOW - timedelta(minutes=25)))
+                        AsyncMock(return_value=NOW - timedelta(minutes=60)))
     db, helper, thread, te = _setup()
     store = {}
     res = await ts.run_team_schedule_tick(db, now=NOW, client_factory=_factory(store),
