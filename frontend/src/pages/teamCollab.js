@@ -44,6 +44,43 @@ export function filterLogEvents(events, { senderInstanceId, coldInstanceId, help
   return out;
 }
 
+// ── V35 — «درخواست‌های بی‌پاسخ» (unresponded requests) task filter ───────────────
+// A task represents one (contact × cold-account) ask. Its status lifecycle is
+// pending → asked → reminded → no_response | done | skipped.
+// "Unresponded" = the contact RECEIVED an ask (and possibly a reminder) but has NOT completed
+// it — i.e. status is exactly one of asked / reminded / no_response. `pending` (never asked)
+// and `skipped` (abandoned) are deliberately excluded; `done` is the completed case we drop.
+export const UNRESPONDED_STATUSES = ["asked", "reminded", "no_response"];
+
+export const TASK_STATUS_FA = {
+  pending: "در صف",
+  asked: "درخواست ارسال شد",
+  reminded: "یادآوری شد",
+  no_response: "بدون پاسخ",
+  done: "تکمیل شد",
+  skipped: "رها شده",
+};
+
+export function taskStatusFa(status) {
+  return TASK_STATUS_FA[status] || status || "—";
+}
+
+// Filter task rows to the unresponded set (status ∈ {asked, reminded, no_response}).
+// Newest asks first: sort by asked_at desc (rows without asked_at fall to the end).
+export function filterUnrespondedTasks(tasks) {
+  const rows = (Array.isArray(tasks) ? tasks : []).filter((t) =>
+    UNRESPONDED_STATUSES.includes(t.status)
+  );
+  rows.sort((a, b) => {
+    const ta = a.asked_at || "", tb = b.asked_at || "";
+    if (ta === tb) return 0;
+    if (!ta) return 1;        // no ask time → bottom
+    if (!tb) return -1;
+    return ta < tb ? 1 : -1;  // newest first
+  });
+  return rows;
+}
+
 // ── thread-status summary for a cold account (dashboard card) ────────────────
 export function threadStatusSummary(cold) {
   const a = Number(cold?.threads_active || 0);

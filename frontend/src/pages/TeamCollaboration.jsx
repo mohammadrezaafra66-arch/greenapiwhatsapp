@@ -10,6 +10,7 @@ import { toast, confirmDialog } from "../ui/toast.jsx";
 import {
   warmthBadge, canAssignCold, filterLogEvents, threadStatusSummary,
   dayInCycleLabel, askRunningCounts, askCountSentence, MAX_COLD_PER_CONTACT,
+  filterUnrespondedTasks, taskStatusFa,
 } from "./teamCollab.js";
 
 const fa = (n) => (n == null ? "" : String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]));
@@ -372,17 +373,42 @@ function DashboardPanel() {
 // ── Panel 3: log ──────────────────────────────────────────────────────────────
 const EVENT_FA = { ask: "درخواست", reminder: "یادآوری", thank_you: "تشکر", cold_reply: "پاسخ اکانت سرد", incoming: "پیام دریافتی", safety_flag: "هشدار ایمنی" };
 
+// V35 — sentinel dropdown value for the «درخواست‌های بی‌پاسخ» (unresponded requests) view.
+// It is NOT an event_type; selecting it switches the panel from the event log to a task-status
+// view (contacts who received an ask/reminder but have not completed the task).
+const UNRESPONDED = "__unresponded__";
+
 function LogPanel() {
   const { data, loading, reload } = useAsync(() => WarmupHelpersApi.teamLog({ limit: 300 }), []);
+  // Tasks power the «درخواست‌های بی‌پاسخ» view (authoritative status: asked/reminded/no_response).
+  const { data: taskData, loading: tasksLoading, reload: reloadTasks } =
+    useAsync(() => WarmupHelpersApi.tasks(), []);
   const [eventType, setEventType] = React.useState("");
   const [senderInstanceId, setSender] = React.useState("");
   const events = data?.events || [];
+  const tasks = taskData?.tasks || [];
+  const unresponded = eventType === UNRESPONDED;
+
+  // Sender options come from whichever dataset is active, so the filter stays meaningful in both views.
   const senders = React.useMemo(() => {
-    const m = {}; for (const e of events) if (e.sender_instance_id) m[e.sender_instance_id] = e.from_name || e.sender_instance_id;
+    const m = {};
+    for (const e of events) if (e.sender_instance_id) m[e.sender_instance_id] = e.from_name || e.sender_instance_id;
+    for (const t of tasks) if (t.sender_instance_id) m[t.sender_instance_id] = t.sender_name || t.sender_instance_id;
     return Object.entries(m);
-  }, [events]);
+  }, [events, tasks]);
+
   const filtered = filterLogEvents(events, { eventType: eventType || undefined, senderInstanceId: senderInstanceId || undefined });
   const running = askRunningCounts(events);   // PART 7 — running per-contact ask number per event
+
+  // Unresponded task rows (apply the same sender filter).
+  const unrespondedRows = React.useMemo(() => {
+    let rows = filterUnrespondedTasks(tasks);
+    if (senderInstanceId) rows = rows.filter((t) => t.sender_instance_id === senderInstanceId);
+    return rows;
+  }, [tasks, senderInstanceId]);
+
+  const busy = unresponded ? tasksLoading : loading;
+  const refresh = () => { reload(); reloadTasks(); };
 
   return (
     <div className="card space-y-3">
@@ -392,15 +418,50 @@ function LogPanel() {
           <select className="input text-xs py-1" value={eventType} onChange={(e) => setEventType(e.target.value)}>
             <option value="">همهٔ رویدادها</option>
             {Object.entries(EVENT_FA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            <option value={UNRESPONDED}>درخواست‌های بی‌پاسخ</option>
           </select>
           <select className="input text-xs py-1" value={senderInstanceId} onChange={(e) => setSender(e.target.value)}>
             <option value="">همهٔ فرستنده‌ها</option>
             {senders.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
           </select>
-          <button className="btn-secondary text-xs" onClick={reload}>تازه‌سازی</button>
+          <button className="btn-secondary text-xs" onClick={refresh}>تازه‌سازی</button>
         </div>
       </div>
-      {loading ? <Spinner /> : filtered.length === 0 ? <Empty label="رویدادی ثبت نشده." /> : (
+
+      {busy ? <Spinner /> : unresponded ? (
+        unrespondedRows.length === 0 ? <Empty label="درخواست بی‌پاسخی وجود ندارد." /> : (
+          <>
+            <p className="text-xs text-slate-400">
+              مخاطبانی که درخواست (و شاید یادآوری) دریافت کرده‌اند اما هنوز کار را کامل نکرده‌اند
+              (وضعیت: درخواست ارسال شد / یادآوری شد / بدون پاسخ).
+            </p>
+            <div className="divide-y divide-slate-800 max-h-[70vh] overflow-y-auto">
+              {unrespondedRows.map((t) => (
+                <div key={t.id} className="py-2 text-sm">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="flex items-center gap-2 flex-wrap">
+                      <span className={`badge ${
+                        t.status === "no_response" ? "bg-red-500/20 text-red-300 border-red-500/40"
+                        : t.status === "reminded" ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                        : "bg-sky-500/20 text-sky-300 border-sky-500/40"}`}>
+                        {taskStatusFa(t.status)}
+                      </span>
+                      <span>{t.sender_name || t.sender_instance_id || "—"} ← {t.helper_name || "—"}</span>
+                      {t.cold_name && <span className="text-xs text-slate-500">(اکانت سرد: {t.cold_name})</span>}
+                    </span>
+                    <span className="text-xs text-slate-500">درخواست: {t.asked_shamsi || t.asked_at || "—"}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {t.reminded_shamsi
+                      ? `یادآوری: ${t.reminded_shamsi}${t.reminder_count ? ` (${fa(t.reminder_count)} بار)` : ""}`
+                      : "یادآوری: ارسال نشده"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </>
+        )
+      ) : filtered.length === 0 ? <Empty label="رویدادی ثبت نشده." /> : (
         <div className="divide-y divide-slate-800 max-h-[70vh] overflow-y-auto">
           {filtered.map((e) => (
             <div key={e.id} className="py-2 text-sm">

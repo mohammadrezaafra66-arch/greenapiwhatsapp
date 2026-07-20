@@ -586,7 +586,12 @@ async def team_dashboard(db: AsyncSession = Depends(get_db)):
 async def list_tasks(cold_instance_id: str | None = None, limit: int = 200,
                      db: AsyncSession = Depends(get_db)):
     """The helper tasks (per cold number) and their status, so the user can see who greeted
-    each new number. Optionally filter to one cold number via ?cold_instance_id=."""
+    each new number. Optionally filter to one cold number via ?cold_instance_id=.
+
+    V35 — each row also carries the SENDER (the account that owns the contact) and Shamsi
+    versions of asked_at/reminded_at, so the «درخواست‌های بی‌پاسخ» (unresponded requests) log
+    filter can show contact + sender + cold account + ask time + reminder time + status."""
+    from app.utils.shamsi import to_shamsi
     helpers = {str(h.id): h for h in await hs.list_helpers(db)}
     accounts = (await db.execute(select(Account))).scalars().all()
     name_by_instance = {a.instance_id: a.name for a in accounts}
@@ -597,15 +602,25 @@ async def list_tasks(cold_instance_id: str | None = None, limit: int = 200,
     q = q.order_by(WarmupHelperTask.created_at.desc()).limit(min(limit, 500))
     rows = (await db.execute(q)).scalars().all()
 
-    return {"tasks": [{
-        "id": str(t.id),
-        "helper_id": str(t.helper_id),
-        "helper_name": (helpers.get(str(t.helper_id)).name if helpers.get(str(t.helper_id)) else None),
-        "cold_instance_id": t.cold_instance_id,
-        "cold_name": name_by_instance.get(t.cold_instance_id, t.cold_instance_id),
-        "status": t.status,
-        "asked_at": t.asked_at.isoformat() if t.asked_at else None,
-        "reminded_at": t.reminded_at.isoformat() if t.reminded_at else None,
-        "done_at": t.done_at.isoformat() if t.done_at else None,
-        "attempts": t.attempts,
-    } for t in rows]}
+    out = []
+    for t in rows:
+        helper = helpers.get(str(t.helper_id))
+        sender_id = helper.sender_instance_id if helper else None
+        out.append({
+            "id": str(t.id),
+            "helper_id": str(t.helper_id),
+            "helper_name": helper.name if helper else None,
+            "sender_instance_id": sender_id,
+            "sender_name": name_by_instance.get(sender_id, sender_id),
+            "cold_instance_id": t.cold_instance_id,
+            "cold_name": name_by_instance.get(t.cold_instance_id, t.cold_instance_id),
+            "status": t.status,
+            "asked_at": t.asked_at.isoformat() if t.asked_at else None,
+            "asked_shamsi": to_shamsi(t.asked_at) if t.asked_at else None,
+            "reminded_at": t.reminded_at.isoformat() if t.reminded_at else None,
+            "reminded_shamsi": to_shamsi(t.reminded_at) if t.reminded_at else None,
+            "reminder_count": t.reminder_count,
+            "done_at": t.done_at.isoformat() if t.done_at else None,
+            "attempts": t.attempts,
+        })
+    return {"tasks": out}

@@ -4,6 +4,7 @@ import {
   warmthBadge, canAssignCold, filterLogEvents, threadStatusSummary,
   dayInCycleLabel, askCountsByContact, askCountsBySender, askCountSentence,
   askRunningCounts, MAX_COLD_PER_CONTACT,
+  filterUnrespondedTasks, taskStatusFa, UNRESPONDED_STATUSES, TASK_STATUS_FA,
 } from "./teamCollab.js";
 
 test("warmthBadge maps level string to class", () => {
@@ -79,6 +80,52 @@ test("askCountsBySender counts asks per sender", () => {
 
 test("askCountSentence", () => {
   assert.equal(askCountSentence(5), "این درخواست شماره 5 برای این مخاطب است");
+});
+
+// ── V35 «درخواست‌های بی‌پاسخ» (unresponded requests) ──────────────────────────
+const TASKS = [
+  { id: "t1", status: "asked",       asked_at: "2026-05-04T10:00:00", helper_name: "علی" },
+  { id: "t2", status: "reminded",    asked_at: "2026-05-04T12:00:00", helper_name: "رضا" },
+  { id: "t3", status: "done",        asked_at: "2026-05-04T09:00:00", helper_name: "سارا" },
+  { id: "t4", status: "no_response", asked_at: "2026-05-04T08:00:00", helper_name: "مینا" },
+  { id: "t5", status: "pending",     asked_at: null,                  helper_name: "نیما" },
+  { id: "t6", status: "skipped",     asked_at: "2026-05-04T07:00:00", helper_name: "کاوه" },
+];
+
+test("filterUnrespondedTasks keeps only asked/reminded/no_response", () => {
+  const r = filterUnrespondedTasks(TASKS);
+  const ids = r.map((t) => t.id);
+  assert.deepEqual(ids, ["t2", "t1", "t4"]); // newest-asked first; done/pending/skipped dropped
+  assert.equal(r.length, 3);
+});
+
+test("filterUnrespondedTasks handles empty / non-array input", () => {
+  assert.deepEqual(filterUnrespondedTasks([]), []);
+  assert.deepEqual(filterUnrespondedTasks(null), []);
+  assert.deepEqual(filterUnrespondedTasks(undefined), []);
+});
+
+test("filterUnrespondedTasks sorts rows without asked_at to the bottom", () => {
+  const r = filterUnrespondedTasks([
+    { id: "a", status: "asked", asked_at: null },
+    { id: "b", status: "asked", asked_at: "2026-05-04T10:00:00" },
+  ]);
+  assert.deepEqual(r.map((t) => t.id), ["b", "a"]);
+});
+
+test("UNRESPONDED_STATUSES is exactly the three non-terminal-done statuses", () => {
+  assert.deepEqual(UNRESPONDED_STATUSES, ["asked", "reminded", "no_response"]);
+  assert.ok(!UNRESPONDED_STATUSES.includes("done"));
+  assert.ok(!UNRESPONDED_STATUSES.includes("pending"));
+});
+
+test("taskStatusFa maps known statuses and passes through unknown", () => {
+  assert.equal(taskStatusFa("asked"), TASK_STATUS_FA.asked);
+  assert.equal(taskStatusFa("reminded"), "یادآوری شد");
+  assert.equal(taskStatusFa("no_response"), "بدون پاسخ");
+  assert.equal(taskStatusFa("done"), "تکمیل شد");
+  assert.equal(taskStatusFa("weird"), "weird");
+  assert.equal(taskStatusFa(null), "—");
 });
 
 test("askRunningCounts numbers a contact's asks in chronological order", () => {
