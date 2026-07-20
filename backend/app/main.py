@@ -927,6 +927,32 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V33] {e}")
+        # ── V33 PART 3 — remove any orphaned task/thread rows (helper_id → a deleted contact), then
+        #    add a FK backstop so deleting a contact can never leave orphans again. The service layer
+        #    additionally BLOCKS deleting a contact that still has ACTIVE tasks (Persian message); a
+        #    contact with only terminal tasks is deletable and the FK CASCADE cleans its rows. The
+        #    DELETEs must run BEFORE the ADD CONSTRAINT (a FK cannot be added while orphans exist). ──
+        ddl_v33_part3 = [
+            "DELETE FROM warmup_helper_task WHERE helper_id NOT IN (SELECT id FROM warmup_helper)",
+            "DELETE FROM warmup_helper_thread WHERE helper_id NOT IN (SELECT id FROM warmup_helper)",
+            """DO $$ BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_warmup_helper_task_helper') THEN
+                    ALTER TABLE warmup_helper_task ADD CONSTRAINT fk_warmup_helper_task_helper
+                        FOREIGN KEY (helper_id) REFERENCES warmup_helper(id) ON DELETE CASCADE;
+                END IF;
+            END $$""",
+            """DO $$ BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='fk_warmup_helper_thread_helper') THEN
+                    ALTER TABLE warmup_helper_thread ADD CONSTRAINT fk_warmup_helper_thread_helper
+                        FOREIGN KEY (helper_id) REFERENCES warmup_helper(id) ON DELETE CASCADE;
+                END IF;
+            END $$""",
+        ]
+        for stmt in ddl_v33_part3:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V33 P3] {e}")
         # ── V26 — group monitoring (listener) + voice transcription schema ──
         ddl_v26 = [
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_listener boolean DEFAULT false",

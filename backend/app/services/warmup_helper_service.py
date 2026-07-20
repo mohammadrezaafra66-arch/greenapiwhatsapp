@@ -435,13 +435,57 @@ async def update_helper(db, helper_id, *, name=None, phone=None, is_active=None,
     return helper
 
 
+# V33 PART 3 — a contact may not be deleted while it still has ACTIVE (in-flight) tasks, so a delete
+# can never strand tasks that are mid-ask/mid-reminder. Terminal tasks (done/skipped/no_response) do
+# not block; the DB FK (ON DELETE CASCADE) then cleans them up atomically. "no_response" (V33 PART 4)
+# is terminal, so it is intentionally NOT in this set.
+ACTIVE_TASK_STATUSES = (STATUS_PENDING, STATUS_ASKED, STATUS_REMINDED)
+DELETE_BLOCKED_ACTIVE_FA = (
+    "این مخاطب هنوز کارهای فعال دارد (در حال ارسال یا یادآوری). ابتدا آن‌ها را کامل یا لغو کنید، "
+    "سپس مخاطب را حذف کنید."
+)
+
+
 async def delete_helper(db, helper_id) -> bool:
     helper = await db.get(WarmupHelper, helper_id)
     if helper is None:
         return False
+    active = int((await db.execute(
+        select(func.count()).select_from(WarmupHelperTask).where(
+            WarmupHelperTask.helper_id == helper_id,
+            WarmupHelperTask.status.in_(ACTIVE_TASK_STATUSES))
+    )).scalar() or 0)
+    if active > 0:
+        raise ValueError(DELETE_BLOCKED_ACTIVE_FA)
+    # No active tasks → safe to delete. The FK cascade removes any terminal task/thread rows so no
+    # orphan can survive (see main.py DDL fk_warmup_helper_task_helper / fk_warmup_helper_thread_helper).
     await db.delete(helper)
     await db.commit()
     return True
+
+
+async def cleanup_orphan_helper_tasks(db) -> dict:
+    """V33 PART 3 — remove task AND thread rows whose helper_id references a contact that no longer
+    exists (they can never progress — there is no contact to message). One-time repair for rows that
+    predate the FK; the FK now prevents new orphans. Returns exactly what was removed, for reporting."""
+    from app.models.warmup_helpers import WarmupHelperThread
+    valid = {hid for (hid,) in (await db.execute(select(WarmupHelper.id))).all()}
+    tasks = (await db.execute(select(WarmupHelperTask))).scalars().all()
+    threads = (await db.execute(select(WarmupHelperThread))).scalars().all()
+    orphan_tasks = [t for t in tasks if t.helper_id not in valid]
+    orphan_threads = [th for th in threads if th.helper_id not in valid]
+    for t in orphan_tasks:
+        await db.delete(t)
+    for th in orphan_threads:
+        await db.delete(th)
+    if orphan_tasks or orphan_threads:
+        await db.commit()
+    return {
+        "tasks_removed": [{"helper_id": str(t.helper_id), "cold_instance_id": t.cold_instance_id,
+                           "status": t.status} for t in orphan_tasks],
+        "threads_removed": [{"helper_id": str(th.helper_id), "cold_instance_id": th.cold_instance_id}
+                            for th in orphan_threads],
+    }
 
 
 # ── V29: cold-account assignment (a contact's "path"; ceiling of 2) ──────────

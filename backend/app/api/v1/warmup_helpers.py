@@ -372,7 +372,11 @@ async def _pick_real_product() -> str | None:
 
 @router.delete("/{helper_id}")
 async def remove_helper(helper_id: str, db: AsyncSession = Depends(get_db)):
-    ok = await hs.delete_helper(db, uuid.UUID(helper_id))
+    try:
+        ok = await hs.delete_helper(db, uuid.UUID(helper_id))
+    except ValueError as e:
+        # V33 PART 3 — deletion refused while the contact still has active (in-flight) tasks.
+        raise HTTPException(404 if "یافت نشد" in str(e) else 409, str(e))
     return {"deleted": ok}
 
 
