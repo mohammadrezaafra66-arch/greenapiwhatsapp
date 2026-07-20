@@ -24,7 +24,9 @@ from app.api.v1 import (
     capabilities as capabilities_router,
     adlinks, warmup, warmup_helpers,
     group_monitor, telegram, onboarding,
+    reports_public,
 )
+from app.config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -1147,9 +1149,38 @@ for router in [
     partner.router, messages.router, incidents.router, calls.router,
     capabilities_router.router, adlinks.router, warmup.router,
     warmup_helpers.router, group_monitor.router, telegram.router,
-    onboarding.router,
+    onboarding.router, reports_public.router,
 ]:
     app.include_router(router, prefix="/api/v1")
+
+
+# ── Scoped, env-configurable CORS for the public reports API ONLY (/api/v1/reports/*) ──────────
+# The rest of the API keeps its own CORS (above) untouched. The LAN system that renders the
+# top-products tab is allow-listed here; add the new machine's origin later via the
+# REPORTS_ALLOWED_ORIGINS env var (comma-separated, or "*") — no code change needed.
+_REPORTS_PATH_PREFIX = "/api/v1/reports"
+
+
+@app.middleware("http")
+async def reports_scoped_cors(request: Request, call_next):
+    path = request.url.path
+    if not path.startswith(_REPORTS_PATH_PREFIX):
+        return await call_next(request)      # every other path: untouched (uses the global CORS)
+
+    # Preflight — answer here without hitting the route (read-only API: GET + OPTIONS only).
+    if request.method == "OPTIONS":
+        from starlette.responses import Response as _Resp
+        resp = _Resp(status_code=204)
+    else:
+        resp = await call_next(request)
+
+    allowed = reports_public.parse_allowed_origins(settings.reports_allowed_origins)
+    headers = reports_public.cors_headers_for(
+        request.headers.get("origin"), allowed,
+        request.headers.get("access-control-request-headers"))
+    for k, v in headers.items():
+        resp.headers[k] = v
+    return resp
 
 from app.services.green_api import GreenInstanceDeleted
 

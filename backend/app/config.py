@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     # event loop via asyncio.run and pooled asyncpg conns can't cross loops.
     # When false (API), use a real connection pool for concurrency.
     worker_mode: bool = False
+    # Read-only public reports API (/api/v1/reports/*) — comma-separated CORS allowlist for the
+    # LAN system that renders the top-products tab. Set REPORTS_ALLOWED_ORIGINS in .env to add the
+    # new machine when it moves (e.g. "http://192.168.170.10:3100") — no code change needed. Use
+    # "*" to allow any origin. This allowlist applies ONLY to /api/v1/reports/* (see main.py); the
+    # rest of the API keeps its own CORS untouched.
+    reports_allowed_origins: str = "http://192.168.170.8:3100,http://192.168.170.10:3100"
 
     class Config:
         env_file = ".env"

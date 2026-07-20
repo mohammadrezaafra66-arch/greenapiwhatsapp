@@ -159,37 +159,24 @@ async def clear_product_mentions(db: AsyncSession = Depends(get_db)):
 
 @router.get("/top-products")
 async def top_repeated_products(limit: int = 150, days: int = 30, db: AsyncSession = Depends(get_db)):
-    """Most-frequently-mentioned products across groups (from product_mention_logs)."""
-    from datetime import timedelta
+    """Most-frequently-mentioned products across groups (from product_mention_logs).
+    Delegates to the shared product_reports service so the public /reports API can never drift."""
     from app.utils.shamsi import to_shamsi
-    limit = max(1, min(limit, 500))
-    cutoff = datetime.utcnow() - timedelta(days=max(1, days))
-    rows = (await db.execute(
-        select(
-            ProductMentionLog.product_name,
-            func.count().label("mention_count"),
-            func.count(func.distinct(ProductMentionLog.group_chat_id)).label("group_count"),
-            func.count(func.distinct(ProductMentionLog.sender_phone)).label("sender_count"),
-            func.max(ProductMentionLog.mentioned_at).label("last_mention"),
-        )
-        .where(ProductMentionLog.mentioned_at >= cutoff)
-        .group_by(ProductMentionLog.product_name)
-        .order_by(func.count().desc())
-        .limit(limit)
-    )).all()
+    from app.services import product_reports as pr
+    rows = await pr.top_products_rows(db, days=days, limit=limit)
     return {
         "total_products": len(rows),
         "period_days": days,
         "products": [
             {
-                "rank": i + 1,
-                "product_name": r.product_name,
-                "mention_count": r.mention_count,
-                "group_count": r.group_count,
-                "sender_count": r.sender_count,
-                "last_mention_shamsi": to_shamsi(r.last_mention),
+                "rank": r["rank"],
+                "product_name": r["product_name"],
+                "mention_count": r["mention_count"],
+                "group_count": r["group_count"],
+                "sender_count": r["sender_count"],
+                "last_mention_shamsi": to_shamsi(r["last_mention"]),
             }
-            for i, r in enumerate(rows)
+            for r in rows
         ],
     }
 
@@ -198,33 +185,22 @@ async def top_repeated_products(limit: int = 150, days: int = 30, db: AsyncSessi
 async def product_sellers(product_name: str, days: int = 30, limit: int = 100,
                           db: AsyncSession = Depends(get_db)):
     """All sellers who advertised a given product: contact, time (Shamsi), group.
-    Powers the 'مشاهده فروشندگان اخیر' modal in the top-products table."""
-    from datetime import timedelta
-    from app.services.phone_extract import contacts_for
+    Powers the 'مشاهده فروشندگان اخیر' modal in the top-products table. Delegates to the shared
+    product_reports service (single source of truth shared with the public /reports API)."""
     from app.utils.shamsi import to_shamsi
-
-    limit = max(1, min(limit, 500))
-    cutoff = datetime.utcnow() - timedelta(days=max(1, days))
-    rows = (await db.execute(
-        select(ProductMentionLog)
-        .where(ProductMentionLog.product_name == product_name)
-        .where(ProductMentionLog.mentioned_at >= cutoff)
-        .order_by(ProductMentionLog.mentioned_at.desc())
-        .limit(limit)
-    )).scalars().all()
-
-    sellers = []
-    for m in rows:
-        sender_display, _phones, all_contacts = contacts_for(m.sender_phone or "", m.message_text or "")
-        sellers.append({
-            "sender_name": m.sender_name or "",
-            "sender_phone": sender_display,
-            "all_contacts": all_contacts,
-            "group_name": m.group_name or "",
-            "message_preview": (m.message_text or "")[:120],
-            "time_shamsi": to_shamsi(m.mentioned_at),
-        })
-
+    from app.services import product_reports as pr
+    rows = await pr.product_mentioners_rows(db, product_name=product_name, days=days, limit=limit)
+    sellers = [
+        {
+            "sender_name": r["sender_display_name"],
+            "sender_phone": r["sender_phone"],
+            "all_contacts": r["all_contacts"],
+            "group_name": r["group_name"],
+            "message_preview": r["message_preview"],
+            "time_shamsi": to_shamsi(r["mentioned_at"]),
+        }
+        for r in rows
+    ]
     return {"product_name": product_name, "total_sellers": len(sellers), "sellers": sellers}
 
 
