@@ -1063,6 +1063,17 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL TG] {e}")
+        # ── V35 PART 3 — contact relationship category + optional referral note on warmup_helper
+        #    (both nullable; never break legacy rows). referral_note feeds the AI ask generator. ──
+        ddl_v35 = [
+            "ALTER TABLE warmup_helper ADD COLUMN IF NOT EXISTS relationship varchar(20)",
+            "ALTER TABLE warmup_helper ADD COLUMN IF NOT EXISTS referral_note text",
+        ]
+        for stmt in ddl_v35:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V35] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:

@@ -312,7 +312,10 @@ async def _unified_ask_text(db, helper, task_sender, cold_acc, cold_instance_id,
             brief=brief_text,
             contact={"name": helper.name, "job_title": getattr(helper, "job_title", None),
                      "years_experience": getattr(helper, "years_experience", None),
-                     "personal_benefit_note": getattr(helper, "personal_benefit_note", None)},
+                     "personal_benefit_note": getattr(helper, "personal_benefit_note", None),
+                     # V35 PART 3 — relationship category + optional referral note reach the AI prompt.
+                     "relationship": getattr(helper, "relationship", None),
+                     "referral_note": getattr(helper, "referral_note", None)},
             topic=topic, step_count=step_count, cold_phone_digits=[phone_digits],
             recent=recent, ai_fn=ai_fn if ai_fn is not None else build_thread_ai_fn(),
             forbidden=forbidden)

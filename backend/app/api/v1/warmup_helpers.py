@@ -30,6 +30,9 @@ class HelperBody(BaseModel):
     years_experience: int | None = None
     personal_benefit_note: str | None = None
     phone_secondary: str | None = None      # «شماره کاری»
+    # V35 PART 3 — relationship category + optional referral note (both optional).
+    relationship: str | None = None         # friend | colleague | employee | family
+    referral_note: str | None = None        # e.g. «شماره شما را آقای X داده»
     # V29 — the «همکاری تیمی» UI sends this true so NEW saves must carry a full name (first +
     # last). Default False keeps the V25/V28 API contract (single-token names) intact.
     require_full_name: bool = False
@@ -45,6 +48,9 @@ class HelperUpdateBody(BaseModel):
     years_experience: int | None = _UNSET
     personal_benefit_note: str | None = _UNSET
     phone_secondary: str | None = _UNSET
+    # V35 PART 3 — patchable (sentinel → leave unchanged; pass value to set; "" to clear).
+    relationship: str | None = _UNSET
+    referral_note: str | None = _UNSET
     require_full_name: bool = False
 
 
@@ -80,6 +86,9 @@ def _helper_dict(h) -> dict:
         "years_experience": getattr(h, "years_experience", None),
         "personal_benefit_note": getattr(h, "personal_benefit_note", None),
         "phone_secondary": getattr(h, "phone_secondary", None),
+        # V35 PART 3 — relationship category + optional referral note.
+        "relationship": getattr(h, "relationship", None),
+        "referral_note": getattr(h, "referral_note", None),
         "created_at": h.created_at.isoformat() if h.created_at else None,
     }
 
@@ -151,6 +160,7 @@ async def create_helper(body: HelperBody, db: AsyncSession = Depends(get_db)):
             db, body.name, body.phone, body.is_active, sender_instance_id=sender,
             job_title=body.job_title, years_experience=body.years_experience,
             personal_benefit_note=body.personal_benefit_note, phone_secondary=body.phone_secondary,
+            relationship=body.relationship, referral_note=body.referral_note,
             require_full_name=body.require_full_name,   # V29 «همکاری تیمی» UI sends true
         )
     except ValueError as e:
@@ -214,7 +224,8 @@ async def generate_preview(body: BriefBody, db: AsyncSession = Depends(get_db)):
 async def edit_helper(helper_id: str, body: HelperUpdateBody, db: AsyncSession = Depends(get_db)):
     # Translate the _UNSET sentinel back into the service's own _UNSET (omit → leave unchanged).
     patch = {}
-    for f in ("job_title", "years_experience", "personal_benefit_note", "phone_secondary"):
+    for f in ("job_title", "years_experience", "personal_benefit_note", "phone_secondary",
+              "relationship", "referral_note"):
         v = getattr(body, f)
         if v != _UNSET:
             patch[f] = v

@@ -46,6 +46,11 @@ class WarmupHelper(Base):
     years_experience: Mapped[int | None] = mapped_column(Integer)              # سابقهٔ تخصصی (سال)
     personal_benefit_note: Mapped[str | None] = mapped_column(Text)            # این سیستم چه سودی برای او دارد
     phone_secondary: Mapped[str | None] = mapped_column(String(20))            # شماره کاری (اختیاری)
+    # V35 PART 3 — relationship category (friend/colleague/employee/family) shown as a dropdown,
+    # and an optional free-text referral note (e.g. «شماره شما را آقای X داده») woven into the
+    # AI-generated ask-messages. Both NULLABLE; independent of each other; never break legacy rows.
+    relationship: Mapped[str | None] = mapped_column(String(20))               # دوست/همکار/کارمند/فامیل
+    referral_note: Mapped[str | None] = mapped_column(Text)                    # مثال: شماره شما را آقای X داده
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

@@ -345,11 +345,26 @@ def is_full_name(name: str | None) -> bool:
     return len(parts) >= 2
 
 
+# V35 PART 3 — the allowed contact-relationship categories (stored as English codes; the UI shows
+# the Persian label). Any other value is coerced to None so a bad input never persists.
+VALID_RELATIONSHIPS = ("friend", "colleague", "employee", "family")
+
+
+def _coerce_relationship(v) -> str | None:
+    """Normalize a relationship input → one of VALID_RELATIONSHIPS or None."""
+    if v is None:
+        return None
+    s = str(v).strip().lower()
+    return s if s in VALID_RELATIONSHIPS else None
+
+
 async def add_helper(db, name: str, phone: str, is_active: bool = True,
                      sender_instance_id: str | None = None, *,
                      job_title: str | None = None, years_experience: int | None = None,
                      personal_benefit_note: str | None = None,
                      phone_secondary: str | None = None,
+                     relationship: str | None = None,
+                     referral_note: str | None = None,
                      require_full_name: bool = False) -> WarmupHelper:
     """Add ONE known contact for a sender. V28 — NO hard count cap (pacing is the safety rail);
     `name` is MANDATORY (rejected if empty). V29 — the «همکاری تیمی» API passes
@@ -374,7 +389,9 @@ async def add_helper(db, name: str, phone: str, is_active: bool = True,
                           years_experience=yrs,
                           personal_benefit_note=(personal_benefit_note or None) and
                           personal_benefit_note.strip() or None,
-                          phone_secondary=sec)
+                          phone_secondary=sec,
+                          relationship=_coerce_relationship(relationship),
+                          referral_note=(referral_note or None) and str(referral_note).strip() or None)
     db.add(helper)
     await db.commit()
     await db.refresh(helper)
@@ -403,6 +420,7 @@ _UNSET = object()
 async def update_helper(db, helper_id, *, name=None, phone=None, is_active=None,
                         sender_instance_id=None, job_title=_UNSET, years_experience=_UNSET,
                         personal_benefit_note=_UNSET, phone_secondary=_UNSET,
+                        relationship=_UNSET, referral_note=_UNSET,
                         require_full_name: bool = False) -> WarmupHelper:
     """Edit a contact. V28 — no cap on (re)activation; `name` stays mandatory when provided.
     V29 — the «همکاری تیمی» API passes `require_full_name=True` so an edited name must stay a
@@ -436,6 +454,10 @@ async def update_helper(db, helper_id, *, name=None, phone=None, is_active=None,
             str(personal_benefit_note).strip() or None
     if phone_secondary is not _UNSET:
         helper.phone_secondary = wa_me_digits(phone_secondary) or None
+    if relationship is not _UNSET:
+        helper.relationship = _coerce_relationship(relationship)
+    if referral_note is not _UNSET:
+        helper.referral_note = (referral_note or None) and str(referral_note).strip() or None
     await db.commit()
     await db.refresh(helper)
     return helper

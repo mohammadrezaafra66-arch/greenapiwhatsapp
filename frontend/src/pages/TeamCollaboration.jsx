@@ -24,7 +24,19 @@ const TABS = [
 const EMPTY_CONTACT = {
   name: "", phone: "", job_title: "", years_experience: "",
   personal_benefit_note: "", phone_secondary: "",
+  // V35 PART 3 — relationship category + optional referral note.
+  relationship: "", referral_note: "",
 };
+
+// V35 PART 3 — relationship categories (English code stored; Persian label shown).
+const RELATIONSHIP_OPTIONS = [
+  { value: "", label: "— نسبت (اختیاری) —" },
+  { value: "friend", label: "دوست" },
+  { value: "colleague", label: "همکار" },
+  { value: "employee", label: "کارمند" },
+  { value: "family", label: "فامیل" },
+];
+const RELATIONSHIP_FA = { friend: "دوست", colleague: "همکار", employee: "کارمند", family: "فامیل" };
 
 // ── warmth badge lookup shared across panels ─────────────────────────────────
 function WarmthBadge({ level, score }) {
@@ -140,6 +152,8 @@ function ContactsEditor({ senderInstanceId, onChange }) {
         years_experience: form.years_experience === "" ? null : Number(form.years_experience),
         personal_benefit_note: form.personal_benefit_note.trim() || null,
         phone_secondary: form.phone_secondary.trim() || null,
+        relationship: form.relationship || null,
+        referral_note: form.referral_note.trim() || null,
         require_full_name: true,
       });
       setForm(EMPTY_CONTACT); reload(); onChange && onChange();
@@ -182,6 +196,12 @@ function ContactsEditor({ senderInstanceId, onChange }) {
               onChange={(e) => setForm({ ...form, phone_secondary: e.target.value })} />
             <input className="input" placeholder="این سیستم چه سودی برای او دارد؟" value={form.personal_benefit_note}
               onChange={(e) => setForm({ ...form, personal_benefit_note: e.target.value })} />
+            <select className="input" value={form.relationship}
+              onChange={(e) => setForm({ ...form, relationship: e.target.value })}>
+              {RELATIONSHIP_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <input className="input" placeholder="یادداشت معرف (مثلاً: شماره شما را آقای X داده)" value={form.referral_note}
+              onChange={(e) => setForm({ ...form, referral_note: e.target.value })} />
           </div>
         )}
       </div>
@@ -224,6 +244,8 @@ function ContactRow({ helper, onDelete, onToggle }) {
           <span className="text-xs text-slate-500 font-mono mr-2">{fa(helper.phone)}</span>
           {helper.job_title && <span className="text-xs text-sky-300 mr-2">{helper.job_title}</span>}
           {helper.years_experience != null && <span className="text-xs text-slate-400 mr-1">({fa(helper.years_experience)} سال)</span>}
+          {helper.relationship && RELATIONSHIP_FA[helper.relationship] && <span className="badge bg-indigo-500/20 text-indigo-300 border-indigo-500/40 mr-2">{RELATIONSHIP_FA[helper.relationship]}</span>}
+          {helper.referral_note && <span className="text-xs text-amber-300/80 mr-1" title="یادداشت معرف">📇 {helper.referral_note}</span>}
         </div>
         <div className="flex gap-1">
           <button className={`badge ${helper.is_active ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-slate-600/30 text-slate-400 border-slate-600"}`} onClick={onToggle}>{helper.is_active ? "فعال" : "غیرفعال"}</button>

@@ -28,6 +28,14 @@ logger = logging.getLogger("afrakala.outreach")
 # V29 «همکاری تیمی» — an ask-message references AT MOST 2 cold accounts (explicit ceiling).
 MAX_REFERENCED_COLD_ACCOUNTS = 2
 
+# V35 PART 3 — Persian labels for the contact-relationship categories (codes stored in the DB).
+RELATIONSHIP_FA = {
+    "friend": "دوست",
+    "colleague": "همکار",
+    "employee": "کارمند",
+    "family": "فامیل",
+}
+
 
 # ── name validation (real name, NOT restricted to a pool) ────────────────────
 def message_includes_name(text: str, name: str) -> bool:
@@ -166,9 +174,12 @@ def _thread_system_prompt() -> str:
     )
 
 
-def _profile_line(*, job_title, years_experience, personal_benefit_note) -> str:
+def _profile_line(*, job_title, years_experience, personal_benefit_note,
+                  relationship=None, referral_note=None) -> str:
     """A short Persian hint the AI uses to make the ask personally relevant. Empty when no
-    profile data is present."""
+    profile data is present. V35 PART 3 — also weaves in the relationship category (so the tone
+    matches friend/colleague/employee/family) and, when present, the free-text referral note
+    (e.g. «شماره شما را آقای X داده») so the generated message can reference it naturally."""
     bits = []
     if job_title:
         bits.append(f"سمت او: {str(job_title).strip()}")
@@ -176,6 +187,12 @@ def _profile_line(*, job_title, years_experience, personal_benefit_note) -> str:
         bits.append(f"سابقهٔ تخصصی: {years_experience} سال")
     if personal_benefit_note:
         bits.append(f"چرا کمک برای خودش هم مفید است: {str(personal_benefit_note).strip()}")
+    rel_fa = RELATIONSHIP_FA.get(str(relationship or "").strip().lower())
+    if rel_fa:
+        bits.append(f"نسبت او با فرستنده: {rel_fa} (لحن پیام را متناسب با این نسبت تنظیم کن)")
+    if referral_note:
+        bits.append(f"چطور با او آشنا شدیم/چه کسی معرفی کرده: {str(referral_note).strip()} "
+                    f"(اگر طبیعی بود، در پیام به‌شکل دوستانه به آن اشاره کن)")
     return "؛ ".join(bits)
 
 
@@ -256,7 +273,8 @@ async def generate_thread_ask_message(*, brief: str | None, contact: dict, topic
         raise ValueError("نام مخاطب معتبر نیست (نباید عدد/شناسه باشد)")
     profile_line = _profile_line(
         job_title=contact.get("job_title"), years_experience=contact.get("years_experience"),
-        personal_benefit_note=contact.get("personal_benefit_note"))
+        personal_benefit_note=contact.get("personal_benefit_note"),
+        relationship=contact.get("relationship"), referral_note=contact.get("referral_note"))
 
     body, source = None, "fallback"
     if ai_fn is not None:
