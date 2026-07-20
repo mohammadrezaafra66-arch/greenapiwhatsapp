@@ -169,6 +169,42 @@ async def cold_instances_being_warmed(db, enr_map: dict) -> list[str]:
             if enabled and state not in _INACTIVE_COLD_STATES]
 
 
+async def tc_eligible_cold_instances(db, accounts_by_instance: dict,
+                                     now: datetime | None = None) -> list[str]:
+    """V34 — cold accounts eligible for the «همکاری تیمی» ask → reminder → done/no_response cycle in
+    run_helper_tick: every TEAM-enrolled + enabled cold account whose OWN V27 pre-send health gate
+    passes (`send_gate.gate_check`).
+
+    This is DELIBERATELY decoupled from the mesh warm-up track's state. The mesh «being warmed» set
+    (`cold_instances_being_warmed`) excludes GRADUATED/PAUSED/BLOCKED_RESET — so when the mesh is
+    paused (e.g. the V17/V21 chain-ban breaker halting the WHOLE mesh because OTHER numbers carded),
+    a genuinely-healthy Team-Collaboration cold used to stop getting reminders and never reach
+    `no_response`. Team Collaboration is a SEPARATE track, so it should progress a cold on the cold's
+    OWN health, not on whether the mesh track happens to be paused for that same number.
+
+    The V27 gate is NOT weakened: a genuinely unhealthy cold — live Green API state
+    yellowCard/blocked/notAuthorized, or an active cooldown/throttle, or status != active — is still
+    excluded (the gate reads the same fast live-state mirror + governors every send call-site uses).
+    A team-enrolled cold with no loaded (active) Account is skipped — it can't be health-gated, so it
+    is treated conservatively as ineligible. `now` is left to the gate's default (UTC), matching every
+    other gate_check call-site, so cooldown/throttle/live-freshness math stays in one clock."""
+    from app.models.warmup_helpers import WarmupTeamEnrollment
+    from app.services.send_gate import gate_check
+    rows = (await db.execute(
+        select(WarmupTeamEnrollment.cold_instance_id).where(
+            WarmupTeamEnrollment.is_enabled.is_(True))
+    )).all()
+    out = []
+    for (cid,) in rows:
+        acc = accounts_by_instance.get(cid)
+        if acc is None:
+            continue
+        allowed, _reason = gate_check(acc, now)
+        if allowed:
+            out.append(cid)
+    return out
+
+
 async def ensure_helper_tasks(db, cold_instance_ids: list[str],
                               active_helpers: list[WarmupHelper]) -> int:
     """Create a `pending` task pairing active helpers with cold numbers being warmed, WITHOUT ever
@@ -331,8 +367,14 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
         await db.commit()
         return {"enabled": True, "acted": 0, "created": created, "no_sender": True}
 
-    # Candidate tasks limited to cold numbers still being warmed + active helpers.
-    active_cold = set(cold_ids)
+    # Candidate cold numbers = the legacy mesh «being warmed» set UNION the V34 Team-Collaboration
+    # set (team-enrolled cold accounts healthy per their OWN V27 gate, INDEPENDENT of the mesh PAUSED
+    # state). So a mesh pause (e.g. the chain-ban breaker halting the mesh track for OTHER numbers) no
+    # longer stalls a healthy TC cold's ask → reminder → no_response cycle; a genuinely unhealthy cold
+    # is still excluded by gate_check. The SENDER is still separately gated in _send_from_main.
+    acc_by_instance = {a.instance_id: a for a in accounts}
+    tc_cold_ids = await tc_eligible_cold_instances(db, acc_by_instance)
+    active_cold = set(cold_ids) | set(tc_cold_ids)
     active_helper_ids = {str(h.id) for h in active_helpers}
     helper_by_id = {str(h.id): h for h in active_helpers}
     # V33 PART 4 — reminded tasks (awaiting their 2nd reminder) are candidates too, so include them.

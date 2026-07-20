@@ -92,6 +92,7 @@ def _tick_db(sender, helper, task, config):
                 _Res(scalars=[helper]),                                  # list_helpers
                 _Res(scalars=[]),                                        # ensure_helper_tasks existing
                 _Res(scalars=[sender]),                                  # active accounts (pick_main_sender)
+                _Res(rows=[]),                                           # V34 — tc_eligible team-enrollment (none)
                 _Res(scalars=[task]),                                    # candidate tasks
             ]
         async def execute(s, *a, **k): return s._q.pop(0) if s._q else _Res()
