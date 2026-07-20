@@ -81,14 +81,15 @@ async def product_mentioners_rows(db: AsyncSession, *, product_name: str, days: 
     for m in rows:
         sender_display, phones_in_msg, all_contacts = contacts_for(
             m.sender_phone or "", m.message_text or "")
+        # A «شماره کاری»-style secondary: the first DISTINCT extra number (not the sender's own,
+        # even if they retyped it in the message). None when the seller listed no other number.
+        secondary = next((c for c in all_contacts if c != sender_display), None)
         out.append({
             "mentioned_at": m.mentioned_at,               # raw datetime
             "group_name": m.group_name or "",
             "sender_display_name": m.sender_name or "",
             "sender_phone": sender_display,               # the sender's own number (primary)
-            # first ADDITIONAL number found in the message text (a «شماره کاری»-style secondary),
-            # None when the seller listed no extra number
-            "sender_phone_secondary": (phones_in_msg[0] if phones_in_msg else None),
+            "sender_phone_secondary": secondary,
             "all_contacts": all_contacts,                 # every distinct number (superset)
             "message_preview": (m.message_text or "")[:120],
             "product_id": m.product_id,                   # nullable; not the aggregation key

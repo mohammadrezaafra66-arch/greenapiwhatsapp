@@ -1174,6 +1174,13 @@ async def reports_scoped_cors(request: Request, call_next):
     else:
         resp = await call_next(request)
 
+    # This scoped allowlist is AUTHORITATIVE for /reports: clear whatever the global CORS set for
+    # these paths, then apply only our decision — so a disallowed origin gets no ACAO here (the
+    # allowlist genuinely governs), while every OTHER path keeps the global CORS untouched.
+    for h in ("access-control-allow-origin", "access-control-allow-credentials",
+              "access-control-allow-methods", "access-control-allow-headers"):
+        if h in resp.headers:
+            del resp.headers[h]
     allowed = reports_public.parse_allowed_origins(settings.reports_allowed_origins)
     headers = reports_public.cors_headers_for(
         request.headers.get("origin"), allowed,
