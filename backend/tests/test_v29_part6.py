@@ -47,10 +47,18 @@ def test_one_reminder_per_step():
     assert kind == "remind" and task is old_ask
 
 
-def test_no_second_reminder():
-    reminded = _task(hs.STATUS_REMINDED, asked_min_ago=200)
-    # a reminded task is not 'asked' → never re-selected (engine also filters it upstream)
-    assert he.select_action([], [reminded], NOW) is None
+def test_second_reminder_allowed_then_capped():
+    # V33 PART 4 — reminders are now capped at exactly 2 (was 1). A once-reminded task gets a 2nd
+    # reminder when its window elapses; a twice-reminded task is never selected again.
+    once = _task(hs.STATUS_REMINDED, asked_min_ago=200)
+    once.reminded_at = NOW - timedelta(minutes=90)
+    once.reminder_count = 1
+    kind, task = he.select_action([], [once], NOW)
+    assert kind == "remind" and task is once
+    twice = _task(hs.STATUS_REMINDED, asked_min_ago=200)
+    twice.reminded_at = NOW - timedelta(minutes=90)
+    twice.reminder_count = 2
+    assert he.select_action([], [twice], NOW) is None
 
 
 def test_no_reminder_before_window():

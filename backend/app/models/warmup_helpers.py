@@ -68,9 +68,13 @@ class WarmupHelperTask(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     helper_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     cold_instance_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    # V33 PART 4 — status lifecycle: pending → asked → reminded → no_response | done | skipped.
+    # `reminder_count` bounds reminders at exactly 2 per ask-step; after the 2nd reminder's window
+    # elapses with no completion the task goes terminal `no_response` (never a 3rd reminder / re-ask).
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     asked_at: Mapped[datetime | None] = mapped_column(DateTime)
     reminded_at: Mapped[datetime | None] = mapped_column(DateTime)
+    reminder_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     done_at: Mapped[datetime | None] = mapped_column(DateTime)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

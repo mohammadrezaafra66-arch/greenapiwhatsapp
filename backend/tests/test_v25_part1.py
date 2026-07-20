@@ -181,16 +181,18 @@ def test_select_action_no_reminder_before_1h():
     assert he.select_action([], [fresh_ask], TEHRAN_11AM) is None
 
 
-def test_reminded_task_is_never_reminded_again():
-    """A task already reminded is not status 'asked', so select_action never re-selects it —
-    a helper is messaged at most ask + one reminder."""
-    reminded = _task(hs.STATUS_REMINDED, asked_min_ago=200)
-    reminded.reminded_at = TEHRAN_11AM - timedelta(hours=2)
-    # only 'asked' tasks are eligible for a reminder; a reminded task is excluded upstream
-    kind = he.select_action([], [], TEHRAN_11AM)
-    assert kind is None
-    # even if erroneously passed in, status != 'asked' so it is ignored
-    assert he.select_action([], [reminded], TEHRAN_11AM) is None
+def test_reminders_capped_at_two_then_no_third():
+    """V33 PART 4 — a task reminded ONCE (count 1) is still eligible for its 2nd reminder once the
+    window elapses; after 2 reminders (count 2) it is NEVER selected again (capped at exactly two)."""
+    once = _task(hs.STATUS_REMINDED, asked_min_ago=200)
+    once.reminded_at = TEHRAN_11AM - timedelta(hours=2)
+    once.reminder_count = 1
+    kind, task = he.select_action([], [once], TEHRAN_11AM)
+    assert kind == "remind" and task is once            # reminder #2 is due
+    twice = _task(hs.STATUS_REMINDED, asked_min_ago=200)
+    twice.reminded_at = TEHRAN_11AM - timedelta(hours=2)
+    twice.reminder_count = 2
+    assert he.select_action([], [twice], TEHRAN_11AM) is None   # never a 3rd
 
 
 # ── DB fake (routes by compiled SQL) for CRUD + engine integration ───────────

@@ -87,6 +87,7 @@ def _tick_db(sender, helper, task, config):
             s.commits = 0
             s._q = [
                 _Res(scalars=[config]),                                  # get_config
+                _Res(scalars=[]),                                        # V33 PART 4 — expire_exhausted_reminders (none)
                 _Res(rows=[("C1", WarmupState.RECEIVING.value, True)]),  # enr states (cold number)
                 _Res(scalars=[helper]),                                  # list_helpers
                 _Res(scalars=[]),                                        # ensure_helper_tasks existing

@@ -953,6 +953,16 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V33 P3] {e}")
+        # ── V33 PART 4 — reminder_count on warmup_helper_task: bounds reminders at exactly 2, then
+        #    the task goes terminal `no_response` (no 3rd reminder / re-ask). ──
+        ddl_v33_part4 = [
+            "ALTER TABLE warmup_helper_task ADD COLUMN IF NOT EXISTS reminder_count integer NOT NULL DEFAULT 0",
+        ]
+        for stmt in ddl_v33_part4:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V33 P4] {e}")
         # ── V26 — group monitoring (listener) + voice transcription schema ──
         ddl_v26 = [
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_listener boolean DEFAULT false",

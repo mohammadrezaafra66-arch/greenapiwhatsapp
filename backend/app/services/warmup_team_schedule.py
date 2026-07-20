@@ -237,6 +237,7 @@ async def run_team_schedule_tick(db, now: datetime | None = None, *, client_fact
         if task is not None:
             task.status = hs.STATUS_ASKED
             task.asked_at = now
+            task.reminder_count = 0                    # V33 PART 4 — new ask-step → fresh 2-reminder budget
             task.attempts = int(task.attempts or 0) + 1
         wt.advance_thread(thread, topic, now)
         from app.services import warmup_helper_log as tclog

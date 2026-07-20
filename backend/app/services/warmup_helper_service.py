@@ -76,6 +76,12 @@ STATUS_ASKED = "asked"
 STATUS_REMINDED = "reminded"
 STATUS_DONE = "done"
 STATUS_SKIPPED = "skipped"
+# V33 PART 4 — terminal state after exactly 2 reminders with no completion. The (contact, cold)
+# task closes out and is NEVER reminded or re-asked again; a LATE completion still honors it. Only
+# THIS pairing closes — the contact stays eligible for other cold accounts.
+STATUS_NO_RESPONSE = "no_response"
+# V33 PART 4 — exactly two reminders maximum per ask-step, then STOP (terminal `no_response`).
+MAX_REMINDERS = 2
 
 
 class HelperCapError(Exception):
@@ -591,7 +597,7 @@ async def escalate_after_completion(db, helper_id, *, batch: int = ESCALATION_BA
 # one), tie-broken by the most recent activity timestamp. A dropped pairing's THREAD is PAUSED
 # (never deleted) when it carries any progress, so no conversation history is silently lost.
 _STATUS_RANK = {STATUS_DONE: 4, STATUS_REMINDED: 3, STATUS_ASKED: 2, STATUS_PENDING: 1,
-                STATUS_SKIPPED: 0}
+                STATUS_SKIPPED: 0, STATUS_NO_RESPONSE: 0}
 
 
 def _pairing_progress_key(task):

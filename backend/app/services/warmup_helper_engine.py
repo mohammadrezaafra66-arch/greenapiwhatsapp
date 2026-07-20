@@ -87,25 +87,72 @@ def _to_utc_naive(tehran_naive: datetime) -> datetime:
 
 
 # ── pure: choose the ONE action this tick (reminder wins over a fresh ask) ────
-def select_action(pending_tasks: list, asked_tasks: list, now: datetime,
-                  reminder_after_hours: int = hs.REMINDER_AFTER_HOURS):
+def _reminder_ref_time(task):
+    """The last-outreach time a reminder is measured from: reminded_at once reminded, else asked_at."""
+    return task.reminded_at if task.status == hs.STATUS_REMINDED else task.asked_at
+
+
+def reminder_due_for(task, cutoff) -> bool:
+    """PURE. Is a reminder due for this awaiting task, under the exactly-2-reminder cap (V33 PART 4)?
+      • status 'asked'    → reminder #1 due when asked_at <= cutoff (never reminded yet);
+      • status 'reminded' → reminder #2 due when reminder_count < MAX_REMINDERS and reminded_at <= cutoff.
+    A task that has already had MAX_REMINDERS reminders is NEVER due (it goes terminal `no_response`
+    via expire_exhausted_reminders instead — never a 3rd reminder)."""
+    rc = int(getattr(task, "reminder_count", 0) or 0)
+    if task.status == hs.STATUS_ASKED:
+        return task.asked_at is not None and task.asked_at <= cutoff
+    if task.status == hs.STATUS_REMINDED:
+        return rc < hs.MAX_REMINDERS and task.reminded_at is not None and task.reminded_at <= cutoff
+    return False
+
+
+def select_action(pending_tasks: list, awaiting_tasks: list, now: datetime,
+                  reminder_after_minutes: int = hs.REMINDER_AFTER_MINUTES):
     """Decide the single action to perform this tick. Returns ("remind", task) |
     ("ask", task) | None.
 
-    A reminder is due for an `asked` (never-reminded) task whose asked_at is older than
-    `reminder_after_hours`. Reminders take priority (finish what we started), then a fresh
-    `pending` ask. Exactly one task is returned, so the main account never sends in a burst.
-    `asked_tasks` must already exclude tasks that were reminded/done (status == 'asked')."""
-    cutoff = now - timedelta(hours=reminder_after_hours)
-    due_reminders = [t for t in asked_tasks
-                     if t.status == hs.STATUS_ASKED and t.asked_at is not None and t.asked_at <= cutoff]
+    `awaiting_tasks` are the non-terminal already-asked tasks (status 'asked' OR 'reminded'). A
+    reminder is due for an 'asked' task (reminder #1) or a 'reminded' task still under the 2-reminder
+    cap (reminder #2), whose last outreach is older than the 45–60 min window. Reminders take priority
+    (finish what we started), then a fresh 'pending' ask. Exactly one task is returned, so the sender
+    never bursts. Terminal `no_response` tasks are excluded upstream and closed by the expiry sweep."""
+    cutoff = now - timedelta(minutes=reminder_after_minutes)
+    due_reminders = [t for t in awaiting_tasks if reminder_due_for(t, cutoff)]
     if due_reminders:
-        due_reminders.sort(key=lambda t: t.asked_at)
+        due_reminders.sort(key=lambda t: _reminder_ref_time(t) or now)
         return ("remind", due_reminders[0])
     if pending_tasks:
         pending_tasks.sort(key=lambda t: t.created_at or now)
         return ("ask", pending_tasks[0])
     return None
+
+
+async def expire_exhausted_reminders(db, now: datetime,
+                                     reminder_after_minutes: int = hs.REMINDER_AFTER_MINUTES) -> int:
+    """V33 PART 4 — after the 2nd reminder's window elapses with STILL no completion, close the task:
+    mark it terminal `no_response` and set ITS (contact, cold) thread `done` so neither the reminder
+    path nor the 10-day scheduler ever asks/reminds that pairing again (never a 3rd reminder/re-ask).
+    Only that pairing closes — the contact stays eligible for other cold accounts. A LATER completion
+    is still honored (handle_helper_incoming accepts a no_response task). Not a send → safe every tick.
+    Returns how many tasks were expired."""
+    cutoff = now - timedelta(minutes=reminder_after_minutes)
+    tasks = (await db.execute(
+        select(WarmupHelperTask).where(
+            WarmupHelperTask.status == hs.STATUS_REMINDED,
+            WarmupHelperTask.reminder_count >= hs.MAX_REMINDERS,
+            WarmupHelperTask.reminded_at.isnot(None),
+            WarmupHelperTask.reminded_at <= cutoff,
+        )
+    )).scalars().all()
+    from app.services import warmup_helper_thread as wt
+    expired = 0
+    for t in tasks:
+        t.status = hs.STATUS_NO_RESPONSE
+        thread = await wt.get_thread(db, t.helper_id, t.cold_instance_id)
+        if thread is not None and thread.status == wt.STATUS_ACTIVE:
+            thread.status = wt.STATUS_DONE   # stop the 10-day scheduler from re-stepping this pairing
+        expired += 1
+    return expired
 
 
 # ── DB helpers ───────────────────────────────────────────────────────────────
@@ -257,6 +304,10 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
     if not conf.is_enabled:
         return {"enabled": False, "acted": 0}
 
+    # V33 PART 4 — close out any task whose 2 reminders elapsed with no completion (→ terminal
+    # `no_response`). A pure state transition (no send), so it runs regardless of the send gates below.
+    expired = await expire_exhausted_reminders(db, now)
+
     enr_map = await _enrollment_states(db)
     cold_ids = await cold_instances_being_warmed(db, enr_map)
     active_helpers = [h for h in await hs.list_helpers(db) if h.is_active]
@@ -284,17 +335,18 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
     active_cold = set(cold_ids)
     active_helper_ids = {str(h.id) for h in active_helpers}
     helper_by_id = {str(h.id): h for h in active_helpers}
+    # V33 PART 4 — reminded tasks (awaiting their 2nd reminder) are candidates too, so include them.
     all_tasks = (await db.execute(
         select(WarmupHelperTask).where(
-            WarmupHelperTask.status.in_((hs.STATUS_PENDING, hs.STATUS_ASKED))
+            WarmupHelperTask.status.in_((hs.STATUS_PENDING, hs.STATUS_ASKED, hs.STATUS_REMINDED))
         )
     )).scalars().all()
     tasks = [t for t in all_tasks
              if t.cold_instance_id in active_cold and str(t.helper_id) in active_helper_ids]
     pending = [t for t in tasks if t.status == hs.STATUS_PENDING]
-    asked = [t for t in tasks if t.status == hs.STATUS_ASKED]
+    awaiting = [t for t in tasks if t.status in (hs.STATUS_ASKED, hs.STATUS_REMINDED)]
 
-    action = select_action(pending, asked, now)
+    action = select_action(pending, awaiting, now)
     if action is None:
         await db.commit()
         return {"enabled": True, "acted": 0, "created": created, "nothing_due": True}
@@ -348,9 +400,11 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
     if kind == "remind":
         task.status = hs.STATUS_REMINDED
         task.reminded_at = now
+        task.reminder_count = int(task.reminder_count or 0) + 1   # V33 PART 4 — cap enforced at 2
     else:
         task.status = hs.STATUS_ASKED
         task.asked_at = now
+        task.reminder_count = 0                                    # fresh ask-step → fresh 2-reminder budget
     task.attempts = int(task.attempts or 0) + 1
 
     # V29 PART 9 — record the ask/reminder in the dedicated «همکاری تیمی» log.
@@ -402,11 +456,13 @@ async def handle_helper_incoming(db, cold_instance_id: str, sender_phone: str,
     if helper is None:
         return None
 
+    # V33 PART 4 — a LATE completion after the task went terminal `no_response` is still honored
+    # (better to thank a late responder than miss it), so no_response is completion-eligible too.
     task = (await db.execute(
         select(WarmupHelperTask).where(
             WarmupHelperTask.helper_id == helper.id,
             WarmupHelperTask.cold_instance_id == cold_instance_id,
-            WarmupHelperTask.status.in_((hs.STATUS_ASKED, hs.STATUS_REMINDED)),
+            WarmupHelperTask.status.in_((hs.STATUS_ASKED, hs.STATUS_REMINDED, hs.STATUS_NO_RESPONSE)),
         ).limit(1)
     )).scalar_one_or_none()
     if task is None:
