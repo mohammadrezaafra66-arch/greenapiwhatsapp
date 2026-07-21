@@ -92,6 +92,23 @@ async def recent_ask_bodies(db, sender_instance_id: str | None, limit: int = 8) 
             for r in rows if getattr(r, "message_sent", None)]
 
 
+async def recent_reminder_bodies(db, sender_instance_id: str | None, limit: int = 8) -> list[str]:
+    """V38 — the first lines (bodies) of a sender's most-recent REMINDER messages, fed as `recent`
+    into the reminder generator so consecutive reminders are never near-duplicates. Best-effort:
+    returns [] when the sender id is missing or nothing is logged yet."""
+    if not sender_instance_id:
+        return []
+    rows = (await db.execute(
+        select(WarmupHelperLog).where(
+            WarmupHelperLog.sender_instance_id == sender_instance_id,
+            WarmupHelperLog.event_type == EVENT_REMINDER,
+            WarmupHelperLog.message_sent.isnot(None),
+        ).order_by(WarmupHelperLog.created_at.desc()).limit(min(limit, 50))
+    )).scalars().all()
+    return [str(getattr(r, "message_sent", "")).split("\n", 1)[0]
+            for r in rows if getattr(r, "message_sent", None)]
+
+
 def render_row(r) -> dict:
     """PURE-ish — one log row as a display dict with the Shamsi date/time."""
     return {

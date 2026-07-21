@@ -325,6 +325,34 @@ async def _unified_ask_text(db, helper, task_sender, cold_acc, cold_instance_id,
         return hs.build_ask_message(helper.name, hs.wa_me_link(phone_digits))
 
 
+async def _reminder_text(db, helper, task_sender, cold_acc, cold_instance_id, link,
+                         reminder_ai_fn=None) -> str:
+    """V38 — generate a reminder-TONED body through the dedicated AI reminder generator (was the
+    static `build_reminder_message`). The body explicitly signals it is a reminder and carries a
+    reminder/urgency emoji, is anti-repeat-seeded from this sender's recent reminder bodies in the
+    SHARED warmup_helper_log, and passes the UNCHANGED identifier-leak filter. The wa.me link is
+    appended AFTER body validation, exactly as the static builder did. Falls back to the static
+    reminder builder ONLY if generation is impossible, so the tick never breaks.
+
+    NOTE: this uses its OWN reminder-shaped ai_fn (signature `(*, contact_name)`) — deliberately NOT
+    the tick's ask-shaped `ai_fn` (`(*, name, topic, …)`); `reminder_ai_fn` is an injection seam for
+    tests only."""
+    from app.services.warmup_reminder import generate_reminder, build_reminder_ai_fn
+    from app.services import warmup_helper_log as tclog
+    try:
+        recent = await tclog.recent_reminder_bodies(db, task_sender.instance_id)
+        forbidden = tuple(v for v in (cold_instance_id, getattr(cold_acc, "name", None),
+                                      helper.sender_instance_id, getattr(task_sender, "name", None)) if v)
+        body, _src = await generate_reminder(
+            contact_name=helper.name, recent=recent,
+            ai_fn=reminder_ai_fn if reminder_ai_fn is not None else build_reminder_ai_fn(),
+            forbidden=forbidden)
+        return f"{body}\nلینک: {link}" if link else body
+    except Exception as e:
+        logger.info("V38 reminder generation fell back to static builder: %s", e)
+        return hs.build_reminder_message(helper.name, link)
+
+
 async def run_helper_tick(db, now: datetime | None = None, *, client_factory=None,
                           rng: random.Random | None = None, cfg=DEFAULT_WARMUP_CONFIG,
                           ai_fn=None) -> dict:
@@ -453,7 +481,10 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
     link = hs.wa_me_link(phone_digits)
 
     if kind == "remind":
-        text = hs.build_reminder_message(helper.name, link)
+        # V38 — route the REMINDER through the dedicated AI reminder generator (was static line):
+        # reminder-signaling tone + urgency emoji, anti-repeat + leak-safe, static fallback.
+        text = await _reminder_text(db, helper, task_sender, _cold_acc, task.cold_instance_id,
+                                    link)
     else:
         # V31 — route the ASK through the unified AI thread-aware generator (was static template).
         text = await _unified_ask_text(db, helper, task_sender, _cold_acc, task.cold_instance_id,
