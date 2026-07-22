@@ -89,6 +89,65 @@ def state_reset_reason(green_state: str) -> str | None:
     return None
 
 
+# ── V41 PART 2 — restart-on-disruption guard for recovery-mode enrollments ────
+# Green API's recovery guidance: if ANYTHING disrupts a re-warm cycle (a reinstall, moving the
+# account to another phone, another disconnect, a card/block), RESTART the whole sequence from
+# Day 1 — never continue from where it left off. These are the live signals that mean the
+# linked-device session churned or the number was flagged again.
+RECOVERY_DISRUPTION_STATES = {"yellowcard", "blocked", "notauthorized", "notauthorised", "logout"}
+
+
+def recovery_disruption_reason(green_state: str) -> str | None:
+    """The disruption reason for a recovery cycle, or None if `green_state` is not disruptive.
+    Case-insensitive; returns the ORIGINAL-cased signal (yellowCard/blocked/notAuthorized/logout)."""
+    s = (green_state or "").strip()
+    if s.lower() in RECOVERY_DISRUPTION_STATES:
+        return s
+    return None
+
+
+async def recovery_disruption_reset(db, enrollment, reason: str,
+                                    now: datetime | None = None) -> dict:
+    """Reset a recovery-mode enrollment back to Day 1 (day_index 0 / COOLDOWN) after a disruption,
+    incrementing its reset counter and recording the reason + timestamp (durably, and as a
+    dashboard-visible alert). General: works for ANY recovery_mode enrollment, not one hard-coded
+    instance, so the same guard holds if the recovery flow is ever needed for another number."""
+    now = now or datetime.utcnow()
+    prev_state = enrollment.state
+    prev_count = int(getattr(enrollment, "recovery_reset_count", 0) or 0)
+    enrollment.state = WarmupState.COOLDOWN.value        # hard reset — day-1 restart (bypass the ladder)
+    enrollment.day_index = 0
+    enrollment.started_at = now
+    enrollment.authorized_at = now                       # re-anchor the day counter to now
+    enrollment.sent_today = 0
+    enrollment.received_today = 0
+    enrollment.reply_ratio = 0.0
+    enrollment.rest_until = None
+    enrollment.next_action_at = now + timedelta(hours=24)
+    enrollment.recovery_reset_count = prev_count + 1
+    enrollment.recovery_last_reset_at = now
+    enrollment.recovery_last_reset_reason = reason
+    db.add(WarmupEventLog(
+        enrollment_id=enrollment.id, event_type="recovery_reset",
+        payload_json=json.dumps({"from": prev_state, "reason": reason,
+                                 "reset_count": enrollment.recovery_reset_count,
+                                 "at": now.isoformat()}, ensure_ascii=False)))
+    await _alert(db, "روند بازیابی (ری‌وارم) این شماره مختل شد؛ طبق دستور گرین‌ای‌پی‌آی گرم‌سازی از روز اول بازنشانی شد.",
+                 scope="number", instance_id=enrollment.instance_id, enrollment_id=enrollment.id)
+    logger.warning("[warmup] recovery reset for %s (reason=%s, count=%d)",
+                   enrollment.instance_id, reason, enrollment.recovery_reset_count)
+    return {"state": enrollment.state, "day_index": 0, "reason": reason,
+            "reset_count": enrollment.recovery_reset_count}
+
+
+def _mid_recovery_cycle(enrollment, now: datetime | None = None) -> bool:
+    """True once a recovery enrollment has moved PAST the initial no-link/authorize cooldown
+    (day_index >= 2). Before that, a genuine 'authorized' is the EXPECTED first authorization
+    (Green API Day 2), not a disruption; after it, a fresh relink means the session churned."""
+    from app.services.warmup_scheduler import day_index
+    return day_index(enrollment, now) >= 2
+
+
 # ── alerts + event log ───────────────────────────────────────────────────────
 async def _alert(db, message_fa: str, *, scope: str, instance_id: str | None = None,
                  enrollment_id=None):
@@ -328,10 +387,17 @@ async def reset_breaker(db, now: datetime | None = None) -> dict:
 
 # ── entry point used by the webhook layer ────────────────────────────────────
 async def handle_warmup_state_signal(db, instance_id: str, green_state: str,
-                                     now: datetime | None = None) -> dict | None:
+                                     now: datetime | None = None, *,
+                                     genuine_reconnect: bool = False) -> dict | None:
     """Route a Green API state webhook to the right warm-up kill-switch action. No-op (None)
     when the instance isn't enrolled. Records an incident + checks the breaker for
-    yellowCard/block signals."""
+    yellowCard/block signals.
+
+    V41 PART 2 — for a recovery_mode enrollment, ANY disruption (yellowCard/block/notAuthorized/
+    logout, or a genuine mid-cycle reconnect/relink) restarts the whole sequence from Day 1
+    instead of the general per-number handling, per Green API's "start over if anything changes"
+    rule. `genuine_reconnect` is set by the webhook only on a real non-active→active transition,
+    so repeated 'authorized' heartbeats never falsely reset a healthy recovery cycle."""
     now = now or datetime.utcnow()
     enr = (await db.execute(
         select(WarmupEnrollment).where(WarmupEnrollment.instance_id == instance_id)
@@ -339,6 +405,26 @@ async def handle_warmup_state_signal(db, instance_id: str, green_state: str,
     if not enr:
         return None
     state = (green_state or "").strip()
+
+    # V41 PART 2 — recovery-mode restart-on-disruption guard (takes precedence over the general
+    # per-number handling below). Still records the incident + checks the mesh-wide chain-ban
+    # breaker for real card/block signals, so mesh-level protection is never weakened.
+    if bool(getattr(enr, "recovery_mode", False)):
+        reason = recovery_disruption_reason(state)
+        if reason is None and state == "authorized" and genuine_reconnect and _mid_recovery_cycle(enr, now):
+            reason = "reconnect"
+        if reason is not None:
+            res = await recovery_disruption_reset(db, enr, reason, now)
+            breaker = {"tripped": False}
+            if reason.lower() in RECOVERY_DISRUPTION_STATES:
+                await record_incident(db, instance_id, reason, now)
+                breaker = await check_and_maybe_trip_breaker(db, now)
+            return {"action": "recovery_reset", **res, "breaker": breaker}
+        # A non-disruptive signal (e.g. the expected first 'authorized' during the initial
+        # cooldown, or a heartbeat) → no-op for a recovery enrollment; never run the general
+        # on_reauthorized/BLOCKED_RESET path, which would double-handle the restart.
+        return None
+
     if state == "yellowCard":
         res = await on_yellow_card(db, enr, now)
         await record_incident(db, instance_id, "yellowCard", now)

@@ -57,6 +57,11 @@ def _build_allowed() -> dict[WarmupState, set[WarmupState]]:
     # Forward along the flow (each stage → the next one).
     for a, b in zip(FLOW_ORDER, FLOW_ORDER[1:]):
         allowed[a].add(b)
+    # V41 — recovery mode's ladder skips the long MATURING band and graduates straight from
+    # RAMPING once the 7-day 12→100 ramp completes (day_index 12). Allow that direct edge. The
+    # general (non-recovery) timeline never targets GRADUATED while still RAMPING (it passes
+    # through MATURING on days 11–24 first), so this is additive and leaves it unaffected.
+    allowed[WarmupState.RAMPING].add(WarmupState.GRADUATED)
     # Any interruptible live state → any side state.
     for s in _INTERRUPTIBLE:
         allowed[s] |= _SIDE

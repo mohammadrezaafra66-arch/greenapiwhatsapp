@@ -316,6 +316,10 @@ async def handle_state_change(instance_id: str, payload: dict):
     # pre-send gate within a webhook round-trip rather than sending more messages.
     from app.services import send_gate
     send_gate.update_live_state(instance_id, state)
+    # V41 PART 2 — whether this 'authorized' is a GENUINE reconnect/relink (a non-active → active
+    # transition), not a heartbeat. Passed to the warm-up kill-switch so a recovery-mode cycle
+    # restarts from Day 1 on a real relink even when no notAuthorized preceded it.
+    genuine_reconnect = False
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Account).where(Account.instance_id == instance_id))
         account = result.scalar_one_or_none()
@@ -334,6 +338,7 @@ async def handle_state_change(instance_id: str, payload: dict):
                 # transition (a rescan/relink), so the 24h post-reconnect TC rest anchors here.
                 # Repeated 'authorized' pushes while already active must not keep resetting it.
                 if account.status != AccountStatus.active:
+                    genuine_reconnect = True
                     _ts = datetime.utcnow()
                     account.reconnected_at = _ts
                     account.connected_at = _ts   # V39 PART 1 — universal connect-cooldown anchor
@@ -351,7 +356,8 @@ async def handle_state_change(instance_id: str, payload: dict):
     try:
         from app.services.warmup_killswitch import handle_warmup_state_signal
         async with AsyncSessionLocal() as wdb:
-            if await handle_warmup_state_signal(wdb, instance_id, state) is not None:
+            if await handle_warmup_state_signal(
+                    wdb, instance_id, state, genuine_reconnect=genuine_reconnect) is not None:
                 await wdb.commit()
     except Exception as e:
         logger.warning("warmup state signal failed (non-fatal): %s", e)

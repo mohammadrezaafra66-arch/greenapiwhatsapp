@@ -45,6 +45,12 @@ class WarmupEnrollment(Base):
     # sequence (a re-warm of a churned/carded number) instead of the general onboarding
     # timeline. A scoped, per-number exception; the general schedule is unchanged when False.
     recovery_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # V41 PART 2 — restart-on-disruption tracking. Green API's guidance: if ANYTHING disrupts a
+    # recovery cycle (a fresh disconnect/relink, a yellowCard/block/notAuthorized), restart the
+    # WHOLE sequence from Day 1. These record how many times that guard has fired and why/when.
+    recovery_reset_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    recovery_last_reset_at: Mapped[datetime | None] = mapped_column(DateTime)
+    recovery_last_reset_reason: Mapped[str | None] = mapped_column(String(40))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

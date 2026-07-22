@@ -1121,6 +1121,10 @@ async def lifespan(app: FastAPI):
         # instead of the general onboarding schedule; the general schedule is unchanged when false.
         ddl_v41 = [
             "ALTER TABLE warmup_enrollment ADD COLUMN IF NOT EXISTS recovery_mode boolean NOT NULL DEFAULT false",
+            # V41 PART 2 — restart-on-disruption tracking (reset count + last reason/time).
+            "ALTER TABLE warmup_enrollment ADD COLUMN IF NOT EXISTS recovery_reset_count integer NOT NULL DEFAULT 0",
+            "ALTER TABLE warmup_enrollment ADD COLUMN IF NOT EXISTS recovery_last_reset_at timestamp",
+            "ALTER TABLE warmup_enrollment ADD COLUMN IF NOT EXISTS recovery_last_reset_reason varchar(40)",
         ]
         for stmt in ddl_v41:
             try:
