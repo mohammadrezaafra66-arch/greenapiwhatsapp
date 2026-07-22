@@ -21,9 +21,25 @@ logger = logging.getLogger("afrakala.story_media")
 # by the media-serving endpoint. Overridable for tests / alt deployments.
 STORY_MEDIA_DIR = os.environ.get("STORY_MEDIA_DIR", "/app/.media/statuses")
 
-# Green API status "type" values (and typeMessage suffixes) we treat as media (downloadable image).
-_MEDIA_TYPES = {"image", "imagestatus", "imagestatusmessage", "picture", "photo"}
-_TEXT_TYPES = {"text", "textstatus", "textstatusmessage"}
+# Green API's `type` field on getIncomingStatuses is a DIRECTION indicator — every real incoming
+# status arrives as "type": "incoming" — and is NOT the media type. Reading it as one classified all
+# 565 production stories as "incoming", which made `is_media` permanently False: no story image was
+# ever downloaded and the image/vision path never ran. `typeMessage` is the real media-type field.
+_DIRECTION_VALUES = {"incoming", "outgoing"}
+
+# Real `typeMessage` values on getIncomingStatuses: media statuses are imageMessage / videoMessage /
+# audioMessage / documentMessage, text statuses are extendedTextMessage / textMessage. The older
+# *Status / *StatusMessage spellings are kept as tolerated aliases so a Green API version that emits
+# them still classifies correctly.
+_IMAGE_TYPES = {"imagemessage", "image", "imagestatus", "imagestatusmessage", "picture", "photo"}
+_TEXT_TYPES = {"extendedtextmessage", "textmessage", "text", "textstatus", "textstatusmessage"}
+# Non-image media: recorded with their true type so the Stories tab can label them, but deliberately
+# NOT downloaded (large files) and never handed to the image-only vision analyzer.
+_OTHER_MEDIA_TYPES = {
+    "videomessage": "video", "video": "video", "videostatus": "video",
+    "audiomessage": "audio", "audio": "audio", "voice": "audio", "voicestatus": "audio",
+    "documentmessage": "document", "document": "document",
+}
 
 
 def _first(d: dict, *keys):
@@ -53,17 +69,44 @@ def _status_timestamp(raw) -> datetime | None:
         return None
 
 
+def _classify_status(s: dict, media_url) -> str:
+    """image | video | audio | document | text.
+
+    Derived from `typeMessage` (Green API's real media-type field), NEVER from `type` (a direction).
+    A direction value is neutralised rather than trusted, so "incoming" can never again be stored as
+    if it were a media type. When the type is absent or unrecognised, the only reliable remaining
+    signal is whether the status carries a downloadable media URL.
+    """
+    raw = _first(s, "typeMessage", "statusType", "type")
+    t = (raw or "").strip().lower()
+    if t in _DIRECTION_VALUES:
+        t = ""                       # a direction says nothing about the media type
+    if t in _IMAGE_TYPES:
+        return "image"
+    if t in _OTHER_MEDIA_TYPES:
+        return _OTHER_MEDIA_TYPES[t]
+    if t in _TEXT_TYPES:
+        return "text"
+    return "image" if media_url else "text"
+
+
+def _status_text(s: dict):
+    """The text of a text status. Green API sends it flat as `textMessage` AND nested under
+    `extendedTextMessage.text`; read both so a payload carrying only the nested form is not
+    persisted as an empty status."""
+    flat = _first(s, "textStatus", "text", "textMessage", "message")
+    if flat:
+        return flat
+    nested = s.get("extendedTextMessage")
+    if isinstance(nested, dict):
+        return _first(nested, "text", "textMessage")
+    return None
+
+
 def normalize_status(s: dict) -> dict:
     """Collapse a raw Green API status dict into V40's stable field set."""
-    raw_type = (_first(s, "type", "typeMessage", "statusType") or "").strip()
-    tlow = raw_type.lower()
     media_url = _first(s, "urlFile", "downloadUrl", "fileUrl", "url")
-    if tlow in _MEDIA_TYPES or (not tlow and media_url):
-        status_type = "image"
-    elif tlow in _TEXT_TYPES:
-        status_type = "text"
-    else:
-        status_type = tlow or ("image" if media_url else "text")
+    status_type = _classify_status(s, media_url)
     chat_id = _first(s, "chatId", "senderId", "sender")
     phone = None
     if chat_id:
@@ -74,7 +117,7 @@ def normalize_status(s: dict) -> dict:
         "sender_phone": phone,
         "sender_name": _first(s, "senderName", "senderContactName"),
         "status_type": status_type,
-        "text_content": _first(s, "textStatus", "text", "textMessage", "message"),
+        "text_content": _status_text(s),
         "caption": _first(s, "caption"),
         "original_media_url": media_url,
         "status_timestamp": _status_timestamp(_first(s, "timestamp", "time")),

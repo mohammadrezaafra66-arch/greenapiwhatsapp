@@ -50,6 +50,11 @@ class _Downloader:
         return self.size
 
 
+# NOTE: these two payloads are SYNTHETIC — `"type": "image"` and `"typeMessage":
+# "textStatusMessage"` are values Green API never actually sends. They are kept because they still
+# exercise the tolerated-alias branches of the classifier, but they are why the "incoming" bug went
+# unnoticed: nothing here ever fed the real field values through. The REAL getIncomingStatuses
+# payload shape is round-tripped in test_v40_media_type_fix.py — put new shape assertions there.
 IMAGE_STATUS = {
     "idMessage": "IMG1", "chatId": "989121112233@c.us", "senderName": "فروشگاه پارس",
     "type": "image", "urlFile": "https://api.green-api.example/media/IMG1.jpg",

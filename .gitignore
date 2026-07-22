@@ -22,3 +22,8 @@ celerybeat-schedule
 
 # Database backups produced by پشتیبان-گیری.bat
 backups/
+
+# V40 — story media persisted locally at fetch time (backend/.media/statuses).
+# Real WhatsApp story images/videos: hundreds of MB, regenerable from Green API while the
+# source URLs are alive. Never belongs in git.
+backend/.media/
