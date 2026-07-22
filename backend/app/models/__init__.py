@@ -53,9 +53,11 @@ from app.models.group_monitor import (
 from app.models.telegram import TelegramChatIdCache
 from app.models.account_onboarding import AccountOnboarding
 from app.models.received_status import ReceivedStatus
+from app.models.story_analysis import StoryProductAnalysis
 
 __all__ = [
     "ReceivedStatus",
+    "StoryProductAnalysis",
     "AccountOnboarding",
     "InstanceLiveState",
     "WhatsappNumberCheck",
