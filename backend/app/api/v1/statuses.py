@@ -17,13 +17,39 @@ logger = logging.getLogger("afrakala.statuses")
 
 async def _persist_incoming(db: AsyncSession, instance_id: str, statuses: list[dict]) -> None:
     """V40 PART 1 — persist fetched incoming stories + download their media locally (best-effort).
-    Never lets a persistence error break the live fetch the UI depends on."""
+    V40 PART 4 — then annotate each returned status with its persisted `row_id` (and `analyzed`
+    flag) so the received-stories list can trigger per-story analysis. Never lets a persistence
+    error break the live fetch the UI depends on."""
     try:
-        from app.services.story_media import persist_incoming_statuses
+        from app.services.story_media import persist_incoming_statuses, normalize_status
         await persist_incoming_statuses(db, instance_id, statuses)
         await db.commit()
+        await _annotate_row_ids(db, instance_id, statuses, normalize_status)
     except Exception as e:
         logger.warning("persist incoming statuses failed for %s: %s", instance_id, e)
+
+
+async def _annotate_row_ids(db, instance_id, statuses, normalize_status) -> None:
+    """Attach each live status's persisted row_id + analyzed flag (for the per-story analyze button)."""
+    from app.models.received_status import ReceivedStatus
+    from app.models.story_analysis import StoryProductAnalysis
+    ids = [m for m in (normalize_status(s).get("status_message_id") for s in (statuses or [])) if m]
+    if not ids:
+        return
+    rows = (await db.execute(
+        select(ReceivedStatus.id, ReceivedStatus.status_message_id)
+        .where(ReceivedStatus.instance_id == instance_id, ReceivedStatus.status_message_id.in_(ids))
+    )).all()
+    by_msg = {mid: rid for rid, mid in rows}
+    analyzed = set((await db.execute(
+        select(StoryProductAnalysis.story_id).where(StoryProductAnalysis.story_id.in_(by_msg.values()))
+    )).scalars().all())
+    for s in statuses:
+        mid = normalize_status(s).get("status_message_id")
+        rid = by_msg.get(mid)
+        if rid is not None:
+            s["row_id"] = str(rid)
+            s["analyzed"] = rid in analyzed
 
 
 class TextStatusBody(BaseModel):
@@ -280,6 +306,48 @@ async def analyze_story(status_row_id: str, db: AsyncSession = Depends(get_db)):
     (analysis, from_cache), = await _analyze_story_rows(db, [story])
     await db.commit()
     return _analysis_payload(analysis, from_cache)
+
+
+def _analysis_row_payload(analysis, story) -> dict:
+    """V40 PART 4 — one row for the «تحلیل محصولات استوری‌ها» tab. The thumbnail points at the
+    LOCAL persisted image endpoint (never the expiring WhatsApp URL); None when no local media."""
+    from app.utils.shamsi import to_shamsi
+    has_local = bool(getattr(story, "local_media_path", None)) and bool(getattr(story, "media_downloaded", False))
+    return {
+        "id": str(analysis.id),
+        "story_id": str(story.id),
+        "contact_name": story.sender_name or story.sender_phone or "—",
+        "phone": story.sender_phone,
+        "status_text": story.text_content or story.caption or "",
+        "thumbnail_url": f"/api/v1/statuses/media/{story.id}" if has_local else None,
+        "analysis_type": analysis.analysis_type,
+        "detected_product": analysis.detected_product_name,
+        "in_assistant": bool(analysis.in_assistant),
+        "assistant_status": "در دستیار داریم" if analysis.in_assistant else "خارج از دستیار",
+        "ai_confidence": analysis.ai_confidence,
+        "analyzed_shamsi": to_shamsi(analysis.analyzed_at),
+    }
+
+
+@router.get("/analysis")
+async def story_analysis_list(account_id: str | None = None, limit: int = 200,
+                              db: AsyncSession = Depends(get_db)):
+    """V40 PART 4 — analyzed-story rows for the «تحلیل محصولات استوری‌ها» tab (joined story + result)."""
+    from app.models.received_status import ReceivedStatus
+    from app.models.story_analysis import StoryProductAnalysis
+    q = (
+        select(StoryProductAnalysis, ReceivedStatus)
+        .join(ReceivedStatus, StoryProductAnalysis.story_id == ReceivedStatus.id)
+        .order_by(StoryProductAnalysis.analyzed_at.desc())
+        .limit(max(1, min(limit, 1000)))
+    )
+    if account_id:
+        acc = await db.get(Account, uuid.UUID(account_id))
+        if acc:
+            q = q.where(ReceivedStatus.instance_id == acc.instance_id)
+    rows = (await db.execute(q)).all()
+    return {"count": len(rows),
+            "items": [_analysis_row_payload(a, s) for a, s in rows]}
 
 
 @router.post("/analyze-today")

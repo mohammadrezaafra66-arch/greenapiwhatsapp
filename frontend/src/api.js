@@ -207,7 +207,7 @@ export const Statuses = {
     http.post("/statuses/analyze-today", null, { params: accountId ? { account_id: accountId } : {} }).then((r) => r.data),
   analysisList: (accountId) =>
     http.get("/statuses/analysis", { params: accountId ? { account_id: accountId } : {} }).then((r) => r.data),
-  mediaUrl: (rowId) => `/api/v1/statuses/media/${rowId}`,
+  mediaUrl: (storyId) => `${http.defaults.baseURL}/statuses/media/${storyId}`,
 };
 
 // ── Templates ──────────────────────────────────────────

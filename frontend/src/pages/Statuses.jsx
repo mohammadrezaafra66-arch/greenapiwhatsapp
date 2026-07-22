@@ -34,7 +34,7 @@ function statusContent(s) {
   return s.textStatus || s.text || s.caption || s.message || s.urlFile || s.downloadUrl || "";
 }
 
-function IncomingView({ data, loading, onRefresh, onAnalyzeToday, analyzingToday }) {
+function IncomingView({ data, loading, onRefresh, onAnalyzeToday, analyzingToday, onAnalyzeOne }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -83,9 +83,96 @@ function IncomingView({ data, loading, onRefresh, onAnalyzeToday, analyzingToday
                   ) : (
                     <p className="text-sm text-slate-200 whitespace-pre-line break-words">{content}</p>
                   ))}
+                <div className="flex items-center gap-2 pt-1">
+                  <button className="btn-secondary text-xs" onClick={() => onAnalyzeOne(s.row_id)}>
+                    🤖 تحلیل با هوش مصنوعی
+                  </button>
+                  {s.analyzed && <span className="text-emerald-400 text-xs">✓ تحلیل‌شده</span>}
+                </div>
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// V40 PART 4 — «تحلیل محصولات استوری‌ها»: analyzed stories with product, in/out-of-assistant badge,
+// AI confidence, and a thumbnail of the LOCALLY-persisted image (never an expiring WhatsApp link).
+function AnalysisView({ data, loading, onRefresh, onAnalyzeToday, analyzingToday }) {
+  const items = data?.items || [];
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-sm text-slate-400">
+          تحلیل محصولات استوری‌ها{data && data.count != null ? ` · ${Number(data.count).toLocaleString("fa-IR")} مورد` : ""}
+        </p>
+        <div className="flex items-center gap-2">
+          <button className="btn-primary text-xs" disabled={analyzingToday} onClick={onAnalyzeToday}>
+            {analyzingToday ? "در حال تحلیل..." : "🧠 تحلیل همه استوری‌های امروز"}
+          </button>
+          <button className="btn-secondary text-xs" disabled={loading} onClick={onRefresh}>
+            {loading ? "در حال بارگذاری..." : "🔄 تازه‌سازی"}
+          </button>
+        </div>
+      </div>
+
+      {data?.error && (
+        <div className="card bg-amber-500/10 border-amber-500/30 text-amber-200 text-sm">⚠️ {data.error}</div>
+      )}
+      {!loading && items.length === 0 && !data?.error && (
+        <p className="text-slate-500 text-sm">هنوز استوری تحلیل‌شده‌ای وجود ندارد. از تب «استوری‌های دریافتی» تحلیل را اجرا کنید.</p>
+      )}
+
+      {items.length > 0 && (
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm text-right">
+            <thead>
+              <tr className="text-slate-400 border-b border-slate-700">
+                <th className="p-2">همکار/مخاطب</th>
+                <th className="p-2">شماره/اکانت</th>
+                <th className="p-2">متن استاتوس</th>
+                <th className="p-2">عکس/لینک استاتوس</th>
+                <th className="p-2">محصول تشخیص‌داده‌شده</th>
+                <th className="p-2">برچسب</th>
+                <th className="p-2">میزان اطمینان</th>
+                <th className="p-2">تاریخ و ساعت</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((r) => (
+                <tr key={r.id} className="border-b border-slate-800 align-top">
+                  <td className="p-2 font-bold">{r.contact_name}</td>
+                  <td className="p-2 text-slate-300">{r.phone || "—"}</td>
+                  <td className="p-2 text-slate-300 max-w-xs truncate">{r.status_text || "—"}</td>
+                  <td className="p-2">
+                    {r.thumbnail_url ? (
+                      <div className="space-y-1">
+                        <img src={Api.mediaUrl(r.story_id)} alt="story"
+                          className="w-16 h-16 object-cover rounded border border-slate-700" />
+                        {r.detected_product && (
+                          <p className="text-[10px] text-slate-400">تشخیص AI: {r.detected_product}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-slate-600 text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="p-2">{r.detected_product || <span className="text-slate-600">—</span>}</td>
+                  <td className="p-2">
+                    <span className={`badge text-xs ${r.in_assistant ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border-amber-500/40"}`}>
+                      {r.assistant_status}
+                    </span>
+                  </td>
+                  <td className="p-2 text-slate-300">
+                    {r.ai_confidence != null ? `${Math.round(r.ai_confidence * 100)}%` : "—"}
+                  </td>
+                  <td className="p-2 text-slate-400 text-xs whitespace-nowrap">{r.analyzed_shamsi || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
@@ -245,6 +332,10 @@ export default function Statuses() {
   const [incoming, setIncoming] = React.useState(null);
   const [incLoading, setIncLoading] = React.useState(false);
 
+  // V40 PART 4 — analyzed-story product table.
+  const [analysis, setAnalysis] = React.useState(null);
+  const [anaLoading, setAnaLoading] = React.useState(false);
+
   // Posted-status history + upcoming roadmap (per selected account).
   const [histData, setHistData] = React.useState(null);
   const [histLoading, setHistLoading] = React.useState(false);
@@ -264,6 +355,19 @@ export default function Statuses() {
     }
   };
 
+  const loadAnalysis = async () => {
+    setAnaLoading(true);
+    try {
+      setAnalysis(await Api.analysisList(selectedAccount));
+    } catch (e) {
+      const msg = e?.response?.data?.detail || e.message;
+      toast.error(msg);
+      setAnalysis({ items: [], error: msg });
+    } finally {
+      setAnaLoading(false);
+    }
+  };
+
   // V40 PART 3.4 — analyze every not-yet-analyzed story stored today (text + image, cached once).
   const [analyzingToday, setAnalyzingToday] = React.useState(false);
   const analyzeToday = async () => {
@@ -271,10 +375,24 @@ export default function Statuses() {
     try {
       const res = await Api.analyzeToday(selectedAccount);
       toast.success(res.message || "تحلیل انجام شد");
+      if (mainTab === "analysis") loadAnalysis();
     } catch (e) {
       toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setAnalyzingToday(false);
+    }
+  };
+
+  // V40 PART 3.3 — analyze ONE story from the received list (row_id attached by the backend).
+  const analyzeOne = async (rowId) => {
+    if (!rowId) return toast.info("این استوری هنوز ذخیره نشده — یک‌بار «تازه‌سازی» بزنید.");
+    try {
+      const res = await Api.analyzeStory(rowId);
+      toast.success(res.detected_product
+        ? `تشخیص AI: ${res.detected_product} (${res.assistant_status})`
+        : "محصولی در این استوری تشخیص داده نشد");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
     }
   };
 
@@ -320,10 +438,11 @@ export default function Statuses() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainTab]);
 
-  // (Re)load history/roadmap when their tab becomes active or the account changes.
+  // (Re)load history/roadmap/analysis when their tab becomes active or the account changes.
   React.useEffect(() => {
     if (mainTab === "history") loadHistory(selectedAccount);
     if (mainTab === "roadmap") loadScheduled(selectedAccount);
+    if (mainTab === "analysis") loadAnalysis();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainTab, selectedAccount]);
 
@@ -364,17 +483,18 @@ export default function Statuses() {
   };
 
   return (
-    <div className="space-y-4 max-w-xl">
+    <div className={`space-y-4 ${mainTab === "analysis" ? "max-w-6xl" : "max-w-xl"}`}>
       <h2 className="text-2xl font-bold">استوری واتس‌اپ</h2>
 
       {/* Main tabs */}
       <div className="flex gap-2 flex-wrap items-center">
         <button className={mainTab === "mine" ? "btn-primary" : "btn-secondary"} onClick={() => setMainTab("mine")}>استوری‌های من</button>
         <button className={mainTab === "incoming" ? "btn-primary" : "btn-secondary"} onClick={() => setMainTab("incoming")}>استوری‌های دریافتی</button>
+        <button className={mainTab === "analysis" ? "btn-primary" : "btn-secondary"} onClick={() => setMainTab("analysis")}>تحلیل محصولات استوری‌ها</button>
         <button className={mainTab === "history" ? "btn-primary" : "btn-secondary"} onClick={() => setMainTab("history")}>تاریخچه استوری</button>
         <button className={mainTab === "roadmap" ? "btn-primary" : "btn-secondary"} onClick={() => setMainTab("roadmap")}>برنامه آینده</button>
 
-        {(mainTab === "incoming" || mainTab === "history" || mainTab === "roadmap") && (
+        {(mainTab === "incoming" || mainTab === "history" || mainTab === "roadmap" || mainTab === "analysis") && (
           <select
             className="input w-auto"
             value={selectedAccount}
@@ -447,6 +567,9 @@ export default function Statuses() {
         </>
       ) : mainTab === "incoming" ? (
         <IncomingView data={incoming} loading={incLoading} onRefresh={loadIncoming}
+          onAnalyzeToday={analyzeToday} analyzingToday={analyzingToday} onAnalyzeOne={analyzeOne} />
+      ) : mainTab === "analysis" ? (
+        <AnalysisView data={analysis} loading={anaLoading} onRefresh={loadAnalysis}
           onAnalyzeToday={analyzeToday} analyzingToday={analyzingToday} />
       ) : mainTab === "history" ? (
         <HistoryView data={histData} loading={histLoading} onRefresh={() => loadHistory(selectedAccount)} />
