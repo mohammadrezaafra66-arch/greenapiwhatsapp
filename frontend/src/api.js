@@ -498,6 +498,9 @@ export const WarmupHelpersApi = {
     http.post("/warmup-helpers/current-brief", { sender_instance_id: senderInstanceId, brief_text: briefText }).then((r) => r.data),
   getCurrentBrief: (senderInstanceId) =>
     http.get("/warmup-helpers/current-brief", { params: { sender_instance_id: senderInstanceId } }).then((r) => r.data),
+  // V39 PART 2/4 — is this account eligible to be a Team Collaboration sender right now?
+  senderEligibility: (senderInstanceId) =>
+    http.get("/warmup-helpers/sender-eligibility", { params: { sender_instance_id: senderInstanceId } }).then((r) => r.data),
   // V29 PART 8 warmth + PART 9 log
   warmth: () => http.get("/warmup-helpers/warmth").then((r) => r.data),
   log: (params) => http.get("/warmup-helpers/log", { params: params || {} }).then((r) => r.data),

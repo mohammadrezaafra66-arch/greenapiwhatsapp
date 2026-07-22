@@ -5,6 +5,8 @@ import {
   dayInCycleLabel, askCountsByContact, askCountsBySender, askCountSentence,
   askRunningCounts, MAX_COLD_PER_CONTACT,
   filterUnrespondedTasks, taskStatusFa, UNRESPONDED_STATUSES, TASK_STATUS_FA,
+  needsOverridePrompt, overrideConfirmValid, eligibilityWarningText,
+  senderHasOverride, OVERRIDE_BADGE_FA, OVERRIDE_CONFIRM_LABEL_FA,
 } from "./teamCollab.js";
 
 test("warmthBadge maps level string to class", () => {
@@ -25,6 +27,38 @@ test("warmthBadge derives level from score when level missing", () => {
 test("warmthBadge label includes score when present", () => {
   assert.equal(warmthBadge({ level: "بالا", score: 88 }).label, "بالا (88)");
   assert.equal(warmthBadge({ level: "کم" }).label, "کم");
+});
+
+// ── V39 PART 4 — sender-eligibility override UI logic ────────────────────────
+test("needsOverridePrompt: only when ineligible AND not already overridden", () => {
+  assert.equal(needsOverridePrompt({ eligible: true, override_active: false }), false);
+  assert.equal(needsOverridePrompt({ eligible: false, override_active: false }), true);
+  assert.equal(needsOverridePrompt({ eligible: false, override_active: true }), false);  // already overridden
+  assert.equal(needsOverridePrompt(null), false);                                        // unknown → don't block UI
+});
+
+test("overrideConfirmValid: requires BOTH the checkbox and a non-empty note", () => {
+  assert.equal(overrideConfirmValid({ confirmed: false, note: "دلیل" }), false);
+  assert.equal(overrideConfirmValid({ confirmed: true, note: "" }), false);
+  assert.equal(overrideConfirmValid({ confirmed: true, note: "   " }), false);   // whitespace-only rejected
+  assert.equal(overrideConfirmValid({ confirmed: true, note: "کمبود اکانت" }), true);
+  assert.equal(overrideConfirmValid({}), false);
+});
+
+test("eligibilityWarningText: prefers backend message, falls back sensibly", () => {
+  assert.equal(eligibilityWarningText({ message: "این اکانت فقط ۶.۹ روز..." }), "این اکانت فقط ۶.۹ روز...");
+  assert.match(eligibilityWarningText({ reason: "too_young", days_remaining: 7 }), /۷|7/);
+  assert.match(eligibilityWarningText({ reason: "recent_incident" }), /حادثه/);
+  assert.match(eligibilityWarningText({ reason: "other" }), /واجد شرایط/);
+  assert.equal(eligibilityWarningText(null), "");
+});
+
+test("senderHasOverride + badge/label constants", () => {
+  assert.equal(senderHasOverride({ eligibility_overridden: true }), true);
+  assert.equal(senderHasOverride({ eligibility_overridden: false }), false);
+  assert.equal(senderHasOverride({}), false);
+  assert.equal(OVERRIDE_BADGE_FA, "رد شرط ۱۴روزه");
+  assert.match(OVERRIDE_CONFIRM_LABEL_FA, /مسئولیت ریسک/);
 });
 
 test("canAssignCold respects the ceiling of 2", () => {

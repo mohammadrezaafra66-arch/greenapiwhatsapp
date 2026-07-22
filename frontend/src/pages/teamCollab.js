@@ -27,6 +27,46 @@ export function warmthBadge({ level, score } = {}) {
   return { label, cls, level: lvl };
 }
 
+// ── V39 PART 4 — sender-eligibility override (14-day rule) ────────────────────
+// The «رد شرط ۱۴روزه» badge label shown next to a sender running on a deliberate override.
+export const OVERRIDE_BADGE_FA = "رد شرط ۱۴روزه";
+
+// The required confirmation-checkbox label in the warning dialog.
+export const OVERRIDE_CONFIRM_LABEL_FA =
+  "می‌دانم این اکانت هنوز آماده نیست و مسئولیت ریسک را می‌پذیرم";
+
+// True when the chosen sender is ineligible AND not already overridden → the warning/confirmation
+// dialog must be shown before the assignment can proceed. `elig` is the GET /sender-eligibility body.
+export function needsOverridePrompt(elig) {
+  if (!elig) return false;                       // unknown → don't block the UI (backend still gates)
+  return elig.eligible === false && elig.override_active !== true;
+}
+
+// The override can only be submitted once the user BOTH ticks the confirmation checkbox AND writes a
+// short (non-empty) note. Mirrors the backend's mandatory-note rule.
+export function overrideConfirmValid({ confirmed, note } = {}) {
+  return confirmed === true && typeof note === "string" && note.trim().length > 0;
+}
+
+// The exact Persian warning sentence for the dialog: prefer the backend's specific message; else fall
+// back to a days-remaining phrasing; else a generic line.
+export function eligibilityWarningText(elig) {
+  if (!elig) return "";
+  if (elig.message) return elig.message;
+  if (elig.reason === "too_young" && elig.days_remaining != null) {
+    return `این اکانت هنوز ${elig.days_remaining} روز تا کامل‌شدن شرط ۱۴روزه فاصله دارد.`;
+  }
+  if (elig.reason === "recent_incident") {
+    return "این اکانت در ۱۴ روز اخیر حادثه داشته است.";
+  }
+  return "این اکانت هنوز واجد شرایط فرستنده‌ی همکاری تیمی نیست.";
+}
+
+// Whether to show the override badge next to a sender in the picker (from GET /senders).
+export function senderHasOverride(sender) {
+  return !!(sender && sender.eligibility_overridden);
+}
+
 // ── cold-account assignment ceiling (mirrors MAX_COLD_ACCOUNTS_PER_CONTACT = 2) ──
 export const MAX_COLD_PER_CONTACT = 2;
 

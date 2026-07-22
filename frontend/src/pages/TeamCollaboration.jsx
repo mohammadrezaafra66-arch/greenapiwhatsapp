@@ -11,6 +11,8 @@ import {
   warmthBadge, canAssignCold, filterLogEvents, threadStatusSummary,
   dayInCycleLabel, askRunningCounts, askCountSentence, MAX_COLD_PER_CONTACT,
   filterUnrespondedTasks, taskStatusFa,
+  OVERRIDE_BADGE_FA, OVERRIDE_CONFIRM_LABEL_FA, needsOverridePrompt,
+  overrideConfirmValid, eligibilityWarningText, senderHasOverride,
 } from "./teamCollab.js";
 
 const fa = (n) => (n == null ? "" : String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]));
@@ -92,6 +94,10 @@ function ManagePanel() {
                   <span>{s.name || s.instance_id}</span>
                   <span className="text-xs opacity-70">({fa(s.contact_count)} مخاطب)</span>
                   {w && <WarmthBadge level={w.level} score={w.score} />}
+                  {senderHasOverride(s) && (
+                    <span className="badge bg-rose-500/20 text-rose-300 border-rose-500/40"
+                      title="این فرستنده با رد شرط ۱۴روزه (به‌صورت دستی) فعال شده است">{OVERRIDE_BADGE_FA}</span>
+                  )}
                   {!s.team_enabled && <span className="badge bg-slate-600/30 text-slate-400 border-slate-600">خاموش</span>}
                 </button>
               );
@@ -141,24 +147,52 @@ function ContactsEditor({ senderInstanceId, onChange }) {
   const { data, loading, reload } = useAsync(() => WarmupHelpersApi.list(senderInstanceId), [senderInstanceId]);
   const [form, setForm] = React.useState(EMPTY_CONTACT);
   const [showProfile, setShowProfile] = React.useState(false);
+  // V39 PART 4 — override warning/confirmation dialog state.
+  const [overrideDlg, setOverrideDlg] = React.useState(null);   // { elig } when open, else null
+  const [ovConfirmed, setOvConfirmed] = React.useState(false);
+  const [ovNote, setOvNote] = React.useState("");
   const helpers = data?.helpers || [];
   const softWarning = data?.soft_warning;
 
+  function contactBody(extra) {
+    return {
+      name: form.name.trim(), phone: form.phone.trim(), sender_instance_id: senderInstanceId,
+      job_title: form.job_title.trim() || null,
+      years_experience: form.years_experience === "" ? null : Number(form.years_experience),
+      personal_benefit_note: form.personal_benefit_note.trim() || null,
+      phone_secondary: form.phone_secondary.trim() || null,
+      relationship: form.relationship || null,
+      referral_note: form.referral_note.trim() || null,
+      require_full_name: true,
+      ...(extra || {}),
+    };
+  }
+
+  async function submitContact(extra) {
+    try {
+      await WarmupHelpersApi.create(contactBody(extra));
+      setForm(EMPTY_CONTACT); setOverrideDlg(null); setOvConfirmed(false); setOvNote("");
+      reload(); onChange && onChange();
+    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+  }
+
   async function add() {
     if (!form.name.trim() || !form.phone.trim()) return toast.error("نام و شماره لازم است");
-    try {
-      await WarmupHelpersApi.create({
-        name: form.name.trim(), phone: form.phone.trim(), sender_instance_id: senderInstanceId,
-        job_title: form.job_title.trim() || null,
-        years_experience: form.years_experience === "" ? null : Number(form.years_experience),
-        personal_benefit_note: form.personal_benefit_note.trim() || null,
-        phone_secondary: form.phone_secondary.trim() || null,
-        relationship: form.relationship || null,
-        referral_note: form.referral_note.trim() || null,
-        require_full_name: true,
-      });
-      setForm(EMPTY_CONTACT); reload(); onChange && onChange();
-    } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
+    // V39 PART 4 — before assigning this contact to the sender, check the sender's 14-day
+    // eligibility. If ineligible (and not already overridden), open the warning/confirmation dialog
+    // instead of silently submitting; the backend still enforces the gate regardless.
+    let elig = null;
+    try { elig = await WarmupHelpersApi.senderEligibility(senderInstanceId); } catch { /* backend still gates */ }
+    if (needsOverridePrompt(elig)) {
+      setOvConfirmed(false); setOvNote(""); setOverrideDlg({ elig });
+      return;
+    }
+    await submitContact();
+  }
+
+  function confirmOverride() {
+    if (!overrideConfirmValid({ confirmed: ovConfirmed, note: ovNote })) return;
+    submitContact({ eligibility_override: true, eligibility_override_note: ovNote.trim() });
   }
   async function del(h) {
     if (!(await confirmDialog(`«${h.name}» حذف شود؟`))) return;
@@ -212,6 +246,33 @@ function ContactsEditor({ senderInstanceId, onChange }) {
           {helpers.map((h) => (
             <ContactRow key={h.id} helper={h} onDelete={() => del(h)} onToggle={() => toggleActive(h)} />
           ))}
+        </div>
+      )}
+
+      {overrideDlg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" dir="rtl">
+          <div className="card max-w-md w-full space-y-3 border-rose-500/40">
+            <h3 className="font-bold text-rose-300">⚠️ این فرستنده هنوز آماده نیست</h3>
+            <p className="text-sm text-slate-300">{eligibilityWarningText(overrideDlg.elig)}</p>
+            <p className="text-xs text-slate-400">
+              استفاده از یک اکانت زیر ۱۴ روز (یا با حادثهٔ اخیر) به‌عنوان فرستنده ریسک مسدودشدن دارد.
+              برای ادامه، تأیید کنید و دلیل را بنویسید — این تصمیم ثبت و ماندگار می‌شود.
+            </p>
+            <label className="flex items-start gap-2 text-sm text-slate-200">
+              <input type="checkbox" className="mt-1" checked={ovConfirmed}
+                onChange={(e) => setOvConfirmed(e.target.checked)} />
+              <span>{OVERRIDE_CONFIRM_LABEL_FA}</span>
+            </label>
+            <textarea className="input w-full text-sm" rows={2} placeholder="دلیل (اجباری) — مثلاً: کمبود اکانت سالم"
+              value={ovNote} onChange={(e) => setOvNote(e.target.value)} />
+            <div className="flex gap-2 justify-end">
+              <button className="btn-secondary text-sm"
+                onClick={() => { setOverrideDlg(null); setOvConfirmed(false); setOvNote(""); }}>انصراف</button>
+              <button className="btn-primary text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled={!overrideConfirmValid({ confirmed: ovConfirmed, note: ovNote })}
+                onClick={confirmOverride}>افزودن با پذیرش ریسک</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
