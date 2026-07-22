@@ -17,9 +17,41 @@ import random
 from datetime import datetime, timedelta, time as dtime
 import pytz
 
-from app.services.warmup_state import WarmupState, DEFAULT_WARMUP_CONFIG
+from app.services.warmup_state import (
+    WarmupState, DEFAULT_WARMUP_CONFIG, RECOVERY_WARMUP_CONFIG,
+)
 
 TEHRAN = pytz.timezone("Asia/Tehran")
+
+# ── V41 PART 1 — recovery-mode timeline boundaries (Green API's exact sequence) ──
+# Keyed on day_index (1-based days since authorization; day_index 0 = enrolled, pre-auth).
+# Mapping to Green API's calendar (GA Day N ≈ day_index N-1, since GA Day 1 is the no-link
+# pre-auth day and GA Day 2 is the authorize-only day):
+#   day_index 0–1  → COOLDOWN   (GA Day 1 no-link + GA Day 2 authorize, send nothing)
+#   day_index 2–4  → RECEIVING  (GA Days 3–5, peers message it ~every 2h, receiving-only)
+#   day_index 5    → REPLYING   (GA Day 6, the number begins replying ~every 2h)
+#   day_index 6–11 → RAMPING    (GA Days 7–12, ramp 12→100 over the 7-step ramp_curve)
+#   day_index ≥ 12 → GRADUATED
+# Reconciliation of Green API's own numbers: it states both a "7-day ramp 12→100" and
+# "much more ban-resistant after ~10 days". Those overlap rather than sum; we honor the full
+# 7-step ramp and only declare GRADUATED after it completes (day_index 12), which is strictly
+# MORE conservative than graduating at day 10 — never less safe. By GA's day-10 milestone the
+# number is already deep in the ramp (~66/day) and fully interactive.
+RECOVERY_RECEIVING_DAYS = (2, 3, 4)
+RECOVERY_REPLY_START_DAY = RECOVERY_WARMUP_CONFIG.reply_start_day          # 5
+RECOVERY_RAMP_LEN = len(RECOVERY_WARMUP_CONFIG.ramp_curve)                 # 7 steps (12→100)
+RECOVERY_GRADUATE_DAY = RECOVERY_REPLY_START_DAY + RECOVERY_RAMP_LEN       # day_index 12
+
+
+def recovery_enabled(enrollment) -> bool:
+    """True when this enrollment follows the V41 recovery-mode timeline."""
+    return bool(getattr(enrollment, "recovery_mode", False))
+
+
+def effective_config(enrollment, cfg=DEFAULT_WARMUP_CONFIG):
+    """The config an enrollment's schedule should use: the recovery config for a recovery-mode
+    enrollment (fixed 3-day receive / day-5 reply / graduate-at-12 sequence), else `cfg`."""
+    return RECOVERY_WARMUP_CONFIG if recovery_enabled(enrollment) else cfg
 
 # Hard floor between two sends from ONE number: 2 msgs/min → >= 30s apart.
 HARD_MIN_GAP_SECONDS = 30
@@ -157,12 +189,30 @@ def day_index(enrollment, now: datetime | None = None) -> int:
     return max(1, (_naive(now) - _naive(anchor)).days + 1)
 
 
-def target_state_for_day(day: int, current: str, cfg=DEFAULT_WARMUP_CONFIG) -> str:
+def _recovery_target_state_for_day(day: int) -> str:
+    """V41 PART 1 — the state a RECOVERY-mode number should be in on `day` (day_index),
+    following Green API's exact sequence. See the RECOVERY_* boundaries above."""
+    if day <= 1:
+        return WarmupState.COOLDOWN.value                    # GA Day 1 no-link + Day 2 authorize-only
+    if day in RECOVERY_RECEIVING_DAYS:
+        return WarmupState.RECEIVING.value                   # GA Days 3–5, receiving-only ~every 2h
+    if day == RECOVERY_REPLY_START_DAY:
+        return WarmupState.REPLYING.value                    # GA Day 6 — replies begin ~every 2h
+    if RECOVERY_REPLY_START_DAY < day < RECOVERY_GRADUATE_DAY:
+        return WarmupState.RAMPING.value                     # GA Days 7–12 — ramp 12→100
+    return WarmupState.GRADUATED.value                       # day_index >= 12
+
+
+def target_state_for_day(day: int, current: str, cfg=DEFAULT_WARMUP_CONFIG,
+                         recovery: bool = False) -> str:
     """The state a number should be in on `day` given the schedule. Side states
-    (PAUSED/YELLOWCARD/BLOCKED_RESET) are sticky — the scheduler never overrides them."""
+    (PAUSED/YELLOWCARD/BLOCKED_RESET) are sticky — the scheduler never overrides them.
+    `recovery=True` follows the V41 recovery-mode sequence instead of the general timeline."""
     if current in (WarmupState.PAUSED.value, WarmupState.YELLOWCARD.value,
                    WarmupState.BLOCKED_RESET.value):
         return current
+    if recovery:
+        return _recovery_target_state_for_day(day)
     if day <= 1:
         return WarmupState.COOLDOWN.value
     if day in cfg.receiving_days and day < cfg.reply_start_day:
@@ -201,9 +251,13 @@ def maturing_daily_target(rng: random.Random | None = None) -> int:
 
 def daily_target(enrollment, now: datetime | None = None, cfg=DEFAULT_WARMUP_CONFIG,
                  rng: random.Random | None = None) -> int:
-    """Total warm-up events targeted for this number today, per its stage/day."""
+    """Total warm-up events targeted for this number today, per its stage/day. A recovery-mode
+    enrollment uses the recovery config (day-5 reply start → correct ramp indexing) and timeline."""
+    recovery = recovery_enabled(enrollment)
+    if recovery:
+        cfg = RECOVERY_WARMUP_CONFIG
     day = day_index(enrollment, now)
-    state = target_state_for_day(day, getattr(enrollment, "state", ""), cfg)
+    state = target_state_for_day(day, getattr(enrollment, "state", ""), cfg, recovery=recovery)
     if state == WarmupState.RECEIVING.value:
         return receiving_inbound_target(day)
     if state == WarmupState.REPLYING.value:

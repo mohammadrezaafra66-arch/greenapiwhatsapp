@@ -8,9 +8,10 @@ blocked / insufficient warm peers / global breaker). Kept pure so it unit-tests 
 from __future__ import annotations
 from datetime import datetime
 
-from app.services.warmup_state import WarmupState, DEFAULT_WARMUP_CONFIG
+from app.services.warmup_state import WarmupState, DEFAULT_WARMUP_CONFIG, RECOVERY_WARMUP_CONFIG
 from app.services.warmup_scheduler import (
     day_index, target_state_for_day, receiving_inbound_target, ramp_daily_target,
+    recovery_enabled, RECOVERY_GRADUATE_DAY,
 )
 from app.services.warmup_mesh_service import (
     edge_is_messageable, INSUFFICIENT_PEERS_NOTICE, CAPACITY_FULL_NOTICE, MAX_COLD_PER_WARM_PEER,
@@ -48,8 +49,11 @@ STATE_LABELS_FA = {
 
 def display_daily_target(enrollment, now: datetime, cfg=DEFAULT_WARMUP_CONFIG) -> int:
     """A stable (RNG-free) representation of the day's target for the dashboard."""
+    recovery = recovery_enabled(enrollment)      # V41 PART 1 — recovery-mode timeline when set
+    if recovery:
+        cfg = RECOVERY_WARMUP_CONFIG
     day = day_index(enrollment, now)
-    state = target_state_for_day(day, getattr(enrollment, "state", ""), cfg)
+    state = target_state_for_day(day, getattr(enrollment, "state", ""), cfg, recovery=recovery)
     if state == WarmupState.RECEIVING.value:
         return receiving_inbound_target(day)
     if state in (WarmupState.REPLYING.value, WarmupState.RAMPING.value):

@@ -23,11 +23,11 @@ from app.models.warmup_mesh import WarmupEnrollment, WarmupMeshEdge, WarmupEvent
 from app.services.green_api import GreenAPIClient
 from app.services.warmup_state import (
     WarmupState, transition, can_transition, reset_daily_counters_if_new_day,
-    compute_reply_ratio, DEFAULT_WARMUP_CONFIG,
+    compute_reply_ratio, DEFAULT_WARMUP_CONFIG, RECOVERY_WARMUP_CONFIG,
 )
 from app.services.warmup_scheduler import (
     day_index, target_state_for_day, daily_target, allowed_outbound,
-    in_active_hours, next_active_start, schedule_next_action,
+    in_active_hours, next_active_start, schedule_next_action, recovery_enabled,
 )
 from app.services.warmup_mesh_service import edge_is_messageable
 from app.services.warmup_content import generate_mesh_message, content_hash
@@ -69,8 +69,13 @@ def plan_number_action(enrollment, edges, now: datetime, cfg=DEFAULT_WARMUP_CONF
     A "send" plan carries: direction ("inbound"|"outbound"), edge, next_action_at, state.
     """
     r = rng or random
+    # V41 PART 1 — a recovery-mode enrollment follows Green API's exact sequence via the
+    # recovery config; every non-recovery enrollment is unchanged.
+    recovery = recovery_enabled(enrollment)
+    if recovery:
+        cfg = RECOVERY_WARMUP_CONFIG
     day = day_index(enrollment, now)
-    state = target_state_for_day(day, getattr(enrollment, "state", ""), cfg)
+    state = target_state_for_day(day, getattr(enrollment, "state", ""), cfg, recovery=recovery)
 
     # Non-active stages do nothing this tick (COOLDOWN/side-states/graduated-idle).
     if state == WarmupState.COOLDOWN.value:
@@ -227,8 +232,11 @@ async def _recent_edge_history(db, edge_id, limit: int = 20) -> tuple[set, list]
 async def _advance_state(db, enrollment, now, cfg) -> None:
     """Move the persisted state toward the schedule's target (legal transitions only)."""
     reset_daily_counters_if_new_day(enrollment, now)
+    recovery = recovery_enabled(enrollment)      # V41 PART 1 — recovery-mode timeline when set
+    if recovery:
+        cfg = RECOVERY_WARMUP_CONFIG
     day = day_index(enrollment, now)
-    target = target_state_for_day(day, enrollment.state, cfg)
+    target = target_state_for_day(day, enrollment.state, cfg, recovery=recovery)
     if target != enrollment.state and can_transition(enrollment.state, target):
         try:
             transition(enrollment, target, now=now)

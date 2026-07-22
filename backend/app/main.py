@@ -1116,6 +1116,17 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V35] {e}")
+        # V41 PART 1 — recovery-mode re-warm (Green API's exact 10-day recovery sequence).
+        # recovery_mode flags a scoped, per-number exception that follows the recovery timeline
+        # instead of the general onboarding schedule; the general schedule is unchanged when false.
+        ddl_v41 = [
+            "ALTER TABLE warmup_enrollment ADD COLUMN IF NOT EXISTS recovery_mode boolean NOT NULL DEFAULT false",
+        ]
+        for stmt in ddl_v41:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V41] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:

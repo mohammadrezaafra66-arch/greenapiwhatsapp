@@ -41,6 +41,10 @@ class WarmupEnrollment(Base):
     counters_date: Mapped[date_type | None] = mapped_column(Date)
     # Optional per-number config overrides (JSON string); None → global defaults.
     config_json: Mapped[str | None] = mapped_column(Text)
+    # V41 PART 1 — recovery mode: this enrollment follows Green API's exact 10-day recovery
+    # sequence (a re-warm of a churned/carded number) instead of the general onboarding
+    # timeline. A scoped, per-number exception; the general schedule is unchanged when False.
+    recovery_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

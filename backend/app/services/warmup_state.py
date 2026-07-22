@@ -127,6 +127,22 @@ class WarmupConfig:
 
 DEFAULT_WARMUP_CONFIG = WarmupConfig()
 
+# ── V41 PART 1 — recovery-mode config (Green API's exact 10-day recovery sequence) ──
+# Green API support's re-warm guidance for a number whose linked devices churned:
+#   • Day 1: no link/authorize at all.
+#   • Day 2: authorize, send NOTHING.
+#   • Days 3–5 (3 days): OTHER real accounts message it ~every 2h (receiving-only).
+#   • Then the number starts replying ~every 2h to existing contacts.
+#   • Over the following 7 days: ramp message flow from ~12 up to 100 messages/day.
+#   • After ~10 days total the number is much more ban-resistant.
+# The general onboarding config differs (2 receiving days, reply on day 4, a long MATURING
+# band, graduation only at day 25), so recovery mode uses THIS config: 3 receiving days
+# (day_index 2–4) and replying beginning day_index 5. The ramp curve (12→100, 7 steps) and
+# the ~2h base cadence (BASE_MU_MIN=120) already match Green API exactly, so they are reused
+# unchanged. Day boundaries are anchored on day_index (1-based days since authorization);
+# see warmup_scheduler for the day-by-day state mapping and the graduation boundary.
+RECOVERY_WARMUP_CONFIG = WarmupConfig(receiving_days=[2, 3, 4], reply_start_day=5)
+
 
 def load_config(overrides: dict | None = None) -> WarmupConfig:
     """Global defaults merged with an optional per-number override dict (admin-editable)."""
