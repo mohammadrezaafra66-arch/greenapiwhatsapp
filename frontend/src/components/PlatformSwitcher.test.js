@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { filterByPlatform } from "./PlatformSwitcher.jsx";
+import { filterByPlatform } from "./platformSwitcherUtils.js";
 
 const items = [
   { id: 1, platform: "whatsapp" },

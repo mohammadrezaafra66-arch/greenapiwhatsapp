@@ -1,14 +1,10 @@
 import React from "react";
+export { PLATFORM_TABS, filterByPlatform } from "./platformSwitcherUtils.js";
+import { PLATFORM_TABS } from "./platformSwitcherUtils.js";
 
 // TG PART 7 — reusable platform tab switcher (Persian, RTL). Used on Accounts, Campaigns,
 // Group Monitoring, Inbox, Warm-up, Reports so those pages scope to one platform at a time.
 // value: "all" | "whatsapp" | "telegram".
-export const PLATFORM_TABS = [
-  ["all", "همه"],
-  ["whatsapp", "واتساپ"],
-  ["telegram", "تلگرام ✈️"],
-];
-
 export default function PlatformSwitcher({ value, onChange, includeAll = true }) {
   const tabs = includeAll ? PLATFORM_TABS : PLATFORM_TABS.filter(([k]) => k !== "all");
   return (
@@ -25,13 +21,5 @@ export default function PlatformSwitcher({ value, onChange, includeAll = true })
         </button>
       ))}
     </div>
-  );
-}
-
-// Pure filter helper (shared + unit-testable): keep items whose `platform` matches.
-export function filterByPlatform(items, platform) {
-  if (!platform || platform === "all") return items || [];
-  return (items || []).filter(
-    (it) => (it.platform || "whatsapp") === platform
   );
 }
