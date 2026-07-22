@@ -208,7 +208,7 @@ async def test_campaign_deliver_refuses_unhealthy_account():
     # patch the client so a leak would be observable
     campaign_runner.GreenAPIClient = _Client
     cc = SimpleNamespace(status=None, error_message=None)
-    account = _acct(instance_id="C", cooldown_until=NOW + timedelta(days=1))
+    account = _acct(instance_id="C", cooldown_until=datetime.utcnow() + timedelta(days=1))
     campaign = SimpleNamespace()
     out = await campaign_runner._deliver_message(_DB(), campaign, cc, SimpleNamespace(phone="x"),
                                                  account, [], [], [])
