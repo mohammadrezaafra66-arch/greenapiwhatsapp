@@ -10,6 +10,7 @@ const TABS = [
   { key: "daily", label: "گزارش روزانه" },
   { key: "mentions", label: "رصد محصولات در گروه‌ها" },
   { key: "topProducts", label: "جدول محصولات پر تکرار" },
+  { key: "spotAlerts", label: "هشدار محصولات دیده‌شده" },
   { key: "bestHours", label: "بهترین ساعت ارسال" },
 ];
 
@@ -86,7 +87,99 @@ export default function Reporting() {
       {tab === "daily" && <DailyTab />}
       {tab === "mentions" && <MentionsTab />}
       {tab === "topProducts" && <TopProductsTab />}
+      {tab === "spotAlerts" && <SpotAlertsTab />}
       {tab === "bestHours" && <BestHoursTab />}
+    </div>
+  );
+}
+
+// ── V40 PART 7: catalog-product-spotted alerts (price-free «spotted» alerts) ──
+function SpotAlertsTab() {
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [unreadOnly, setUnreadOnly] = React.useState(false);
+  const SRC = { pv: "پی‌وی", group: "گروه", status: "استوری" };
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      setData(await Api.spotAlerts(unreadOnly));
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [unreadOnly]);
+
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  const markRead = async (id) => {
+    try {
+      await Api.markSpotAlertRead(id);
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    }
+  };
+
+  const alerts = data?.alerts || [];
+  return (
+    <div className="space-y-4">
+      <div className="card bg-sky-500/10 border-sky-500/30 text-sky-200 text-sm">
+        هشدار زمانی ثبت می‌شود که محصولی از دستیار توسط یک مخاطب بیرونی تبلیغ شود. این نسخه فقط
+        «دیده‌شدن» را گزارش می‌کند و مقایسه‌ی قیمت ندارد (به‌محض افزوده‌شدن استخراج قیمت در آینده،
+        به هشدار «قیمت‌شکنی» ارتقا می‌یابد).
+      </div>
+      <div className="flex items-center gap-3 flex-wrap">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} />
+          فقط خوانده‌نشده‌ها
+        </label>
+        <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40">
+          {fa(data?.unread_count)} خوانده‌نشده
+        </span>
+        <button className="btn-secondary text-xs" onClick={load}>🔄 تازه‌سازی</button>
+      </div>
+
+      {loading && !data && <Spinner />}
+      {data && alerts.length === 0 && !loading && <Empty label="هشداری ثبت نشده." />}
+
+      {alerts.length > 0 && (
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-slate-400 border-b border-slate-700">
+                <th className="text-right p-2">مخاطب</th>
+                <th className="text-right p-2">شماره</th>
+                <th className="text-right p-2">محصول (در دستیار)</th>
+                <th className="text-right p-2">منبع</th>
+                <th className="text-right p-2">زمان</th>
+                <th className="text-center p-2">وضعیت</th>
+              </tr>
+            </thead>
+            <tbody>
+              {alerts.map((a) => (
+                <tr key={a.id} className={`border-b border-slate-800 ${a.is_read ? "opacity-60" : ""}`}>
+                  <td className="p-2">{a.contact_name || "—"}</td>
+                  <td className="p-2 text-slate-300" dir="ltr">{a.contact_phone}</td>
+                  <td className="p-2 font-bold">{a.product_name}</td>
+                  <td className="p-2 text-slate-300 text-xs">{SRC[a.source] || a.source}</td>
+                  <td className="p-2 text-slate-400 text-xs" dir="ltr">{a.time_shamsi}</td>
+                  <td className="p-2 text-center">
+                    {a.is_read ? (
+                      <span className="text-emerald-400 text-xs">خوانده‌شده</span>
+                    ) : (
+                      <button className="btn-secondary text-xs" onClick={() => markRead(a.id)}>علامت خوانده‌شده</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

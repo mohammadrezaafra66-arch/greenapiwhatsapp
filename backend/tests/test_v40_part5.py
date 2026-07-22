@@ -15,6 +15,16 @@ import pytest
 from app.services.product_reports import _split_sources, top_products_rows
 
 
+@pytest.fixture(autouse=True)
+def _no_spot_alert(monkeypatch):
+    """Isolate PART 5's mention-write tests from PART 7's spot-alert queries (covered separately)."""
+    async def _cores(*_a, **_k): return set()
+    async def _raise(*_a, **_k): return False
+    monkeypatch.setattr("app.services.catalog_spot_alert.get_our_phone_cores", _cores)
+    monkeypatch.setattr("app.services.catalog_spot_alert.maybe_raise_spot_alert", _raise)
+    yield
+
+
 def test_split_sources_dedups_and_sorts():
     assert _split_sources("pv,group,pv,status") == ["group", "pv", "status"]
     assert _split_sources(None) == []

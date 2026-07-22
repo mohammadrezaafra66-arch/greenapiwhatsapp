@@ -320,6 +320,9 @@ export const ReportingApi = {
   contactTrend: (phone, days = 90) =>
     http.get(`/reporting/contact-trend?phone=${encodeURIComponent(phone)}&days=${days}`).then((r) => r.data),
   bestHours: (days = 30) => http.get(`/reporting/best-hours?days=${days}`).then((r) => r.data),
+  spotAlerts: (unreadOnly = false) =>
+    http.get(`/reporting/spot-alerts?unread_only=${unreadOnly}`).then((r) => r.data),
+  markSpotAlertRead: (id) => http.post(`/reporting/spot-alerts/${id}/read`).then((r) => r.data),
   productSellers: (productName, days = 30, limit = 100) =>
     http
       .get("/reporting/product-sellers", { params: { product_name: productName, days, limit } })

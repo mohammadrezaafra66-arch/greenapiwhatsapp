@@ -255,6 +255,52 @@ async def contact_trend(phone: str, days: int = 90, limit: int = 500,
             "total_mentions": len(timeline), "timeline": timeline, "summary": summary}
 
 
+@router.get("/spot-alerts")
+async def catalog_spot_alerts(unread_only: bool = False, limit: int = 200,
+                              db: AsyncSession = Depends(get_db)):
+    """V40 PART 7 — admin alerts: a catalog (in-assistant) product spotted being advertised by an
+    outside contact. PRICE-FREE «spotted» alerts (a future pass upgrades to price undercutting)."""
+    from app.utils.shamsi import to_shamsi
+    from app.models.catalog_alert import CatalogSpotAlert
+    q = select(CatalogSpotAlert)
+    if unread_only:
+        q = q.where(CatalogSpotAlert.is_read.is_(False))
+    rows = (await db.execute(
+        q.order_by(CatalogSpotAlert.created_at.desc()).limit(min(limit, 500)))).scalars().all()
+    unread = (await db.execute(
+        select(func.count()).select_from(CatalogSpotAlert).where(CatalogSpotAlert.is_read.is_(False))
+    )).scalar() or 0
+    return {
+        "unread_count": unread,
+        "alerts": [
+            {
+                "id": str(a.id),
+                "contact_phone": a.contact_phone,
+                "contact_name": a.contact_name,
+                "product_name": a.product_name,
+                "source": a.source,
+                "message_text": a.message_text,
+                "is_read": a.is_read,
+                "time_shamsi": to_shamsi(a.created_at),
+            }
+            for a in rows
+        ],
+    }
+
+
+@router.post("/spot-alerts/{alert_id}/read")
+async def mark_spot_alert_read(alert_id: str, db: AsyncSession = Depends(get_db)):
+    """Mark a catalog-spotted alert as read."""
+    import uuid as _uuid
+    from app.models.catalog_alert import CatalogSpotAlert
+    a = await db.get(CatalogSpotAlert, _uuid.UUID(alert_id))
+    if not a:
+        raise HTTPException(404, "هشدار یافت نشد")
+    a.is_read = True
+    await db.commit()
+    return {"id": alert_id, "is_read": True}
+
+
 @router.get("/best-hours")
 async def best_hours(days: int = 30, db: AsyncSession = Depends(get_db)):
     """V13.3 — read/delivered rate by Tehran hour-of-day (from campaign_contacts.sent_at).

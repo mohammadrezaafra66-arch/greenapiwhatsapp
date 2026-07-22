@@ -54,10 +54,12 @@ from app.models.telegram import TelegramChatIdCache
 from app.models.account_onboarding import AccountOnboarding
 from app.models.received_status import ReceivedStatus
 from app.models.story_analysis import StoryProductAnalysis
+from app.models.catalog_alert import CatalogSpotAlert
 
 __all__ = [
     "ReceivedStatus",
     "StoryProductAnalysis",
+    "CatalogSpotAlert",
     "AccountOnboarding",
     "InstanceLiveState",
     "WhatsappNumberCheck",

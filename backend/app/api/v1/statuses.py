@@ -308,13 +308,21 @@ async def _analyze_story_rows(db, rows, *, vision_fn=None):
     from app.services.price_service import get_products
     from app.services.story_analyzer import build_story_analyzer
     from app.services.story_analysis import analyze_story_once
+    from app.services.catalog_spot_alert import get_our_phone_cores, maybe_raise_spot_alert
     products = await get_products(500)
     analyzer = build_story_analyzer(products, vision_fn=vision_fn)
+    our_cores = await get_our_phone_cores(db)
     out = []
     for story in rows:
         analysis, from_cache = await analyze_story_once(db, story, analyzer=analyzer)
         if not from_cache and analysis.detected_product_name:
             _log_story_mention(db, story, analysis)
+            # V40 PART 7 — a catalog product advertised by an outside contact → admin spot alert.
+            await maybe_raise_spot_alert(
+                db, contact_phone=story.sender_phone, contact_name=story.sender_name,
+                product_name=analysis.detected_product_name, product_id=analysis.matched_product_id,
+                source="status", instance_id=story.instance_id,
+                message_text=story.text_content or story.caption, our_cores=our_cores)
         out.append((analysis, from_cache))
     return out
 

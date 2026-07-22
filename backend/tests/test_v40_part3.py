@@ -17,6 +17,17 @@ import pytest
 from app.services.story_analyzer import build_story_analyzer
 
 
+@pytest.fixture(autouse=True)
+def _no_spot_alert(monkeypatch):
+    """PART 7's spot-alert path queries Account/CatalogSpotAlert — orthogonal to PART 3's analysis;
+    stub it so these lightweight fake sessions aren't required to model those queries."""
+    async def _cores(*_a, **_k): return set()
+    async def _raise(*_a, **_k): return False
+    monkeypatch.setattr("app.services.catalog_spot_alert.get_our_phone_cores", _cores)
+    monkeypatch.setattr("app.services.catalog_spot_alert.maybe_raise_spot_alert", _raise)
+    yield
+
+
 CATALOG = [{"name": "کولر گازی گری 18000", "id": "cat-1"}]
 
 

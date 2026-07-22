@@ -276,6 +276,22 @@ async def handle_incoming(instance_id: str, payload: dict):
                                 instance_id=instance_id,
                                 message_text=text[:500],
                             ))
+                        # V40 PART 7 — catalog product spotted being advertised by an outside
+                        # contact → admin spot alert (all sources; deduped one/(contact,product,day)).
+                        try:
+                            from app.services.catalog_spot_alert import (
+                                get_our_phone_cores, maybe_raise_spot_alert)
+                            our_cores = await get_our_phone_cores(log_db)
+                            for hit in hits[:5]:
+                                if hit.get("product_id"):
+                                    await maybe_raise_spot_alert(
+                                        log_db, contact_phone=sender_phone,
+                                        contact_name=sender.get("senderName", ""),
+                                        product_name=hit["product_name"], product_id=hit.get("product_id"),
+                                        source=source, instance_id=instance_id, message_text=text,
+                                        our_cores=our_cores)
+                        except Exception as e:
+                            logger.warning("[SpotAlert] raise failed: %s", e)
                         await log_db.commit()
             except Exception as e:
                 logger.warning("[ProductMention] detection error: %s", e)
