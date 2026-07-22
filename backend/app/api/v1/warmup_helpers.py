@@ -115,9 +115,12 @@ async def list_senders(db: AsyncSession = Depends(get_db)):
     disabled = await hs.enabled_sender_ids(db)   # V29 — set of explicitly-disabled senders
     # V39 PART 2/4 — which senders are currently running on a deliberate eligibility override, so
     # the UI can show the «رد شرط ۱۴روزه» badge next to them.
-    from app.services.sender_eligibility import override_active
+    from app.services.sender_eligibility import override_active, in_mesh_recovery_ids
     cfgs = (await db.execute(select(WarmupSenderConfig))).scalars().all()
     overridden = {c.sender_instance_id for c in cfgs if override_active(c)}
+    # V41 PART 3 — senders currently paused because they are mid mesh-recovery re-warm, so the UI
+    # shows a DISTINCT «در حال بازیابی گرم‌سازی» badge (not a generic unhealthy/too-young reason).
+    recovering = await in_mesh_recovery_ids(db)
     # NOTE: the per-sender warmth score (PART 8) is served by the dedicated GET /warmth endpoint
     # and merged client-side, so this lightweight list stays cheap and its shape is unchanged.
     return {"senders": [{
@@ -127,6 +130,7 @@ async def list_senders(db: AsyncSession = Depends(get_db)):
         "contact_count": int(counts.get(a.instance_id, 0) or 0),
         "team_enabled": a.instance_id not in disabled,   # V29 per-sender «همکاری تیمی» toggle
         "eligibility_overridden": a.instance_id in overridden,   # V39 — «رد شرط ۱۴روزه» badge
+        "in_mesh_recovery": a.instance_id in recovering,   # V41 — «در حال بازیابی گرم‌سازی» badge
     } for a in accts]}
 
 

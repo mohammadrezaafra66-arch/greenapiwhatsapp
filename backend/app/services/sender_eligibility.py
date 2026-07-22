@@ -51,6 +51,14 @@ RECENT_INCIDENT_MESSAGE_FA = (
     "این اکانت در ۱۴ روز اخیر حادثه (کارت‌زرد/مسدودی) داشته و فعلاً نمی‌تواند "
     "فرستنده‌ی همکاری تیمی باشد — به یک شماره‌ی سالم با حداقل ۱۴ روز سابقه نیاز است."
 )
+# V41 PART 3 — a DISTINCT pause reason: this account is mid mesh-recovery re-warm, so it must not
+# send anything as a Team Collaboration sender until it graduates (Green API's 10-day sequence).
+# Separate from a generic «too young» / «recent incident» so the UI shows WHY it is paused. This
+# is a HARD block that a normal eligibility override cannot lift (see sender_send_allowed).
+IN_MESH_RECOVERY_MESSAGE_FA = (
+    "این اکانت در حال «بازیابی گرم‌سازی» (ری‌وارم) است و تا پایان دورهٔ بازیابی نمی‌تواند "
+    "فرستنده‌ی همکاری تیمی باشد — پس از فارغ‌التحصیلی دوباره فعال می‌شود."
+)
 NOT_FOUND_MESSAGE_FA = "اکانت فرستنده یافت نشد."
 NOTE_REQUIRED_FA = "برای رد شرط ۱۴روزه، نوشتن یک یادداشت کوتاه (دلیل) الزامی است."
 GENERIC_INELIGIBLE_FA = "این اکانت واجد شرایط فرستنده‌ی همکاری تیمی نیست."
@@ -79,12 +87,40 @@ async def has_valid_override(db, sender_instance_id: str | None) -> bool:
     return override_active(await _load_config(db, sender_instance_id))
 
 
+def enrollment_in_mesh_recovery(enr) -> bool:
+    """V41 PART 3 — PURE: True when an enrollment is actively mid mesh-recovery (recovery_mode,
+    enabled, and not yet GRADUATED). A GRADUATED recovery number is done recovering and eligible
+    again on normal terms."""
+    if enr is None:
+        return False
+    from app.services.warmup_state import WarmupState
+    return (bool(getattr(enr, "recovery_mode", False))
+            and bool(getattr(enr, "is_enabled", False))
+            and getattr(enr, "state", None) != WarmupState.GRADUATED.value)
+
+
+async def in_mesh_recovery(db, sender_instance_id: str | None) -> bool:
+    """V41 PART 3 — is this sender currently paused because it is mid mesh-recovery re-warm?"""
+    if not sender_instance_id:
+        return False
+    enr = (await db.execute(
+        select(WarmupEnrollment).where(WarmupEnrollment.instance_id == sender_instance_id)
+    )).scalar_one_or_none()
+    return enrollment_in_mesh_recovery(enr)
+
+
+async def in_mesh_recovery_ids(db) -> set:
+    """V41 PART 3 — every sender instance currently paused for mesh recovery (for list views)."""
+    enrs = (await db.execute(select(WarmupEnrollment))).scalars().all()
+    return {e.instance_id for e in enrs if enrollment_in_mesh_recovery(e)}
+
+
 async def check_sender_eligibility(db, sender_instance_id: str,
                                    now: datetime | None = None) -> tuple[bool, str, str | None, float | None]:
     """Authoritative eligibility for the TC SENDER role. Returns
     (eligible, reason_slug, message_fa|None, age_days). Reuses the V27 evaluator + age computation
     against the SAME enrollment/incident data, so the reported day count matches the decision.
-    reason ∈ {ok, too_young, recent_incident, not_found}."""
+    reason ∈ {ok, in_mesh_recovery, too_young, recent_incident, not_found}."""
     now = now or datetime.utcnow()
     acc = await _load_sender(db, sender_instance_id)
     if acc is None:
@@ -92,6 +128,10 @@ async def check_sender_eligibility(db, sender_instance_id: str,
     enr = (await db.execute(
         select(WarmupEnrollment).where(WarmupEnrollment.instance_id == sender_instance_id)
     )).scalar_one_or_none()
+    # V41 PART 3 — mesh recovery takes precedence: it is the SPECIFIC reason this sender is paused,
+    # distinct from a generic too-young / recent-incident state (the account may also be both).
+    if enrollment_in_mesh_recovery(enr):
+        return False, "in_mesh_recovery", IN_MESH_RECOVERY_MESSAGE_FA, peer_age_days(acc, enr, now)
     incidents = await _recent_incident_count(db, acc.id, now)
     eligible, reason, _msg = evaluate_peer_eligibility(acc, enr, incidents, now)
     age = peer_age_days(acc, enr, now)
@@ -164,6 +204,12 @@ async def sender_send_allowed(db, sender_instance_id: str | None,
     eligible, reason, _msg, _age = await check_sender_eligibility(db, sender_instance_id, now)
     if eligible:
         return True, "ok"
+    # V41 PART 3 — a mesh-recovery pause is a HARD block: an account mid re-warm must NOT send as a
+    # TC sender even under an eligibility override, because sending during the recovery sequence is
+    # exactly what re-triggers a ban (Green API's rule). The override only covers the ≥14-day age /
+    # incident bar, never the active recovery cycle.
+    if reason == "in_mesh_recovery":
+        return False, "in_mesh_recovery"
     if await has_valid_override(db, sender_instance_id):
         return True, "overridden"
     return False, reason

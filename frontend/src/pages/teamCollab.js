@@ -35,10 +35,23 @@ export const OVERRIDE_BADGE_FA = "رد شرط ۱۴روزه";
 export const OVERRIDE_CONFIRM_LABEL_FA =
   "می‌دانم این اکانت هنوز آماده نیست و مسئولیت ریسک را می‌پذیرم";
 
+// ── V41 PART 3 — mesh-recovery sender pause (distinct from the 14-day override) ──
+// The «در حال بازیابی گرم‌سازی» badge shown next to a sender that is mid mesh-recovery re-warm and
+// therefore cannot send as a Team Collaboration sender until it graduates.
+export const RECOVERY_BADGE_FA = "در حال بازیابی گرم‌سازی";
+
+// Whether to show the mesh-recovery badge next to a sender in the picker (from GET /senders).
+export function senderInMeshRecovery(sender) {
+  return !!(sender && sender.in_mesh_recovery);
+}
+
 // True when the chosen sender is ineligible AND not already overridden → the warning/confirmation
 // dialog must be shown before the assignment can proceed. `elig` is the GET /sender-eligibility body.
+// A mesh-recovery pause is a HARD block that no override can lift, so it never opens the override
+// dialog (the backend rejects a recovery sender's sends regardless of any override).
 export function needsOverridePrompt(elig) {
   if (!elig) return false;                       // unknown → don't block the UI (backend still gates)
+  if (elig.reason === "in_mesh_recovery") return false;
   return elig.eligible === false && elig.override_active !== true;
 }
 
@@ -53,6 +66,9 @@ export function overrideConfirmValid({ confirmed, note } = {}) {
 export function eligibilityWarningText(elig) {
   if (!elig) return "";
   if (elig.message) return elig.message;
+  if (elig.reason === "in_mesh_recovery") {
+    return "این اکانت در حال بازیابی گرم‌سازی است و تا پایان دوره نمی‌تواند فرستنده باشد.";
+  }
   if (elig.reason === "too_young" && elig.days_remaining != null) {
     return `این اکانت هنوز ${elig.days_remaining} روز تا کامل‌شدن شرط ۱۴روزه فاصله دارد.`;
   }

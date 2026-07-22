@@ -13,6 +13,7 @@ import {
   filterUnrespondedTasks, taskStatusFa,
   OVERRIDE_BADGE_FA, OVERRIDE_CONFIRM_LABEL_FA, needsOverridePrompt,
   overrideConfirmValid, eligibilityWarningText, senderHasOverride,
+  RECOVERY_BADGE_FA, senderInMeshRecovery,
 } from "./teamCollab.js";
 
 const fa = (n) => (n == null ? "" : String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]));
@@ -97,6 +98,10 @@ function ManagePanel() {
                   {senderHasOverride(s) && (
                     <span className="badge bg-rose-500/20 text-rose-300 border-rose-500/40"
                       title="این فرستنده با رد شرط ۱۴روزه (به‌صورت دستی) فعال شده است">{OVERRIDE_BADGE_FA}</span>
+                  )}
+                  {senderInMeshRecovery(s) && (
+                    <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40"
+                      title="این اکانت در حال بازیابی گرم‌سازی است و تا پایان دوره به‌عنوان فرستنده ارسال نمی‌کند">{RECOVERY_BADGE_FA}</span>
                   )}
                   {!s.team_enabled && <span className="badge bg-slate-600/30 text-slate-400 border-slate-600">خاموش</span>}
                 </button>

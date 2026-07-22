@@ -7,6 +7,7 @@ import {
   filterUnrespondedTasks, taskStatusFa, UNRESPONDED_STATUSES, TASK_STATUS_FA,
   needsOverridePrompt, overrideConfirmValid, eligibilityWarningText,
   senderHasOverride, OVERRIDE_BADGE_FA, OVERRIDE_CONFIRM_LABEL_FA,
+  senderInMeshRecovery, RECOVERY_BADGE_FA,
 } from "./teamCollab.js";
 
 test("warmthBadge maps level string to class", () => {
@@ -59,6 +60,18 @@ test("senderHasOverride + badge/label constants", () => {
   assert.equal(senderHasOverride({}), false);
   assert.equal(OVERRIDE_BADGE_FA, "رد شرط ۱۴روزه");
   assert.match(OVERRIDE_CONFIRM_LABEL_FA, /مسئولیت ریسک/);
+});
+
+test("V41 — mesh-recovery sender badge + unoverridable pause", () => {
+  assert.equal(senderInMeshRecovery({ in_mesh_recovery: true }), true);
+  assert.equal(senderInMeshRecovery({ in_mesh_recovery: false }), false);
+  assert.equal(senderInMeshRecovery({}), false);
+  assert.equal(RECOVERY_BADGE_FA, "در حال بازیابی گرم‌سازی");
+  // A recovery pause never opens the override dialog (hard block, not overridable).
+  assert.equal(needsOverridePrompt({ eligible: false, reason: "in_mesh_recovery" }), false);
+  // A plain too-young ineligible still prompts for override (unchanged).
+  assert.equal(needsOverridePrompt({ eligible: false, reason: "too_young" }), true);
+  assert.match(eligibilityWarningText({ reason: "in_mesh_recovery" }), /بازیابی/);
 });
 
 test("canAssignCold respects the ceiling of 2", () => {
