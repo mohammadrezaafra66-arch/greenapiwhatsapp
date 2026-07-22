@@ -317,6 +317,8 @@ export const ReportingApi = {
   clearMentions: () => http.delete("/reporting/product-mentions").then((r) => r.data),
   topProducts: (limit = 150, days = 30, source = "") =>
     http.get(`/reporting/top-products?limit=${limit}&days=${days}${source ? `&source=${source}` : ""}`).then((r) => r.data),
+  contactTrend: (phone, days = 90) =>
+    http.get(`/reporting/contact-trend?phone=${encodeURIComponent(phone)}&days=${days}`).then((r) => r.data),
   bestHours: (days = 30) => http.get(`/reporting/best-hours?days=${days}`).then((r) => r.data),
   productSellers: (productName, days = 30, limit = 100) =>
     http

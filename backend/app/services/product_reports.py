@@ -78,6 +78,62 @@ async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
     ]
 
 
+def phone_core(phone: str) -> str:
+    """The national 10-digit core (9xxxxxxxxx) present in EVERY stored form of an Iranian mobile
+    (09…, 98…, …@c.us), so one contact's mentions can be matched across pv/group/status regardless
+    of how each row happened to store the number."""
+    import re
+    from app.services.phone_extract import normalize_sender_phone, normalize_digits
+    d = re.sub(r"\D", "", normalize_sender_phone(normalize_digits(phone or "")))
+    return d[-10:] if len(d) >= 10 else d
+
+
+async def contact_trend_rows(db: AsyncSession, *, phone: str, days: int,
+                             limit: int = 500) -> dict:
+    """V40 PART 6 — one contact's advertising trend over time, unified across pv/group/status.
+    Returns {timeline, summary}: `timeline` = every mention (newest first) with source + product +
+    in_assistant flag + time; `summary` = per-product repeat counts for this contact (how many times,
+    when last, in/out of assistant). Matched by the national 10-digit core so phone-format variants
+    across sources all collapse to the same contact."""
+    core = phone_core(phone)
+    if not core:
+        return {"timeline": [], "summary": []}
+    rows = (await db.execute(
+        select(ProductMentionLog)
+        .where(ProductMentionLog.mentioned_at >= _cutoff(days))
+        .where(ProductMentionLog.sender_phone.like(f"%{core}%"))
+        .order_by(ProductMentionLog.mentioned_at.desc())
+        .limit(clamp_limit(limit, hi=2000))
+    )).scalars().all()
+
+    timeline = [
+        {
+            "mentioned_at": m.mentioned_at,                # raw datetime
+            "source": m.source or "pv",
+            "product_name": m.product_name,
+            "in_assistant": bool(m.product_id),
+            "group_name": m.group_name or "",
+        }
+        for m in rows
+    ]
+    agg: dict[str, dict] = {}
+    for m in rows:
+        key = m.product_name or "—"
+        e = agg.setdefault(key, {"product_name": key, "count": 0, "in_assistant": False,
+                                 "last_mention": None, "sources": set()})
+        e["count"] += 1
+        e["in_assistant"] = e["in_assistant"] or bool(m.product_id)
+        if m.source:
+            e["sources"].add(m.source)
+        if e["last_mention"] is None or (m.mentioned_at and m.mentioned_at > e["last_mention"]):
+            e["last_mention"] = m.mentioned_at
+    summary = sorted(
+        ({**e, "sources": sorted(e["sources"])} for e in agg.values()),
+        key=lambda e: e["count"], reverse=True,
+    )
+    return {"timeline": timeline, "summary": summary}
+
+
 async def product_mentioners_rows(db: AsyncSession, *, product_name: str, days: int,
                                   limit: int) -> list[dict]:
     """The exact drill-down the «مشاهده فروشندگان اخیر» modal shows: the recent mentions of one

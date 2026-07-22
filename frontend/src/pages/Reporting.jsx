@@ -514,6 +514,19 @@ function TopProductsTab() {
   const [limit, setLimit] = React.useState(150);
   const [source, setSource] = React.useState(""); // "" | pv | group | status
   const [sellersModal, setSellersModal] = React.useState(null); // {product_name, sellers, loading}
+  const [trendModal, setTrendModal] = React.useState(null); // {phone, data, loading}
+
+  const openTrend = async (phone) => {
+    if (!phone) return;
+    setTrendModal({ phone, data: null, loading: true });
+    try {
+      const data = await Api.contactTrend(phone, 90);
+      setTrendModal({ phone, data, loading: false });
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+      setTrendModal({ phone, data: null, loading: false });
+    }
+  };
 
   const openSellersModal = async (productName) => {
     setSellersModal({ product_name: productName, sellers: [], loading: true });
@@ -671,14 +684,78 @@ function TopProductsTab() {
       )}
 
       {sellersModal && (
-        <SellersModal modal={sellersModal} days={days} onClose={() => setSellersModal(null)} />
+        <SellersModal modal={sellersModal} days={days} onClose={() => setSellersModal(null)}
+          onOpenTrend={openTrend} />
+      )}
+      {trendModal && (
+        <ContactTrendModal modal={trendModal} onClose={() => setTrendModal(null)} />
       )}
     </div>
   );
 }
 
+// V40 PART 6 — per-contact advertising trend over time (unified across pv/group/status).
+function ContactTrendModal({ modal, onClose }) {
+  const SRC = { pv: "پی‌وی", group: "گروه", status: "استوری" };
+  const d = modal.data;
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-slate-900 border border-slate-700 rounded-lg w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="p-3 border-b border-slate-700 flex items-center justify-between">
+          <h3 className="font-bold">روند تبلیغات مخاطب · <span dir="ltr">{modal.phone}</span></h3>
+          <button className="text-slate-400 hover:text-white" onClick={onClose}>✕</button>
+        </div>
+        <div className="p-3 overflow-auto space-y-4">
+          {modal.loading && <div className="text-center py-8 text-slate-500">در حال بارگذاری...</div>}
+          {d && d.total_mentions === 0 && !modal.loading && (
+            <div className="text-center py-8 text-slate-500">تبلیغی از این مخاطب ثبت نشده.</div>
+          )}
+          {d && d.summary?.length > 0 && (
+            <div>
+              <p className="text-sm text-slate-400 mb-2">خلاصه‌ی تکرار محصولات (۹۰ روز اخیر):</p>
+              <div className="flex flex-wrap gap-2">
+                {d.summary.map((s, i) => (
+                  <span key={i} className={`badge text-xs ${s.in_assistant ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border-amber-500/40"}`}>
+                    {fa(s.count)}× {s.product_name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {d && d.timeline?.length > 0 && (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-slate-400 border-b border-slate-700">
+                  <th className="py-2 text-right">زمان</th>
+                  <th className="py-2 text-right">منبع</th>
+                  <th className="py-2 text-right">محصول</th>
+                  <th className="py-2 text-right">وضعیت</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.timeline.map((t, i) => (
+                  <tr key={i} className="border-b border-slate-800">
+                    <td className="py-2 text-slate-400 text-xs" dir="ltr">{t.time_shamsi}</td>
+                    <td className="py-2 text-slate-300 text-xs">{SRC[t.source] || t.source}</td>
+                    <td className="py-2">{t.product_name || "—"}</td>
+                    <td className="py-2">
+                      <span className={`badge text-xs ${t.in_assistant ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border-amber-500/40"}`}>
+                        {t.assistant_status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Feature B — per-product recent-sellers modal.
-function SellersModal({ modal, days, onClose }) {
+function SellersModal({ modal, days, onClose, onOpenTrend }) {
   const exportCsv = () => {
     const sellers = modal.sellers || [];
     if (!sellers.length) return toast.info("داده‌ای برای خروجی نیست");
@@ -733,6 +810,7 @@ function SellersModal({ modal, days, onClose }) {
                   <th className="py-2 text-right">اطلاعات تماس</th>
                   <th className="py-2 text-right">گروه</th>
                   <th className="py-2 text-right">زمان</th>
+                  <th className="py-2 text-center">روند</th>
                 </tr>
               </thead>
               <tbody>
@@ -744,6 +822,12 @@ function SellersModal({ modal, days, onClose }) {
                     </td>
                     <td className="py-2 text-slate-300 text-xs">{s.group_name || "—"}</td>
                     <td className="py-2 text-slate-400 text-xs" dir="ltr">{s.time_shamsi}</td>
+                    <td className="py-2 text-center">
+                      <button className="text-xs bg-sky-700 hover:bg-sky-600 text-white px-2 py-1 rounded whitespace-nowrap"
+                        onClick={() => onOpenTrend && onOpenTrend(s.sender_phone || (s.all_contacts || [])[0])}>
+                        📈 روند
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

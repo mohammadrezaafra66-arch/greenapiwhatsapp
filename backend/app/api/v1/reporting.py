@@ -220,6 +220,41 @@ async def product_sellers(product_name: str, days: int = 30, limit: int = 100,
     return {"product_name": product_name, "total_sellers": len(sellers), "sellers": sellers}
 
 
+@router.get("/contact-trend")
+async def contact_trend(phone: str, days: int = 90, limit: int = 500,
+                        db: AsyncSession = Depends(get_db)):
+    """V40 PART 6 — one contact's advertising trend over time (unified across pv/group/status):
+    a chronological timeline of every product they were seen advertising + a per-product repeat
+    summary for this contact. Reached from the «مشاهده فروشندگان اخیر» drill-down."""
+    from app.utils.shamsi import to_shamsi
+    from app.services import product_reports as pr
+    data = await pr.contact_trend_rows(db, phone=phone, days=days, limit=limit)
+    timeline = [
+        {
+            "time_shamsi": to_shamsi(t["mentioned_at"]),
+            "source": t["source"],
+            "product_name": t["product_name"],
+            "in_assistant": t["in_assistant"],
+            "assistant_status": "در دستیار داریم" if t["in_assistant"] else "خارج از دستیار",
+            "group_name": t["group_name"],
+        }
+        for t in data["timeline"]
+    ]
+    summary = [
+        {
+            "product_name": s["product_name"],
+            "count": s["count"],
+            "in_assistant": s["in_assistant"],
+            "assistant_status": "در دستیار داریم" if s["in_assistant"] else "خارج از دستیار",
+            "sources": s["sources"],
+            "last_shamsi": to_shamsi(s["last_mention"]),
+        }
+        for s in data["summary"]
+    ]
+    return {"phone": pr.phone_core(phone), "period_days": days,
+            "total_mentions": len(timeline), "timeline": timeline, "summary": summary}
+
+
 @router.get("/best-hours")
 async def best_hours(days: int = 30, db: AsyncSession = Depends(get_db)):
     """V13.3 — read/delivered rate by Tehran hour-of-day (from campaign_contacts.sent_at).
