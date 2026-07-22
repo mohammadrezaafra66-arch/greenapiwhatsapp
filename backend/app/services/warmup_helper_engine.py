@@ -296,6 +296,33 @@ async def _send_from_main(sender: Account, to_phone: str, text: str, client_fact
         return None
 
 
+async def _send_as_sender(db, sender, to_phone: str, text: str, client_factory,
+                          now=None) -> str | None:
+    """V39 PART 3 — send FROM a Team-Collaboration SENDER, with send-time defense-in-depth on the
+    hard sender-eligibility gate (PART 2). This catches data that BYPASSED the assignment-time API
+    check — a direct DB edit, or a pre-V39 legacy `sender_instance_id` — so a sender that is neither
+    eligible (>=14-day connected + clean 14-day history) NOR carries a valid logged override is
+    BLOCKED here, before any Green API call. An eligible/overridden sender proceeds through the
+    normal `_send_from_main` path (which still enforces the universal connect-cooldown + V27 live
+    health gate). Only the TC SENDER role is gated this way — the cold-reply path (a young cold
+    account answering) intentionally keeps calling `_send_from_main` directly.
+
+    Fail-open ONLY on an unexpected lookup error (never break the tick); a DEFINITE ineligibility
+    still blocks."""
+    from app.services.sender_eligibility import sender_send_allowed
+    sid = getattr(sender, "instance_id", None)
+    try:
+        allowed, reason = await sender_send_allowed(db, sid, now)
+    except Exception as e:   # pragma: no cover - defensive; the assignment-time gate is primary
+        logger.warning("sender-eligibility check errored for %s (allowing): %s", sid, e)
+        allowed = True
+    if not allowed:
+        logger.info("TC send blocked: sender %s fails eligibility (%s) with no valid override",
+                    sid, reason)
+        return None
+    return await _send_from_main(sender, to_phone, text, client_factory)
+
+
 async def _unified_ask_text(db, helper, task_sender, cold_acc, cold_instance_id, phone_digits,
                             ai_fn=None) -> str:
     """V31 — generate a mesh-warming ask through the SAME AI thread-aware generator the Team
@@ -505,8 +532,9 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
         text = await _unified_ask_text(db, helper, task_sender, _cold_acc, task.cold_instance_id,
                                        phone_digits, ai_fn)
 
-    # _send_from_main already applies V27 PART 1's live health gate on the sender.
-    mid = await _send_from_main(task_sender, helper.phone, text, client_factory)
+    # _send_from_main already applies V27 PART 1's live health gate + the V39 connect-cooldown on the
+    # sender; _send_as_sender adds the V39 PART 3 send-time sender-eligibility defense-in-depth.
+    mid = await _send_as_sender(db, task_sender, helper.phone, text, client_factory, now)
 
     if kind == "remind":
         task.status = hs.STATUS_REMINDED
@@ -650,7 +678,7 @@ async def handle_helper_incoming(db, cold_instance_id: str, sender_phone: str,
         if peer_pacer.thankyou_ready(sender.instance_id, now):
             ty_text, _src = await generate_thank_you(
                 contact_name=helper.name, ai_fn=build_thankyou_ai_fn(), forbidden=forbidden)
-            mid = await _send_from_main(sender, helper.phone, ty_text, client_factory)
+            mid = await _send_as_sender(db, sender, helper.phone, ty_text, client_factory, now)
             sent = bool(mid)
             if mid:
                 peer_pacer.record_thankyou(sender.instance_id, now)

@@ -23,6 +23,17 @@ from app.services.warmup_peer_eligibility import MIN_PEER_AGE_DAYS
 
 NOW = datetime(2026, 7, 22, 12, 0, 0)
 
+# Captured before conftest's autouse fixture stubs it to always-allow, so the send-time tests below
+# exercise the real decision.
+_REAL_SENDER_SEND_ALLOWED = se.sender_send_allowed
+
+
+@pytest.fixture(autouse=True)
+def _use_real_eligibility(monkeypatch):
+    monkeypatch.setattr("app.services.sender_eligibility.sender_send_allowed",
+                        _REAL_SENDER_SEND_ALLOWED)
+    yield
+
 
 # ── fake session (SQL-string routing, mirrors test_v29_part8's _DB) ───────────
 class _Res:

@@ -22,7 +22,8 @@ from app.models.warmup_helpers import WarmupHelper, WarmupHelperThread
 from app.services.warmup_content import message_is_safe, is_near_duplicate, has_emoji
 from app.services import warmup_helper_thread as wt
 from app.services import peer_pacer
-from app.services.warmup_helper_engine import _to_utc_naive, _send_from_main, _default_client_factory
+from app.services.warmup_helper_engine import (
+    _to_utc_naive, _send_from_main, _send_as_sender, _default_client_factory)
 from app.services.warmup_scheduler import TEHRAN
 
 logger = logging.getLogger("afrakala.warmup.thankyou")
@@ -171,7 +172,7 @@ async def run_thankyou_tick(db, now: datetime | None = None, *, client_factory=N
             contact_name=helper.name,
             ai_fn=ai_fn if ai_fn is not None else build_thankyou_ai_fn(),
             forbidden=forbidden, rng=r)
-        mid = await _send_from_main(sender, helper.phone, text, client_factory)
+        mid = await _send_as_sender(db, sender, helper.phone, text, client_factory, now)
 
         thread.awaiting_thankyou = False
         thread.pending_thankyou_at = None

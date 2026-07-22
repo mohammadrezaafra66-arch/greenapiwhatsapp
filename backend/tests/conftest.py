@@ -33,3 +33,18 @@ def _hermetic_ai(monkeypatch):
                    "app.services.outreach_message.build_thread_ai_fn"):
         monkeypatch.setattr(target, _no_ai)
     yield
+
+
+@pytest.fixture(autouse=True)
+def _allow_sender_eligibility(monkeypatch):
+    """V39 PART 3 — the send-time sender-eligibility guard (`_send_as_sender`) queries the DB via
+    `sender_eligibility.sender_send_allowed`. The many pre-existing tick tests use positional
+    fake-session queues and lightweight account doubles (no connect anchor), so that extra query
+    would desync them / read the double as ineligible and wrongly block the send. Default the check
+    to ALLOW here so those orthogonal tests are unaffected; the guard's real blocking behavior is
+    proven directly in test_v39_part3 / test_v39_part5, which re-install the real implementation.
+    Production is unchanged."""
+    async def _ok(*_a, **_k):
+        return True, "ok"
+    monkeypatch.setattr("app.services.sender_eligibility.sender_send_allowed", _ok)
+    yield

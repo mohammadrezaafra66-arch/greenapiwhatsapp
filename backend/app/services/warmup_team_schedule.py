@@ -27,7 +27,7 @@ from app.services import warmup_helper_thread as wt
 from app.services import peer_pacer
 from app.services.warmup_scheduler import in_active_hours, to_tehran, TEHRAN
 from app.services.warmup_helper_engine import (
-    _to_utc_naive, _send_from_main, _resolve_cold_phone, resolve_task_sender,
+    _to_utc_naive, _send_from_main, _send_as_sender, _resolve_cold_phone, resolve_task_sender,
     _enrollment_states, _default_client_factory,
 )
 from app.services.warmup_cold_reply import post_auth_cooldown_elapsed
@@ -230,7 +230,7 @@ async def run_team_schedule_tick(db, now: datetime | None = None, *, client_fact
             cold_phone_digits=[phone_digits], recent=recent_bodies,
             ai_fn=ai_fn if ai_fn is not None else build_thread_ai_fn(), forbidden=forbidden)
 
-        mid = await _send_from_main(sender, helper.phone, text, client_factory)
+        mid = await _send_as_sender(db, sender, helper.phone, text, client_factory, now)
 
         # Mark the ask-step on both the task lifecycle and the thread.
         task = (await db.execute(
