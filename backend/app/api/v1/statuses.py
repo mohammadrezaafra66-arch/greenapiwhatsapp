@@ -403,12 +403,21 @@ async def analyze_today_statuses(account_id: str | None = None, db: AsyncSession
     await db.commit()
     products_found = sum(1 for a, _ in results if a.detected_product_name)
     outside = sum(1 for a, _ in results if a.detected_product_name and not a.in_assistant)
+    # Stories the AI could not be run on at all: nothing was stored for them and they stay eligible.
+    # Reported separately so the summary never claims to have analyzed what it actually skipped.
+    skipped = sum(1 for a, _ in results if getattr(a, "vision_failed", False))
+    analyzed = len(results) - skipped
+    message = (f"{analyzed} استوری تحلیل شد، {products_found} محصول شناسایی شد "
+               f"({outside} خارج از دستیار).")
+    if skipped:
+        message += (f" ⚠️ {skipped} استوری به دلیل در دسترس نبودن سرویس هوش مصنوعی تحلیل نشد "
+                    f"و برای تلاش مجدد باقی ماند.")
     return {
-        "analyzed": len(results),
+        "analyzed": analyzed,
         "products_found": products_found,
         "outside_assistant": outside,
-        "message": f"{len(results)} استوری تحلیل شد، {products_found} محصول شناسایی شد "
-                   f"({outside} خارج از دستیار).",
+        "skipped_ai_unavailable": skipped,
+        "message": message,
     }
 
 

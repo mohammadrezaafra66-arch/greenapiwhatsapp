@@ -5,7 +5,10 @@ the text path (gpt_service._chat_via_pool), but sends the image to a VISION-capa
 three configured providers only openai (gpt-4o-mini) and gemini (gemini-2.0-flash) accept image
 input — deepseek is text-only — so this path tries just those two, in that order.
 
-Returns {"text": <persian product description>, "provider": <name>} or None if no vision key works.
+Returns {"text": <persian product description or None>, "provider": <name>} when a vision call
+actually SUCCEEDED (text is None when the model saw no product), or None when vision could not run
+at all — no working key, or every attempt failed. Callers MUST treat those two cases differently:
+see `analyze_story_once`, which refuses to cache the "could not run" case.
 Confidence is not reported by these chat/vision endpoints, so ai_confidence is left unset (the
 archive/UI treat it as optional).
 """
@@ -129,8 +132,12 @@ async def extract_product_from_image(image_path: str) -> dict | None:
                 raw = await _call_openai_vision(key_obj.api_key, model, b64, mime)
             if raw:
                 await mark_success(key_obj.id)
-                cleaned = _clean(raw)
-                return {"text": cleaned, "provider": key_obj.provider} if cleaned else None
+                # A call that SUCCEEDED but saw no product returns {"text": None} — deliberately
+                # distinct from returning None, which means vision could not run at all. The caller
+                # relies on that difference: caching "could not run" as if it were "saw nothing"
+                # would be indistinguishable from a real empty result and would lock the story out
+                # of any future re-analysis.
+                return {"text": _clean(raw), "provider": key_obj.provider}
             await mark_failure(key_obj.id, "empty vision response")
         except Exception as e:
             msg = str(e)

@@ -9,6 +9,12 @@ work / cost-control guarantee holds no matter how analysis is triggered.
 The `analyzer` is injected (PART 3 supplies the real text/image implementation); PART 2 only owns
 the schema + the cache contract. An analyzer returns a dict with any of:
   analysis_type, detected_product_name, matched_product_id, in_assistant, ai_confidence, raw_ai_note.
+
+One deliberate exception to "always cache the first result": if the analyzer reports
+`vision_failed` — the image path was taken but the AI could not run at all — the result is NOT
+persisted. A cached empty row is indistinguishable from a genuine "found nothing", so combined with
+the analyze-once rule it would permanently lock that story out of re-analysis. An AI outage must
+cost a retry, never a permanently wrong answer.
 """
 from __future__ import annotations
 import logging
@@ -54,5 +60,17 @@ async def analyze_story_once(db, story, *, analyzer, now: datetime | None = None
         return cached, True
     result = await analyzer(story) or {}
     row = _build_row(story.id, result, now)
+    if result.get("vision_failed"):
+        # The AI was unavailable, not merely unproductive. Caching this would be a one-way door:
+        # the stored row is indistinguishable from "analyzed, genuinely found nothing", and the
+        # analyze-once rule means the story would never be retried. Return the (unsaved) result so
+        # the caller can still render something, but leave NOTHING in the archive.
+        logger.warning("vision unavailable for story %s — result NOT cached, story stays eligible",
+                       getattr(story, "id", "?"))
+        # Transient marker (a plain attribute, not a column) so callers can report honestly that
+        # the story was skipped rather than analyzed. Without it a bulk run would claim to have
+        # analyzed stories it actually stored nothing for.
+        row.vision_failed = True
+        return row, False
     db.add(row)
     return row, False

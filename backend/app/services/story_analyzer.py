@@ -53,13 +53,20 @@ def build_story_analyzer(products: list, *, vision_fn=None):
 
         vision_text = None
         vision_note = None
+        vision_failed = False
         if is_image:
             try:
                 v = await vision_fn(story.local_media_path)
             except Exception as e:
                 logger.warning("story vision failed (%s): %s", getattr(story, "id", "?"), e)
                 v = None
-            if isinstance(v, dict):
+            if v is None:
+                # Vision could NOT run (no working key, or every attempt failed) — which is not the
+                # same as "the model looked and saw no product". Persisting this would cache an
+                # empty result that is indistinguishable from a genuine one, permanently locking the
+                # story out of re-analysis. Flag it so the cache layer declines to store it.
+                vision_failed = True
+            elif isinstance(v, dict):
                 vision_text = v.get("text")
             elif isinstance(v, str):
                 vision_text = v
@@ -88,6 +95,9 @@ def build_story_analyzer(products: list, *, vision_fn=None):
             "in_assistant": in_assistant,
             "ai_confidence": None,   # chat/vision endpoints don't return a numeric confidence
             "raw_ai_note": vision_note,
+            # True only when the image path was taken and vision was unavailable — the cache layer
+            # uses this to decline persisting, keeping the story eligible for a later retry.
+            "vision_failed": vision_failed,
         }
 
     return analyzer

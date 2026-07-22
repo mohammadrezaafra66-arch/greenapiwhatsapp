@@ -204,6 +204,42 @@ def summarize(pairs) -> dict:
     }
 
 
+def is_failed_vision_row(analysis, cutoff) -> bool:
+    """A row cached by the image path with no product, analyzed at/before `cutoff`.
+
+    ONE-TIME REMEDIATION ONLY, for rows written BEFORE the `vision_failed` guard existed. Back then
+    an AI outage and a genuine "the model saw no product" produced byte-identical rows, so content
+    alone cannot tell them apart — which is why the caller must supply an explicit `cutoff`. After
+    the guard, an outage caches nothing at all, so any such row is a REAL empty result and must be
+    left alone; that is exactly what the cutoff enforces.
+    """
+    if getattr(analysis, "analysis_type", None) != "image":
+        return False
+    if getattr(analysis, "detected_product_name", None):
+        return False
+    at = getattr(analysis, "analyzed_at", None)
+    return bool(at and cutoff and at <= cutoff)
+
+
+async def purge_failed_vision_analyses(db, *, cutoff, dry_run: bool = True) -> dict:
+    """Delete pre-guard image analyses that an AI outage cached as empty, freeing them for retry.
+
+    Deliberately NOT part of `is_stale`: folding this into the normal predicate would make every
+    genuine "vision found nothing" row eligible forever, and the re-analysis loop would never
+    settle. This is an operator-invoked, cutoff-bounded repair.
+    """
+    rows = (await db.execute(select(StoryProductAnalysis))).scalars().all()
+    ids = [a.id for a in rows if is_failed_vision_row(a, cutoff)]
+    stats = {"analyses_total": len(rows), "selected": len(ids), "deleted": 0,
+             "cutoff": str(cutoff), "dry_run": dry_run}
+    if dry_run or not ids:
+        return stats
+    await db.execute(delete(StoryProductAnalysis).where(StoryProductAnalysis.id.in_(ids)))
+    stats["deleted"] = len(ids)
+    logger.info("purged %s failed-vision analyses cached at/before %s", len(ids), cutoff)
+    return stats
+
+
 async def invalidate_stale_analyses(db, *, only_empty: bool = False, dry_run: bool = True) -> dict:
     """Delete the stale cached analyses so their stories become eligible for re-analysis.
 
