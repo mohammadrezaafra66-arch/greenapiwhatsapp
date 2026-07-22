@@ -64,6 +64,8 @@ async def public_top_products(range: int = 30, limit: int = 30,
     group_count (distinct groups), sender_count (distinct senders), last_mentioned_at."""
     days = max(1, int(range))
     limit = pr.clamp_limit(limit)
+    from app.services.price_service import get_products
+    product_ids = {p.get("name"): p.get("id") for p in await get_products(500) if p.get("name")}
     rows = await pr.top_products_rows(db, days=days, limit=limit)
     return {
         "generated_at": datetime.utcnow().isoformat() + "Z",
@@ -72,6 +74,9 @@ async def public_top_products(range: int = 30, limit: int = 30,
         "count": len(rows),
         "products": [
             {
+                **({"product_id": r["product_id"] or product_ids.get(r["product_name"]),
+                    "in_assistant": bool(r["product_id"] or product_ids.get(r["product_name"])),
+                    "assistant_status": "در دستیار داریم" if (r["product_id"] or product_ids.get(r["product_name"])) else "خارج از دستیار"}),
                 "rank": r["rank"],
                 "product_name": r["product_name"],
                 "mention_count": r["mention_count"],

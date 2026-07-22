@@ -134,14 +134,21 @@ async def daily_logs(date: str | None = None, platform: str | None = None,
 @router.get("/product-mentions")
 async def product_mentions(limit: int = 50, db: AsyncSession = Depends(get_db)):
     from app.services.phone_extract import contacts_for
+    from app.services.price_service import get_products
+    product_ids = {p.get("name"): p.get("id") for p in await get_products(500) if p.get("name")}
     rows = (await db.execute(
         select(ProductMentionLog).order_by(ProductMentionLog.mentioned_at.desc()).limit(limit)
     )).scalars().all()
     out = []
     for i in rows:
         sender_display, phones_in_msg, all_contacts = contacts_for(i.sender_phone or "", i.message_text or "")
+        pid = i.product_id or product_ids.get(i.product_name)
         out.append({
-            "id": str(i.id), "product": i.product_name, "sender": sender_display,
+            "id": str(i.id), "product": i.product_name,
+            "product_id": pid,
+            "in_assistant": bool(pid),
+            "assistant_status": "در دستیار داریم" if pid else "خارج از دستیار",
+            "sender": sender_display,
             "sender_name": i.sender_name, "group": i.group_name,
             "time": str(i.mentioned_at), "text": i.message_text,
             "sender_phone": sender_display, "phones_in_message": phones_in_msg,
@@ -163,12 +170,17 @@ async def top_repeated_products(limit: int = 150, days: int = 30, db: AsyncSessi
     Delegates to the shared product_reports service so the public /reports API can never drift."""
     from app.utils.shamsi import to_shamsi
     from app.services import product_reports as pr
+    from app.services.price_service import get_products
+    product_ids = {p.get("name"): p.get("id") for p in await get_products(500) if p.get("name")}
     rows = await pr.top_products_rows(db, days=days, limit=limit)
     return {
         "total_products": len(rows),
         "period_days": days,
         "products": [
             {
+                **({"product_id": r["product_id"] or product_ids.get(r["product_name"]),
+                    "in_assistant": bool(r["product_id"] or product_ids.get(r["product_name"])),
+                    "assistant_status": "در دستیار داریم" if (r["product_id"] or product_ids.get(r["product_name"])) else "خارج از دستیار"}),
                 "rank": r["rank"],
                 "product_name": r["product_name"],
                 "mention_count": r["mention_count"],

@@ -397,6 +397,7 @@ function MentionsTab() {
             <thead>
               <tr className="text-slate-400 border-b border-slate-700">
                 <th className="text-right p-2">محصول</th>
+                <th className="text-right p-2">وضعیت</th>
                 <th className="text-right p-2">فرستنده</th>
                 <th className="text-right p-2">اطلاعات تماس</th>
                 <th className="text-right p-2">گروه</th>
@@ -408,6 +409,11 @@ function MentionsTab() {
               {rows.map((m, i) => (
                 <tr key={i} className="border-b border-slate-800">
                   <td className="p-2 font-bold">{m.product}</td>
+                  <td className="p-2">
+                    <span className={`badge text-xs ${m.in_assistant ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border-amber-500/40"}`}>
+                      {m.assistant_status || (m.in_assistant ? "در دستیار داریم" : "خارج از دستیار")}
+                    </span>
+                  </td>
                   <td className="p-2">{m.sender_name || m.sender || "—"}</td>
                   <td className="p-2"><ContactCell contacts={m.all_contacts} senderPhone={m.sender_phone} /></td>
                   <td className="p-2 text-slate-300">{m.group || "—"}</td>
@@ -545,11 +551,19 @@ function TopProductsTab() {
   const exportExcel = () => {
     const products = data?.products || [];
     if (!products.length) return toast.info("داده‌ای برای خروجی نیست");
-    const header = ["رتبه", "نام محصول", "تعداد تکرار", "تعداد گروه", "تعداد فرستنده", "آخرین ذکر"];
+    const header = ["رتبه", "نام محصول", "وضعیت دستیار", "تعداد تکرار", "تعداد گروه/چت", "تعداد فرستنده", "آخرین ذکر"];
     const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const lines = [header.map(esc).join(",")];
     for (const p of products) {
-      lines.push([p.rank, p.product_name, p.mention_count, p.group_count, p.sender_count, p.last_mention_shamsi].map(esc).join(","));
+      lines.push([
+        p.rank,
+        p.product_name,
+        p.assistant_status || (p.in_assistant ? "در دستیار داریم" : "خارج از دستیار"),
+        p.mention_count,
+        p.group_count,
+        p.sender_count,
+        p.last_mention_shamsi,
+      ].map(esc).join(","));
     }
     const csv = lines.join("\r\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
@@ -590,7 +604,7 @@ function TopProductsTab() {
 
       {loading && !data && <div className="text-sm text-slate-400">در حال بارگذاری...</div>}
       {data && products.length === 0 && !loading && (
-        <div className="card text-sm text-slate-400">هنوز محصول پرتکراری ثبت نشده (از پیام‌های گروه‌ها استخراج می‌شود).</div>
+        <div className="card text-sm text-slate-400">هنوز محصول پرتکراری ثبت نشده (از پیام‌های PV و گروه‌ها استخراج می‌شود).</div>
       )}
 
       {products.length > 0 && (
@@ -600,8 +614,9 @@ function TopProductsTab() {
               <tr className="text-slate-400 border-b border-slate-700">
                 <th className="text-right p-2">رتبه</th>
                 <th className="text-right p-2">نام محصول</th>
+                <th className="text-right p-2">وضعیت</th>
                 <th className="text-right p-2">تعداد تکرار</th>
-                <th className="text-right p-2">تعداد گروه</th>
+                <th className="text-right p-2">تعداد گروه/چت</th>
                 <th className="text-right p-2">تعداد فرستنده</th>
                 <th className="text-right p-2">آخرین ذکر</th>
                 <th className="text-center p-2">مشاهده فروشندگان اخیر</th>
@@ -614,6 +629,11 @@ function TopProductsTab() {
                     <span className={`badge ${rankClass(p.rank)}`}>{fa(p.rank)}</span>
                   </td>
                   <td className="p-2 font-bold">{p.product_name}</td>
+                  <td className="p-2">
+                    <span className={`badge text-xs ${p.in_assistant ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border-amber-500/40"}`}>
+                      {p.assistant_status || (p.in_assistant ? "در دستیار داریم" : "خارج از دستیار")}
+                    </span>
+                  </td>
                   <td className="p-2">{fa(p.mention_count)}</td>
                   <td className="p-2 text-slate-300">{fa(p.group_count)}</td>
                   <td className="p-2 text-slate-300">{fa(p.sender_count)}</td>

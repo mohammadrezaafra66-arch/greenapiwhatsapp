@@ -18,6 +18,18 @@ from app.services import product_reports as prs
 from app.utils.shamsi import to_shamsi
 
 
+@pytest.fixture(autouse=True)
+def _stub_catalog(monkeypatch):
+    """The report endpoints join in the product catalog (price_service.get_products) to tag each
+    row with in_assistant/product_id. That call reaches Redis/Supabase, which is neither available
+    nor relevant here — stub it to an empty catalog so these tests stay hermetic (no live Redis
+    connection lingering into loop teardown). product_id already flows from the DB rows themselves."""
+    async def _empty(*_a, **_k):
+        return []
+    monkeypatch.setattr("app.services.price_service.get_products", _empty)
+    yield
+
+
 # ── fake DB that returns seeded rows for the two query shapes the service issues ──────────────
 class _AggRow(SimpleNamespace):
     pass
@@ -49,8 +61,8 @@ class _FakeDB:
 LAST = datetime(2026, 5, 4, 9, 30)
 
 AGG = [
-    _AggRow(product_name="گوشی سامسونگ A54", mention_count=42, group_count=7, sender_count=15, last_mention=LAST),
-    _AggRow(product_name="iPhone 15", mention_count=30, group_count=5, sender_count=12, last_mention=datetime(2026, 5, 3, 8, 0)),
+    _AggRow(product_name="گوشی سامسونگ A54", product_id=None, mention_count=42, group_count=7, sender_count=15, last_mention=LAST),
+    _AggRow(product_name="iPhone 15", product_id=None, mention_count=30, group_count=5, sender_count=12, last_mention=datetime(2026, 5, 3, 8, 0)),
 ]
 
 

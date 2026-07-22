@@ -5,7 +5,7 @@ Fetches active, in-stock products and (best-effort) joins them with the
 `product_computed_prices_public` view to attach each product's `rounded_sale_price`.
 Results are cached in Redis for PRICING_CACHE_MINUTES.
 
-Normalized output: [{"name": "...", "price": <rounded_sale_price | None>}, ...]
+Normalized output: [{"id": "...", "name": "...", "price": <rounded_sale_price | None>}, ...]
 
 Notes:
 - Only anon-readable product columns are selected. `sku` and `category`
@@ -145,7 +145,7 @@ async def get_products(count: int = 3, category_filter: str | None = None) -> li
             if not name:
                 continue
             price = price_map.get(str(item.get("id")))
-            products.append({"name": name, "price": price})
+            products.append({"id": str(item.get("id") or ""), "name": name, "price": price})
 
         # V16 PART 4 — cache for a SHORT TTL (≤60s) so per-message fetches during a
         # campaign reflect a mid-campaign price change within a minute.
@@ -195,7 +195,11 @@ async def get_products_by_label(label_id: str, count: int = 3) -> list[dict]:
 
         result = []
         for p in products[:count]:
-            result.append({"name": p.get("name", ""), "price": prices.get(str(p.get("id")))})
+            result.append({
+                "id": str(p.get("id") or ""),
+                "name": p.get("name", ""),
+                "price": prices.get(str(p.get("id"))),
+            })
         return result
     except Exception as e:
         print(f"[PriceService] get_products_by_label failed: {e}")

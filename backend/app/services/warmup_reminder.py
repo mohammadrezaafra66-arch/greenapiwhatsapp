@@ -5,7 +5,7 @@ This makes the reminder AI-generated and clearly DISTINGUISHABLE in tone from th
 
   • it explicitly SIGNALS that it is a reminder — naturally weaving in «این پیام جهت یادآوری است» /
     «هنوز منتظر جوابتم» / «یادت نره» rather than reading like a fresh first request;
-  • it naturally uses reminder/urgency emoji from a small curated set (⏰ ⏳ ⌛ 🏃 🔔 📌) — varied,
+  • it naturally uses reminder/urgency emoji from a small curated set (⏰ ⏳ ⌛ 🏃 🔔 📌 📣) — varied,
     never forcing all of them into one message;
   • it reuses — UNCHANGED — the exact same anti-repeat (`is_near_duplicate`) and identifier-leak
     (`message_is_safe`) guards every other warm-up generator uses, so no phone/instance-id/label
@@ -27,7 +27,7 @@ logger = logging.getLogger("afrakala.warmup.reminder")
 # A small curated set of reminder / urgency emoji. Generation naturally draws from these; a
 # reminder that reaches the wire always carries at least one (a backstop appends one if the AI
 # returned none), and NONE of them are used by the ask/thank-you generators — so tone is distinct.
-REMINDER_EMOJI = ("⏰", "⏳", "⌛", "🏃", "🔔", "📌")
+REMINDER_EMOJI = ("⏰", "⏳", "⌛", "🏃", "🔔", "📌", "📣")
 
 # Persian reminder-signaling stems: a genuine reminder contains at least one of these so it never
 # reads like a fresh first ask. Matched as substrings (Persian has no casing to fold).
@@ -71,7 +71,7 @@ def _system_prompt() -> str:
         "پیام باید کاملاً واضح نشان بدهد که این یک یادآوری است (نه یک درخواست تازه) — مثلاً با لحن‌هایی "
         "مثل «این پیام فقط جهت یادآوریه»، «هنوز منتظر جوابتم» یا «یادت نره». "
         "لحن باید دوستانه اما کمی پیگیرانه/فوری‌تر از یک سلامِ اول باشد، نه طلبکارانه. "
-        "یکی دو ایموجیِ متناسب با یادآوری/عجله به‌کار ببر مثل ⏰ ⏳ ⌛ 🏃 🔔 📌 (طبیعی و کم، نه همه را باهم). "
+        "یکی دو ایموجیِ متناسب با یادآوری/عجله به‌کار ببر مثل ⏰ ⏳ ⌛ 🏃 🔔 📌 📣 (طبیعی و کم، نه همه را باهم). "
         "هرگز شماره تلفن، عدد بلند، شناسه یا لینک ننویس — فقط متن کوتاه یادآوری فارسی."
     )
 
@@ -111,6 +111,7 @@ _FALLBACK = [
     "سلام {name}، یادت نره اون پیام کوتاه رو بفرستی ⏳ ممنونم ازت",
     "{name} جان، فقط یه یادآوری ⏰ هنوز منتظر جوابتم 🏃 اگه یه لحظه وقت کردی",
     "سلام {name}، پیگیر همون درخواست کوچیکم 📌 اگه فراموش نشده، همون پیام کوتاه رو بزن لطفاً",
+    "{name} جان، این پیام جهت یادآوریه 📣 فراموش نکن همون پیام کوتاه رو بفرستی، ممنون می‌شم",
 ]
 
 

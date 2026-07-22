@@ -38,6 +38,7 @@ async def top_products_rows(db: AsyncSession, *, days: int, limit: int) -> list[
     rows = (await db.execute(
         select(
             ProductMentionLog.product_name,
+            func.max(ProductMentionLog.product_id).label("product_id"),
             func.count().label("mention_count"),
             func.count(func.distinct(ProductMentionLog.group_chat_id)).label("group_count"),
             func.count(func.distinct(ProductMentionLog.sender_phone)).label("sender_count"),
@@ -52,6 +53,8 @@ async def top_products_rows(db: AsyncSession, *, days: int, limit: int) -> list[
         {
             "rank": i + 1,
             "product_name": r.product_name,
+            "product_id": r.product_id,
+            "in_assistant": bool(r.product_id),
             "mention_count": r.mention_count,
             "group_count": r.group_count,
             "sender_count": r.sender_count,
