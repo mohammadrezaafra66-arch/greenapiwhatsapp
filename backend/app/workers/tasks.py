@@ -792,6 +792,7 @@ def task_sync_account_states():
         from app.models.account import Account, AccountStatus
         from app.services.green_api import GreenAPIClient, GreenInstanceDeleted
         from sqlalchemy import select
+        from datetime import datetime  # V38 — reconnect-rest anchor stamp
         async with AsyncSessionLocal() as db:
             newly_active = []  # V11.3 — accounts that just became authorized
             result = await db.execute(select(Account))
@@ -801,6 +802,10 @@ def task_sync_account_states():
                     state = await client.get_state()
                     was_active = account.status == AccountStatus.active
                     if state == "authorized":
+                        # V38 — anchor the 24h post-reconnect TC rest on a genuine reconnect
+                        # (non-active → active), consistent with the webhook path.
+                        if not was_active:
+                            account.reconnected_at = datetime.utcnow()
                         account.status = AccountStatus.active
                         if not was_active:
                             newly_active.append(account)

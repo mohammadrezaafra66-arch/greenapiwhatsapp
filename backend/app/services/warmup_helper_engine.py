@@ -73,6 +73,13 @@ def resolve_task_sender(accounts: list, helper, enr_map: dict):
         for a in accounts:
             if a.instance_id == sid:
                 return a
+        # V38 HOTFIX (2026-07-22) — AUTO-REROUTE PAUSED. When a contact has an EXPLICIT assigned
+        # sender whose account is NOT currently active (e.g. the primary 7105325764 went
+        # notAuthorized), do NOT silently reassign it to a fallback/unproven number. Return None
+        # so the caller SKIPS this contact — its ask waits for its own sender to recover. Only the
+        # explicit-sender case is paused here; the genuine legacy senderless path below is
+        # unchanged. Revert this single `return None` to restore the old auto-reroute.
+        return None
     return pick_main_sender(accounts, enr_map)
 
 
@@ -270,6 +277,14 @@ async def _resolve_cold_phone(db, cold_instance_id: str, client_factory) -> tupl
 async def _send_from_main(sender: Account, to_phone: str, text: str, client_factory) -> str | None:
     """Send one message from the main warm account, respecting typing simulation so it looks
     human. Best-effort — a send failure never crashes the tick."""
+    # V38 — mandatory 24h post-RECONNECT rest (TC send path ONLY). A number that just came back
+    # from notAuthorized/logout via a rescan must rest before ANY Team-Collaboration send, instead
+    # of being instantly send-eligible with zero rest. This is a NEW TC-scoped check — it does NOT
+    # modify the shared V27 send_gate/can_send_now used by campaigns/mesh for other accounts.
+    from app.services.warmup_reconnect_rest import reconnect_rest_active
+    if reconnect_rest_active(sender):
+        logger.info("helper-ask skipped via %s: post-reconnect 24h rest", sender.instance_id)
+        return None
     # V27 PART 1 — live pre-send health gate: never ask a helper through an unhealthy main
     # account (cooldown/throttle/live yellowCard-blocked).
     from app.services.send_gate import gate_check
@@ -429,6 +444,11 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
     for h in active_helpers:
         ts = resolve_task_sender(accounts, h, enr_map)
         helper_sender[str(h.id)] = ts.instance_id if ts is not None else None
+    # V38 HOTFIX (2026-07-22) — auto-reroute paused: DROP candidate tasks whose contact's OWN
+    # assigned sender is not currently active (helper_sender is None). They wait for their own
+    # sender, never a fallback/unproven number. Contacts whose own sender is active are unaffected.
+    pending = [t for t in pending if helper_sender.get(str(t.helper_id))]
+    awaiting = [t for t in awaiting if helper_sender.get(str(t.helper_id))]
     ask_hist_rows = [(t.helper_id, helper_sender.get(str(t.helper_id)), t.asked_at)
                      for t in all_tasks]
     asked_today_by_sender = variety.distinct_asked_today_by_sender(ask_hist_rows, now)

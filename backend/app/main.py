@@ -36,6 +36,8 @@ async def lifespan(app: FastAPI):
         # idempotently (PG 15 allows ADD VALUE inside this transaction as long as it isn't used here).
         await conn.execute(text("ALTER TYPE accountstatus ADD VALUE IF NOT EXISTS 'green_api_deleted'"))
         await conn.execute(text("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS polling_enabled boolean DEFAULT false"))
+        # V38 — mandatory 24h post-reconnect rest anchor (Team-Collaboration send path only).
+        await conn.execute(text("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS reconnected_at timestamp"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS is_deleted boolean DEFAULT false"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS edited_text text"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS original_message_id varchar(200)"))

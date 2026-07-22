@@ -31,6 +31,13 @@ class Account(Base):
     api_host: Mapped[str | None] = mapped_column(String(200))
     # TG — set when the instance reached 'authorized'; drives the 48h non-contact gate.
     authorized_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # V38 — anchor for the mandatory 24h post-RECONNECT rest. Stamped (UTC) every time the
+    # instance transitions from a non-active state back to 'authorized'/active (a rescan/relink).
+    # DISTINCT from authorized_at (first-auth / Telegram gate anchor): this is re-stamped on every
+    # reconnect so a just-recovered number rests 24h before ANY Team-Collaboration send, instead of
+    # being instantly send-eligible with zero rest. Enforced ONLY in the TC send path (see
+    # services/warmup_reconnect_rest.py + _send_from_main) — it never alters the shared V27 gate.
+    reconnected_at: Mapped[datetime | None] = mapped_column(DateTime)
     phone: Mapped[str | None] = mapped_column(String(20))
     status: Mapped[AccountStatus] = mapped_column(SAEnum(AccountStatus), default=AccountStatus.pending)
     daily_limit: Mapped[int] = mapped_column(Integer, default=50)

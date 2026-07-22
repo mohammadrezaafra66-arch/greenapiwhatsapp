@@ -222,6 +222,11 @@ async def check_account_status(account_id: str, db: AsyncSession = Depends(get_d
         return {"state": "green_api_deleted", "status": account.status,
                 "message": GREEN_API_DELETED_MSG}
     if state == "authorized":
+        # V38 — stamp the reconnect instant on a genuine non-active → active transition so the
+        # 24h post-reconnect Team-Collaboration rest anchors here too (see warmup_reconnect_rest).
+        if account.status != AccountStatus.active:
+            from datetime import datetime
+            account.reconnected_at = datetime.utcnow()
         account.status = AccountStatus.active
     elif state == "blocked":
         account.status = AccountStatus.banned

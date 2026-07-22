@@ -245,6 +245,7 @@ async def instance_state(account_id: str, db: AsyncSession = Depends(get_db)):
         return {"state": "unknown"}
     # Reflect an authorized instance locally so the list updates.
     if state == "authorized" and account.status != AccountStatus.active:
+        account.reconnected_at = datetime.utcnow()  # V38 — anchor 24h post-reconnect TC rest
         account.status = AccountStatus.active
         await db.commit()
     return {"state": state, "status": account.status.value if hasattr(account.status, "value") else account.status}

@@ -308,6 +308,11 @@ async def handle_state_change(instance_id: str, payload: dict):
                 account.status = AccountStatus.disconnected
                 await db.commit()
             elif state == "authorized":
+                # V38 — stamp the reconnect instant ONLY on a genuine non-active → active
+                # transition (a rescan/relink), so the 24h post-reconnect TC rest anchors here.
+                # Repeated 'authorized' pushes while already active must not keep resetting it.
+                if account.status != AccountStatus.active:
+                    account.reconnected_at = datetime.utcnow()
                 account.status = AccountStatus.active
                 await db.commit()
             elif state == "yellowCard":
