@@ -46,6 +46,13 @@ async def lifespan(app: FastAPI):
         await conn.execute(text(
             "UPDATE accounts SET connected_at = reconnected_at "
             "WHERE connected_at IS NULL AND reconnected_at IS NOT NULL"))
+        # V39 PART 2 — logged, deliberate override of the hard sender-eligibility gate.
+        await conn.execute(text(
+            "ALTER TABLE warmup_sender_config ADD COLUMN IF NOT EXISTS eligibility_overridden_at timestamp"))
+        await conn.execute(text(
+            "ALTER TABLE warmup_sender_config ADD COLUMN IF NOT EXISTS eligibility_override_note text"))
+        await conn.execute(text(
+            "ALTER TABLE warmup_sender_config ADD COLUMN IF NOT EXISTS eligibility_overridden_by varchar(60)"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS is_deleted boolean DEFAULT false"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS edited_text text"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS original_message_id varchar(200)"))

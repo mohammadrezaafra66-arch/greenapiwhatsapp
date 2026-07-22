@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.account import Account, AccountStatus
-from app.models.warmup_helpers import WarmupHelperTask, WarmupHelper, OutreachBrief
+from app.models.warmup_helpers import WarmupHelperTask, WarmupHelper, OutreachBrief, WarmupSenderConfig
 from app.services import warmup_helper_service as hs
 
 router = APIRouter(prefix="/warmup-helpers", tags=["warmup-helpers"])
@@ -36,6 +36,10 @@ class HelperBody(BaseModel):
     # V29 — the «همکاری تیمی» UI sends this true so NEW saves must carry a full name (first +
     # last). Default False keeps the V25/V28 API contract (single-token names) intact.
     require_full_name: bool = False
+    # V39 PART 2 — deliberate override of the hard ≥14-day sender-eligibility gate. When the chosen
+    # sender is ineligible, the client must resend with eligibility_override=true + a short note.
+    eligibility_override: bool = False
+    eligibility_override_note: str | None = None
 
 
 class HelperUpdateBody(BaseModel):
@@ -43,6 +47,9 @@ class HelperUpdateBody(BaseModel):
     phone: str | None = None
     is_active: bool | None = None
     sender_instance_id: str | None = None
+    # V39 PART 2 — override fields (only consulted when sender_instance_id is being (re)assigned).
+    eligibility_override: bool = False
+    eligibility_override_note: str | None = None
     # V29 — rich-profile patch fields (default sentinel → "leave unchanged").
     job_title: str | None = _UNSET
     years_experience: int | None = _UNSET
@@ -106,6 +113,11 @@ async def list_senders(db: AsyncSession = Depends(get_db)):
         .group_by(WarmupHelper.sender_instance_id)
     )).all())
     disabled = await hs.enabled_sender_ids(db)   # V29 — set of explicitly-disabled senders
+    # V39 PART 2/4 — which senders are currently running on a deliberate eligibility override, so
+    # the UI can show the «رد شرط ۱۴روزه» badge next to them.
+    from app.services.sender_eligibility import override_active
+    cfgs = (await db.execute(select(WarmupSenderConfig))).scalars().all()
+    overridden = {c.sender_instance_id for c in cfgs if override_active(c)}
     # NOTE: the per-sender warmth score (PART 8) is served by the dedicated GET /warmth endpoint
     # and merged client-side, so this lightweight list stays cheap and its shape is unchanged.
     return {"senders": [{
@@ -114,7 +126,24 @@ async def list_senders(db: AsyncSession = Depends(get_db)):
         "is_warm_peer": bool(getattr(a, "is_warm_peer", False)),
         "contact_count": int(counts.get(a.instance_id, 0) or 0),
         "team_enabled": a.instance_id not in disabled,   # V29 per-sender «همکاری تیمی» toggle
+        "eligibility_overridden": a.instance_id in overridden,   # V39 — «رد شرط ۱۴روزه» badge
     } for a in accts]}
+
+
+@router.get("/sender-eligibility")
+async def sender_eligibility_check(sender_instance_id: str, db: AsyncSession = Depends(get_db)):
+    """V39 PART 2 — is this account eligible to be a Team Collaboration sender RIGHT NOW? Drives the
+    PART 4 warning/confirmation dialog: returns the exact Persian reason + remaining days when not,
+    and whether a deliberate override already stands."""
+    from app.services import sender_eligibility as se
+    eligible, reason, message, age = await se.check_sender_eligibility(db, sender_instance_id)
+    overridden = await se.has_valid_override(db, sender_instance_id)
+    days_remaining = None
+    if reason == "too_young" and age is not None:
+        days_remaining = round(max(0.0, se.MIN_PEER_AGE_DAYS - age), 1)
+    return {"sender_instance_id": sender_instance_id, "eligible": eligible, "reason": reason,
+            "message": message, "age_days": round(age, 1) if age is not None else None,
+            "days_remaining": days_remaining, "override_active": overridden}
 
 
 @router.get("/warmth")
@@ -155,6 +184,16 @@ async def create_helper(body: HelperBody, db: AsyncSession = Depends(get_db)):
     Returns the created contact plus a non-blocking soft-warning banner when the sender's list
     is now over the threshold (the client shows it and still proceeds)."""
     sender = body.sender_instance_id or await hs.resolve_main_sender_instance_id(db)
+    # V39 PART 2 — hard sender-eligibility gate at assignment. Rejects an ineligible sender with a
+    # specific Persian reason unless the request carries an explicit, note-backed override (which is
+    # persisted + audit-logged inside enforce_for_assignment).
+    from app.services import sender_eligibility
+    try:
+        await sender_eligibility.enforce_for_assignment(
+            db, sender, override=body.eligibility_override,
+            note=body.eligibility_override_note)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     try:
         h = await hs.add_helper(
             db, body.name, body.phone, body.is_active, sender_instance_id=sender,
@@ -229,6 +268,15 @@ async def edit_helper(helper_id: str, body: HelperUpdateBody, db: AsyncSession =
         v = getattr(body, f)
         if v != _UNSET:
             patch[f] = v
+    # V39 PART 2 — enforce the sender-eligibility gate only when the sender is being (re)assigned.
+    if body.sender_instance_id is not None:
+        from app.services import sender_eligibility
+        try:
+            await sender_eligibility.enforce_for_assignment(
+                db, body.sender_instance_id, override=body.eligibility_override,
+                note=body.eligibility_override_note)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
     try:
         h = await hs.update_helper(db, uuid.UUID(helper_id), name=body.name,
                                    phone=body.phone, is_active=body.is_active,

@@ -77,7 +77,11 @@ async def test_create_rejects_missing_name():
 
 # ── soft threshold: banner but NOT blocked ───────────────────────────────────
 @pytest.mark.asyncio
-async def test_over_threshold_returns_banner_but_saves():
+async def test_over_threshold_returns_banner_but_saves(monkeypatch):
+    # V39 PART 2 added a sender-eligibility gate before add_helper; this test targets the soft
+    # threshold banner (orthogonal), so no-op the gate (fully covered in test_v39_part2).
+    async def _noop(*a, **k): return None
+    monkeypatch.setattr("app.services.sender_eligibility.enforce_for_assignment", _noop)
     # add (no execute) → count_helpers_for_sender (scalar=31) → get_config (threshold 30)
     db = _DB(results=[_Result(scalar=31), _Result(scalars=[_cfg(threshold=30)])])
     out = await api.create_helper(api.HelperBody(name="نفر۳۱", phone="989120000031",
@@ -88,7 +92,9 @@ async def test_over_threshold_returns_banner_but_saves():
 
 
 @pytest.mark.asyncio
-async def test_under_threshold_no_banner():
+async def test_under_threshold_no_banner(monkeypatch):
+    async def _noop(*a, **k): return None   # V39 PART 2 — no-op the eligibility gate (see above)
+    monkeypatch.setattr("app.services.sender_eligibility.enforce_for_assignment", _noop)
     db = _DB(results=[_Result(scalar=5), _Result(scalars=[_cfg(threshold=30)])])
     out = await api.create_helper(api.HelperBody(name="نفر۵", phone="989120000005",
                                                  sender_instance_id="S1"), db=db)

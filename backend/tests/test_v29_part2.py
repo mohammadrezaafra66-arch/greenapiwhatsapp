@@ -156,9 +156,13 @@ async def test_full_name_required_via_service_flag():
 
 # ── full-name enforcement through the V29 API flag (V28 default stays lenient) ─
 @pytest.mark.asyncio
-async def test_api_full_name_flag_rejects_single_token():
+async def test_api_full_name_flag_rejects_single_token(monkeypatch):
     import app.api.v1.warmup_helpers as api
     from fastapi import HTTPException
+    # V39 PART 2 added an eligibility gate before add_helper; this test targets the full-name rule
+    # (orthogonal), so no-op the gate (fully covered in test_v39_part2).
+    async def _noop(*a, **k): return None
+    monkeypatch.setattr("app.services.sender_eligibility.enforce_for_assignment", _noop)
     # V29 UI sends require_full_name=True → single token rejected
     with pytest.raises(HTTPException) as e:
         await api.create_helper(

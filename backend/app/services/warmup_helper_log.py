@@ -25,9 +25,11 @@ EVENT_THANK_YOU = "thank_you"
 EVENT_COLD_REPLY = "cold_reply"
 EVENT_INCOMING = "incoming"
 EVENT_SAFETY = "safety_flag"
+# V39 PART 2 — an auditable record that the hard sender-eligibility gate was deliberately overridden.
+EVENT_ELIGIBILITY_OVERRIDE = "eligibility_override"
 
 EVENT_TYPES = (EVENT_ASK, EVENT_REMINDER, EVENT_THANK_YOU, EVENT_COLD_REPLY,
-               EVENT_INCOMING, EVENT_SAFETY)
+               EVENT_INCOMING, EVENT_SAFETY, EVENT_ELIGIBILITY_OVERRIDE)
 
 EVENT_FA = {
     EVENT_ASK: "درخواست",
@@ -36,6 +38,7 @@ EVENT_FA = {
     EVENT_COLD_REPLY: "پاسخ اکانت سرد",
     EVENT_INCOMING: "پیام دریافتی",
     EVENT_SAFETY: "هشدار ایمنی",
+    EVENT_ELIGIBILITY_OVERRIDE: "رد شرط واجد شرایط بودن",
 }
 
 

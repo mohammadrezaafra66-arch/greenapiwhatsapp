@@ -205,4 +205,12 @@ class WarmupSenderConfig(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     sender_instance_id: Mapped[str] = mapped_column(String(50), nullable=False, unique=True, index=True)
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # V39 PART 2 — deliberate, LOGGED override of the hard ≥14-day + clean-history sender-eligibility
+    # gate. When `eligibility_overridden_at` is set, this sender was consciously approved as a Team
+    # Collaboration sender despite being under-eligible; PART 3's send-time gate honors it. The note
+    # (why) is mandatory at override time, and `eligibility_overridden_by` records who approved it.
+    # An auditable event is ALSO written to warmup_helper_log at the moment of override.
+    eligibility_overridden_at: Mapped[datetime | None] = mapped_column(DateTime)
+    eligibility_override_note: Mapped[str | None] = mapped_column(Text)
+    eligibility_overridden_by: Mapped[str | None] = mapped_column(String(60))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
