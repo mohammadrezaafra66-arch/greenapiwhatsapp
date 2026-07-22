@@ -201,6 +201,13 @@ export const Statuses = {
   scheduled: (accountId) => http.get(`/statuses/scheduled/${accountId}`).then((r) => r.data),
   stats: (messageId) =>
     http.get(`/statuses/${messageId}/stats`).then((r) => r.data),
+  // V40 — story product analysis
+  analyzeStory: (rowId) => http.post(`/statuses/${rowId}/analyze`).then((r) => r.data),
+  analyzeToday: (accountId) =>
+    http.post("/statuses/analyze-today", null, { params: accountId ? { account_id: accountId } : {} }).then((r) => r.data),
+  analysisList: (accountId) =>
+    http.get("/statuses/analysis", { params: accountId ? { account_id: accountId } : {} }).then((r) => r.data),
+  mediaUrl: (rowId) => `/api/v1/statuses/media/${rowId}`,
 };
 
 // ── Templates ──────────────────────────────────────────

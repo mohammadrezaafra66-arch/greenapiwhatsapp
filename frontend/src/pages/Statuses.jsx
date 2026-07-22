@@ -34,7 +34,7 @@ function statusContent(s) {
   return s.textStatus || s.text || s.caption || s.message || s.urlFile || s.downloadUrl || "";
 }
 
-function IncomingView({ data, loading, onRefresh }) {
+function IncomingView({ data, loading, onRefresh, onAnalyzeToday, analyzingToday }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -42,9 +42,14 @@ function IncomingView({ data, loading, onRefresh }) {
           {data?.account ? `حساب: ${data.account}` : "استوری‌های دریافتی"}
           {data && data.count != null ? ` · ${Number(data.count).toLocaleString("fa-IR")} مورد` : ""}
         </p>
-        <button className="btn-secondary text-xs" disabled={loading} onClick={onRefresh}>
-          {loading ? "در حال بارگذاری..." : "🔄 تازه‌سازی"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button className="btn-primary text-xs" disabled={analyzingToday} onClick={onAnalyzeToday}>
+            {analyzingToday ? "در حال تحلیل..." : "🧠 تحلیل همه استوری‌های امروز"}
+          </button>
+          <button className="btn-secondary text-xs" disabled={loading} onClick={onRefresh}>
+            {loading ? "در حال بارگذاری..." : "🔄 تازه‌سازی"}
+          </button>
+        </div>
       </div>
 
       {loading && !data && <p className="text-slate-500 text-sm">در حال بارگذاری...</p>}
@@ -259,6 +264,20 @@ export default function Statuses() {
     }
   };
 
+  // V40 PART 3.4 — analyze every not-yet-analyzed story stored today (text + image, cached once).
+  const [analyzingToday, setAnalyzingToday] = React.useState(false);
+  const analyzeToday = async () => {
+    setAnalyzingToday(true);
+    try {
+      const res = await Api.analyzeToday(selectedAccount);
+      toast.success(res.message || "تحلیل انجام شد");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    } finally {
+      setAnalyzingToday(false);
+    }
+  };
+
   const loadHistory = async (accId) => {
     if (!accId) return;
     setHistLoading(true);
@@ -427,7 +446,8 @@ export default function Statuses() {
           )}
         </>
       ) : mainTab === "incoming" ? (
-        <IncomingView data={incoming} loading={incLoading} onRefresh={loadIncoming} />
+        <IncomingView data={incoming} loading={incLoading} onRefresh={loadIncoming}
+          onAnalyzeToday={analyzeToday} analyzingToday={analyzingToday} />
       ) : mainTab === "history" ? (
         <HistoryView data={histData} loading={histLoading} onRefresh={() => loadHistory(selectedAccount)} />
       ) : (

@@ -240,6 +240,79 @@ async def get_status_media(status_row_id: str, db: AsyncSession = Depends(get_db
     return FileResponse(row.local_media_path)
 
 
+# ── V40 PART 3 — story product analysis (text via existing detector, image via vision) ──────────
+def _analysis_payload(row, from_cache: bool) -> dict:
+    return {
+        "story_id": str(row.story_id),
+        "analysis_type": row.analysis_type,
+        "detected_product": row.detected_product_name,
+        "matched_product_id": row.matched_product_id,
+        "in_assistant": bool(row.in_assistant),
+        "assistant_status": "در دستیار داریم" if row.in_assistant else "خارج از دستیار",
+        "ai_confidence": row.ai_confidence,
+        "raw_ai_note": row.raw_ai_note,
+        "from_cache": from_cache,
+    }
+
+
+async def _analyze_story_rows(db, rows, *, vision_fn=None):
+    """Analyze each persisted story once (cached), reusing ONE catalog fetch + analyzer. Returns
+    the list of (row_analysis, from_cache). Shared by the per-story button and the daily bulk run."""
+    from app.services.price_service import get_products
+    from app.services.story_analyzer import build_story_analyzer
+    from app.services.story_analysis import analyze_story_once
+    products = await get_products(500)
+    analyzer = build_story_analyzer(products, vision_fn=vision_fn)
+    out = []
+    for story in rows:
+        analysis, from_cache = await analyze_story_once(db, story, analyzer=analyzer)
+        out.append((analysis, from_cache))
+    return out
+
+
+@router.post("/{status_row_id}/analyze")
+async def analyze_story(status_row_id: str, db: AsyncSession = Depends(get_db)):
+    """V40 PART 3.3 — analyze ONE persisted story (text or image) with AI, cached one-time."""
+    from app.models.received_status import ReceivedStatus
+    story = await db.get(ReceivedStatus, uuid.UUID(status_row_id))
+    if story is None:
+        raise HTTPException(404, "استوری یافت نشد")
+    (analysis, from_cache), = await _analyze_story_rows(db, [story])
+    await db.commit()
+    return _analysis_payload(analysis, from_cache)
+
+
+@router.post("/analyze-today")
+async def analyze_today_statuses(account_id: str | None = None, db: AsyncSession = Depends(get_db)):
+    """V40 PART 3.4 — analyze every NOT-yet-analyzed story stored today, reusing the same per-story
+    analysis. Returns a short summary (analyzed, products found, outside-assistant count)."""
+    from datetime import datetime as _dt
+    from app.models.received_status import ReceivedStatus
+    from app.models.story_analysis import StoryProductAnalysis
+    start = _dt.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    q = (
+        select(ReceivedStatus)
+        .outerjoin(StoryProductAnalysis, StoryProductAnalysis.story_id == ReceivedStatus.id)
+        .where(ReceivedStatus.created_at >= start, StoryProductAnalysis.id.is_(None))
+    )
+    if account_id:
+        acc = await db.get(Account, uuid.UUID(account_id))
+        if acc:
+            q = q.where(ReceivedStatus.instance_id == acc.instance_id)
+    rows = (await db.execute(q)).scalars().all()
+    results = await _analyze_story_rows(db, rows)
+    await db.commit()
+    products_found = sum(1 for a, _ in results if a.detected_product_name)
+    outside = sum(1 for a, _ in results if a.detected_product_name and not a.in_assistant)
+    return {
+        "analyzed": len(results),
+        "products_found": products_found,
+        "outside_assistant": outside,
+        "message": f"{len(results)} استوری تحلیل شد، {products_found} محصول شناسایی شد "
+                   f"({outside} خارج از دستیار).",
+    }
+
+
 @router.get("/{message_id}/stats")
 async def status_statistics(message_id: str, db: AsyncSession = Depends(get_db)):
     """Fetch view statistics for a status by its Green API message id."""
