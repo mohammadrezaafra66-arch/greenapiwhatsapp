@@ -312,7 +312,9 @@ async def handle_state_change(instance_id: str, payload: dict):
                 # transition (a rescan/relink), so the 24h post-reconnect TC rest anchors here.
                 # Repeated 'authorized' pushes while already active must not keep resetting it.
                 if account.status != AccountStatus.active:
-                    account.reconnected_at = datetime.utcnow()
+                    _ts = datetime.utcnow()
+                    account.reconnected_at = _ts
+                    account.connected_at = _ts   # V39 PART 1 — universal connect-cooldown anchor
                 account.status = AccountStatus.active
                 await db.commit()
             elif state == "yellowCard":

@@ -805,7 +805,9 @@ def task_sync_account_states():
                         # V38 — anchor the 24h post-reconnect TC rest on a genuine reconnect
                         # (non-active → active), consistent with the webhook path.
                         if not was_active:
-                            account.reconnected_at = datetime.utcnow()
+                            _ts = datetime.utcnow()
+                            account.reconnected_at = _ts
+                            account.connected_at = _ts   # V39 PART 1 — universal connect-cooldown anchor
                         account.status = AccountStatus.active
                         if not was_active:
                             newly_active.append(account)

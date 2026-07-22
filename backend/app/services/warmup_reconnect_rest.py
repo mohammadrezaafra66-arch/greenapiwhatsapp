@@ -1,48 +1,35 @@
-"""V38 — mandatory post-RECONNECT rest for the Team-Collaboration send path.
+"""V38 — mandatory post-RECONNECT rest. **V39 PART 1 GENERALIZED this into a UNIVERSAL check.**
 
-The project already enforces a 24h post-AUTHORIZATION cooldown on cold accounts (see
-`warmup_cold_reply.post_auth_cooldown_elapsed`). This module extends the SAME principle to a
-RECONNECT event: when any account drops (notAuthorized / logout / block) and is later brought
-back with a QR rescan, it must rest for 24h before it sends ANY Team-Collaboration traffic —
-instead of being instantly send-eligible with zero rest the moment `status` flips back to
-`active` (which contradicts every other anti-ban rule in the system).
+Originally (V38) this was a Team-Collaboration-ONLY rest, checked separately inside
+`_send_from_main` and deliberately NOT touching the shared V27 send-gate. V39 PART 1 supersedes
+that narrower scoping: the 24h connect/reconnect cooldown is now folded into the ONE shared gate
+(`send_gate.can_send_now`, reason slug `connect_cooldown`) so it applies UNIVERSALLY — every send
+path (mesh warm-up, campaigns, Team Collaboration) and every account (first-ever connection AND
+reconnection).
 
-The reconnect instant is stamped on `Account.reconnected_at` in BOTH reconnect paths
-(the state-change webhook and the `sync_account_states` poll). These functions are PURE (no DB,
-no framework) so the behavior can be unit-pinned, and are consulted ONLY inside `_send_from_main`
-(the single choke point for every TC send). They NEVER touch the shared V27 send-gate
-(`send_gate.can_send_now`) that campaigns and the warm-up mesh rely on — so this rest applies to
-TC sends only and changes nothing for other accounts' gates.
+To keep exactly ONE source of truth, the functions below are now THIN WRAPPERS delegating to
+`send_gate.connect_cooldown_active` / `hours_until_connect_cooldown_over`. They are retained for
+backward compatibility with existing callers/tests; the real logic lives in `send_gate`. The
+canonical anchor is `Account.connected_at` (falling back to the legacy `reconnected_at`).
 """
 from __future__ import annotations
-from datetime import datetime, timedelta
+from datetime import datetime
 
-# The mandatory rest window after a reconnect, in hours — matches the project's established 24h
-# post-authorization cooldown so the anti-ban rules stay consistent.
-RECONNECT_REST_HOURS = 24
+from app.services import send_gate
+
+# The mandatory rest window after a (re)connect, in hours — the single value lives in send_gate;
+# re-exported here so legacy imports of RECONNECT_REST_HOURS keep working.
+RECONNECT_REST_HOURS = send_gate.CONNECT_COOLDOWN_HOURS
 
 
 def reconnect_rest_active(account, now: datetime | None = None,
                           hours: int = RECONNECT_REST_HOURS) -> bool:
-    """True when `account` reconnected within the last `hours` and must NOT send TC traffic yet.
-
-    `reconnected_at` is a UTC-naive instant (stamped with datetime.utcnow() on reconnect). A
-    None value (never reconnected since the feature shipped, or a long-connected account) means
-    NO rest is owed — so already-connected accounts are unaffected until they actually reconnect.
-    """
-    ra = getattr(account, "reconnected_at", None)
-    if not isinstance(ra, datetime):   # None, or a light test double that doesn't model it → no rest
-        return False
-    now = now or datetime.utcnow()
-    return now < ra + timedelta(hours=hours)
+    """Thin wrapper over the shared universal connect-cooldown (V39 PART 1). True when `account`
+    (re)connected within the last `hours` and must NOT send yet. NULL anchor → no rest owed."""
+    return send_gate.connect_cooldown_active(account, now, hours)
 
 
 def hours_until_rest_over(account, now: datetime | None = None,
                           hours: int = RECONNECT_REST_HOURS) -> float:
-    """Hours remaining in the post-reconnect rest (0.0 when no rest is owed / already elapsed)."""
-    ra = getattr(account, "reconnected_at", None)
-    if not isinstance(ra, datetime):
-        return 0.0
-    now = now or datetime.utcnow()
-    remaining = (ra + timedelta(hours=hours) - now).total_seconds() / 3600.0
-    return max(0.0, remaining)
+    """Thin wrapper: hours remaining in the connect-cooldown (0.0 when none owed / elapsed)."""
+    return send_gate.hours_until_connect_cooldown_over(account, now, hours)

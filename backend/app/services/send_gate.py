@@ -21,11 +21,17 @@ instance), so it degrades safe, never open.
 """
 from __future__ import annotations
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.services import governors
 
 logger = logging.getLogger("afrakala.send_gate")
+
+# V39 PART 1 — UNIVERSAL connect/reconnect cooldown. An account must rest this many hours after it
+# (re)connects to Green API before ANY outbound send (mesh warm-up, campaigns, Team Collaboration).
+# Matches the project's long-standing 24h post-authorization rest. This is the SINGLE source of truth
+# for "is this account past its connect-cooldown"; every send path enforces it via can_send_now.
+CONNECT_COOLDOWN_HOURS = 24
 
 # Live Green API states that must block sending immediately (lower-cased for comparison).
 BLOCKING_LIVE_STATES = {"yellowcard", "blocked", "notauthorized", "notauthorised", "starting"}
@@ -85,14 +91,53 @@ def clear_live_cache() -> None:
     _live_cache.clear()
 
 
+def _connect_ts(account) -> datetime | None:
+    """V39 PART 1 — the canonical "last became connected" instant. Prefers the generalized
+    `connected_at` (stamped on first-ever connection AND every reconnection); falls back to the
+    legacy V38 `reconnected_at` so rows written before `connected_at` existed still honor their
+    remaining cooldown. A non-datetime (None, or a test double that doesn't model it) → None,
+    which the cooldown treats as "long enough ago" (grandfathered / never blocking)."""
+    for attr in ("connected_at", "reconnected_at"):
+        ts = getattr(account, attr, None)
+        if isinstance(ts, datetime):
+            return ts
+    return None
+
+
+def connect_cooldown_active(account, now: datetime | None = None,
+                            hours: int = CONNECT_COOLDOWN_HOURS) -> bool:
+    """True when `account` connected/reconnected within the last `hours` and must NOT send yet.
+    NULL connect anchor → False (grandfathered pre-existing accounts are never blocked). The
+    boundary is exclusive: at exactly +`hours` the cooldown is over."""
+    ts = _connect_ts(account)
+    if ts is None:
+        return False
+    now = now or datetime.utcnow()
+    return now < ts + timedelta(hours=hours)
+
+
+def hours_until_connect_cooldown_over(account, now: datetime | None = None,
+                                      hours: int = CONNECT_COOLDOWN_HOURS) -> float:
+    """Hours remaining in the connect-cooldown (0.0 when none owed / already elapsed)."""
+    ts = _connect_ts(account)
+    if ts is None:
+        return 0.0
+    now = now or datetime.utcnow()
+    return max(0.0, (ts + timedelta(hours=hours) - now).total_seconds() / 3600.0)
+
+
 def can_send_now(account, live_state: str | None = None,
                  now: datetime | None = None) -> tuple[bool, str]:
     """PURE gate. Returns (allowed, reason). `live_state` (if given) is the instance's live
     Green API state; pass None when unknown (the gate still enforces status/cooldown/throttle).
-    reason is a stable slug: not_active | cooldown | throttled | live_state:<s> | ok."""
+    reason is a stable slug: not_active | connect_cooldown | cooldown | throttled | live_state:<s> | ok."""
     now = now or datetime.utcnow()
     if _status_value(account) != "active":
         return False, "not_active"
+    # V39 PART 1 — universal 24h connect/reconnect cooldown, folded into the ONE shared gate so
+    # mesh, campaigns AND Team Collaboration all honor it (superseding V38's TC-only scoping).
+    if connect_cooldown_active(account, now):
+        return False, "connect_cooldown"
     if governors.in_cooldown(account, now):
         return False, "cooldown"
     if governors.is_throttled(account, now):

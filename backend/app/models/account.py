@@ -38,6 +38,14 @@ class Account(Base):
     # being instantly send-eligible with zero rest. Enforced ONLY in the TC send path (see
     # services/warmup_reconnect_rest.py + _send_from_main) — it never alters the shared V27 gate.
     reconnected_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # V39 PART 1 — GENERALIZED connect anchor: the last moment this account became connected to
+    # Green API, whether for the VERY FIRST time (a brand-new account's first authorization) OR
+    # after a disconnect (a rescan/relink). Supersedes the reconnect-specific `reconnected_at` as
+    # the single source of truth for the UNIVERSAL 24h connect-cooldown (send_gate.can_send_now),
+    # which now blocks EVERY send path (mesh, campaigns, Team Collaboration) — not just TC.
+    # Grandfather clause: NULL means «connected long enough ago / before this mechanism existed»
+    # → NEVER blocking. Stamped at the same 4 non-active→active transition sites as reconnected_at.
+    connected_at: Mapped[datetime | None] = mapped_column(DateTime)
     phone: Mapped[str | None] = mapped_column(String(20))
     status: Mapped[AccountStatus] = mapped_column(SAEnum(AccountStatus), default=AccountStatus.pending)
     daily_limit: Mapped[int] = mapped_column(Integer, default=50)

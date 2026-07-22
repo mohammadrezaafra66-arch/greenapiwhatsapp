@@ -38,6 +38,14 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS polling_enabled boolean DEFAULT false"))
         # V38 — mandatory 24h post-reconnect rest anchor (Team-Collaboration send path only).
         await conn.execute(text("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS reconnected_at timestamp"))
+        # V39 PART 1 — generalized connect anchor (first-ever connection AND reconnection) driving
+        # the UNIVERSAL 24h connect-cooldown across all send paths. Backfill from reconnected_at so
+        # any account already inside a V38 reconnect window keeps its remaining cooldown; grandfathered
+        # (NULL) rows stay NULL = not blocking.
+        await conn.execute(text("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS connected_at timestamp"))
+        await conn.execute(text(
+            "UPDATE accounts SET connected_at = reconnected_at "
+            "WHERE connected_at IS NULL AND reconnected_at IS NOT NULL"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS is_deleted boolean DEFAULT false"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS edited_text text"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS original_message_id varchar(200)"))

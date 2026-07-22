@@ -277,16 +277,11 @@ async def _resolve_cold_phone(db, cold_instance_id: str, client_factory) -> tupl
 async def _send_from_main(sender: Account, to_phone: str, text: str, client_factory) -> str | None:
     """Send one message from the main warm account, respecting typing simulation so it looks
     human. Best-effort — a send failure never crashes the tick."""
-    # V38 — mandatory 24h post-RECONNECT rest (TC send path ONLY). A number that just came back
-    # from notAuthorized/logout via a rescan must rest before ANY Team-Collaboration send, instead
-    # of being instantly send-eligible with zero rest. This is a NEW TC-scoped check — it does NOT
-    # modify the shared V27 send_gate/can_send_now used by campaigns/mesh for other accounts.
-    from app.services.warmup_reconnect_rest import reconnect_rest_active
-    if reconnect_rest_active(sender):
-        logger.info("helper-ask skipped via %s: post-reconnect 24h rest", sender.instance_id)
-        return None
     # V27 PART 1 — live pre-send health gate: never ask a helper through an unhealthy main
-    # account (cooldown/throttle/live yellowCard-blocked).
+    # account (cooldown/throttle/live yellowCard-blocked). V39 PART 1 — this shared gate now ALSO
+    # enforces the universal 24h connect/reconnect cooldown (reason `connect_cooldown`), so the
+    # V38 TC-only post-reconnect rest is no longer a separate pre-check here — it is one of the
+    # gate's reasons, giving a single source of truth across mesh/campaign/TC.
     from app.services.send_gate import gate_check
     allowed, gate_reason = gate_check(sender)
     if not allowed:

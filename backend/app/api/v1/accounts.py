@@ -226,7 +226,9 @@ async def check_account_status(account_id: str, db: AsyncSession = Depends(get_d
         # 24h post-reconnect Team-Collaboration rest anchors here too (see warmup_reconnect_rest).
         if account.status != AccountStatus.active:
             from datetime import datetime
-            account.reconnected_at = datetime.utcnow()
+            _ts = datetime.utcnow()
+            account.reconnected_at = _ts
+            account.connected_at = _ts   # V39 PART 1 — universal connect-cooldown anchor
         account.status = AccountStatus.active
     elif state == "blocked":
         account.status = AccountStatus.banned

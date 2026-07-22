@@ -125,13 +125,18 @@ async def test_send_allowed_when_never_reconnected(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_rest_does_not_touch_shared_v27_gate(monkeypatch):
-    """The rest must be a SEPARATE check: can_send_now (the shared gate) never sees reconnected_at,
-    so a carded OTHER account's gate behavior is identical whether or not this feature exists."""
+async def test_reconnect_rest_now_folded_into_shared_gate(monkeypatch):
+    """V39 PART 1 SUPERSEDES V38's TC-only scoping: the 24h connect/reconnect cooldown is now
+    folded INTO the shared V27 gate (`can_send_now`), so a just-reconnected account is blocked
+    universally — by the gate itself, reason `connect_cooldown` — not only on the TC path. The
+    legacy `reconnect_rest_active` wrapper now delegates to that same single source of truth."""
     monkeypatch.setattr("app.services.typing_sim.asyncio.sleep", AsyncMock())
-    # can_send_now has no notion of reconnected_at → a just-reconnected but otherwise-healthy
-    # account is still "allowed" by the V27 gate itself; only the TC-path wrapper blocks it.
-    sender = _acc("SENDER-ISO", reconnected_at=datetime.utcnow())
-    allowed, reason = send_gate.can_send_now(sender, None, datetime.utcnow())
-    assert allowed is True and reason == "ok"          # V27 gate is unchanged
-    assert reconnect_rest_active(sender) is True         # the NEW TC-only gate is what blocks
+    now = datetime.utcnow()
+    sender = _acc("SENDER-ISO", reconnected_at=now)
+    allowed, reason = send_gate.can_send_now(sender, None, now)
+    assert allowed is False and reason == "connect_cooldown"   # gate now enforces it
+    assert reconnect_rest_active(sender, now) is True           # wrapper delegates to the gate logic
+    # And a grandfathered (never-stamped) account is still fully allowed by the gate.
+    old = _acc("SENDER-GRANDFATHER", reconnected_at=None)
+    allowed2, reason2 = send_gate.can_send_now(old, None, now)
+    assert allowed2 is True and reason2 == "ok"
