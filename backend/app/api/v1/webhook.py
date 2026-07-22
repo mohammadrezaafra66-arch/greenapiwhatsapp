@@ -261,11 +261,14 @@ async def handle_incoming(instance_id: str, payload: dict):
                 products = await get_products(200)  # get all products
                 hits = detect_product_mentions(text, products)
                 if hits:
+                    # V40 PART 5 — tag the source so the report can filter pv vs group vs status.
+                    source = "group" if msg.is_group else "pv"
                     async with AsyncSessionLocal() as log_db:
                         for hit in hits[:5]:
                             log_db.add(ProductMentionLog(
                                 product_name=hit["product_name"],
                                 product_id=hit.get("product_id"),
+                                source=source,
                                 sender_phone=sender_phone,
                                 sender_name=sender.get("senderName", ""),
                                 group_name=sender.get("chatName", ""),

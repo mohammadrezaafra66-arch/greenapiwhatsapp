@@ -165,17 +165,20 @@ async def clear_product_mentions(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/top-products")
-async def top_repeated_products(limit: int = 150, days: int = 30, db: AsyncSession = Depends(get_db)):
-    """Most-frequently-mentioned products across groups (from product_mention_logs).
-    Delegates to the shared product_reports service so the public /reports API can never drift."""
+async def top_repeated_products(limit: int = 150, days: int = 30, source: str | None = None,
+                                db: AsyncSession = Depends(get_db)):
+    """Most-frequently-mentioned products across PV/groups/stories (from product_mention_logs).
+    Optional `source` (pv|group|status) filters by where the mentions came from. Delegates to the
+    shared product_reports service so the public /reports API can never drift."""
     from app.utils.shamsi import to_shamsi
     from app.services import product_reports as pr
     from app.services.price_service import get_products
     product_ids = {p.get("name"): p.get("id") for p in await get_products(500) if p.get("name")}
-    rows = await pr.top_products_rows(db, days=days, limit=limit)
+    rows = await pr.top_products_rows(db, days=days, limit=limit, source=source)
     return {
         "total_products": len(rows),
         "period_days": days,
+        "source": source,
         "products": [
             {
                 **({"product_id": r["product_id"] or product_ids.get(r["product_name"]),
@@ -186,6 +189,7 @@ async def top_repeated_products(limit: int = 150, days: int = 30, db: AsyncSessi
                 "mention_count": r["mention_count"],
                 "group_count": r["group_count"],
                 "sender_count": r["sender_count"],
+                "sources": r["sources"],
                 "last_mention_shamsi": to_shamsi(r["last_mention"]),
             }
             for r in rows

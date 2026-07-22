@@ -512,6 +512,7 @@ function TopProductsTab() {
   const [loading, setLoading] = React.useState(false);
   const [days, setDays] = React.useState(30);
   const [limit, setLimit] = React.useState(150);
+  const [source, setSource] = React.useState(""); // "" | pv | group | status
   const [sellersModal, setSellersModal] = React.useState(null); // {product_name, sellers, loading}
 
   const openSellersModal = async (productName) => {
@@ -528,13 +529,15 @@ function TopProductsTab() {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      setData(await Api.topProducts(limit, days));
+      setData(await Api.topProducts(limit, days, source));
     } catch (e) {
       toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setLoading(false);
     }
-  }, [days, limit]);
+  }, [days, limit, source]);
+
+  const SOURCE_LABEL = { pv: "پی‌وی", group: "گروه", status: "استوری" };
 
   React.useEffect(() => {
     load();
@@ -551,7 +554,7 @@ function TopProductsTab() {
   const exportExcel = () => {
     const products = data?.products || [];
     if (!products.length) return toast.info("داده‌ای برای خروجی نیست");
-    const header = ["رتبه", "نام محصول", "وضعیت دستیار", "تعداد تکرار", "تعداد گروه/چت", "تعداد فرستنده", "آخرین ذکر"];
+    const header = ["رتبه", "نام محصول", "وضعیت دستیار", "منبع", "تعداد تکرار", "تعداد گروه/چت", "تعداد فرستنده", "آخرین ذکر"];
     const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const lines = [header.map(esc).join(",")];
     for (const p of products) {
@@ -559,6 +562,7 @@ function TopProductsTab() {
         p.rank,
         p.product_name,
         p.assistant_status || (p.in_assistant ? "در دستیار داریم" : "خارج از دستیار"),
+        (p.sources || []).map((s) => SOURCE_LABEL[s] || s).join(" / "),
         p.mention_count,
         p.group_count,
         p.sender_count,
@@ -598,6 +602,15 @@ function TopProductsTab() {
             <option value={150}>۱۵۰</option>
           </select>
         </div>
+        <div>
+          <label className="label">منبع</label>
+          <select className="input" value={source} onChange={(e) => setSource(e.target.value)}>
+            <option value="">همه منابع</option>
+            <option value="pv">پی‌وی</option>
+            <option value="group">گروه</option>
+            <option value="status">استوری</option>
+          </select>
+        </div>
         <button className="btn-secondary" onClick={exportExcel}>📥 خروجی اکسل</button>
         <span className="badge bg-slate-500/20 text-slate-300 border-slate-500/40">{fa(data?.total_products)} محصول</span>
       </div>
@@ -615,6 +628,7 @@ function TopProductsTab() {
                 <th className="text-right p-2">رتبه</th>
                 <th className="text-right p-2">نام محصول</th>
                 <th className="text-right p-2">وضعیت</th>
+                <th className="text-right p-2">منبع</th>
                 <th className="text-right p-2">تعداد تکرار</th>
                 <th className="text-right p-2">تعداد گروه/چت</th>
                 <th className="text-right p-2">تعداد فرستنده</th>
@@ -633,6 +647,9 @@ function TopProductsTab() {
                     <span className={`badge text-xs ${p.in_assistant ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border-amber-500/40"}`}>
                       {p.assistant_status || (p.in_assistant ? "در دستیار داریم" : "خارج از دستیار")}
                     </span>
+                  </td>
+                  <td className="p-2 text-xs text-slate-300">
+                    {(p.sources || []).map((s) => SOURCE_LABEL[s] || s).join("، ") || "—"}
                   </td>
                   <td className="p-2">{fa(p.mention_count)}</td>
                   <td className="p-2 text-slate-300">{fa(p.group_count)}</td>

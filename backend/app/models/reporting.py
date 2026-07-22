@@ -39,6 +39,9 @@ class ProductMentionLog(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     product_name: Mapped[str | None] = mapped_column(String(500))
     product_id: Mapped[str | None] = mapped_column(String(100))
+    # V40 PART 5 — where this mention came from: pv | group | status (story). Lets the report show
+    # and filter mentions by source. Backfilled for pre-V40 rows from group_chat_id (@g.us → group).
+    source: Mapped[str | None] = mapped_column(String(10))
     sender_phone: Mapped[str | None] = mapped_column(String(20))
     sender_name: Mapped[str | None] = mapped_column(String(200))
     group_name: Mapped[str | None] = mapped_column(String(200))

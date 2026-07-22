@@ -281,9 +281,30 @@ def _analysis_payload(row, from_cache: bool) -> dict:
     }
 
 
+def _log_story_mention(db, story, analysis) -> None:
+    """V40 PART 5 — a story that detected a product feeds the SAME product_mention_logs the report
+    reads, tagged source='status'. Written ONCE (only on first analysis, never on a cache hit) so a
+    re-run cannot inflate the mention count."""
+    from app.models.reporting import ProductMentionLog
+    db.add(ProductMentionLog(
+        product_name=analysis.detected_product_name,
+        product_id=analysis.matched_product_id,
+        source="status",
+        sender_phone=story.sender_phone,
+        sender_name=story.sender_name or "",
+        group_name=None,
+        group_chat_id=None,
+        instance_id=story.instance_id,
+        message_text=(story.text_content or story.caption or "")[:500],
+        mentioned_at=analysis.analyzed_at,
+    ))
+
+
 async def _analyze_story_rows(db, rows, *, vision_fn=None):
     """Analyze each persisted story once (cached), reusing ONE catalog fetch + analyzer. Returns
-    the list of (row_analysis, from_cache). Shared by the per-story button and the daily bulk run."""
+    the list of (row_analysis, from_cache). Shared by the per-story button and the daily bulk run.
+    A newly-detected product also writes a source='status' ProductMentionLog into the existing
+    report pipeline (PART 5) — only on the first analysis, so re-runs never double-count."""
     from app.services.price_service import get_products
     from app.services.story_analyzer import build_story_analyzer
     from app.services.story_analysis import analyze_story_once
@@ -292,6 +313,8 @@ async def _analyze_story_rows(db, rows, *, vision_fn=None):
     out = []
     for story in rows:
         analysis, from_cache = await analyze_story_once(db, story, analyzer=analyzer)
+        if not from_cache and analysis.detected_product_name:
+            _log_story_mention(db, story, analysis)
         out.append((analysis, from_cache))
     return out
 

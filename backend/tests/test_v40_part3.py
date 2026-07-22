@@ -22,7 +22,8 @@ CATALOG = [{"name": "کولر گازی گری 18000", "id": "cat-1"}]
 
 def _story(**kw):
     base = dict(id=uuid.uuid4(), status_type="text", local_media_path=None,
-                text_content=None, caption=None)
+                text_content=None, caption=None, sender_phone="989120000000",
+                sender_name="فروشنده", instance_id="inst-1")
     base.update(kw)
     return SimpleNamespace(**base)
 
@@ -129,7 +130,8 @@ class _DB:
         if getattr(obj, "id", None) is None:
             obj.id = uuid.uuid4()
         self.added.append(obj)
-        self.store[obj.story_id] = obj
+        if hasattr(obj, "story_id"):          # StoryProductAnalysis (not the ProductMentionLog)
+            self.store[obj.story_id] = obj
     async def commit(self): self.commits += 1
 
 
@@ -148,7 +150,9 @@ async def test_analyze_rows_analyzes_once_then_caches(monkeypatch):
     # Re-run the SAME story → served from the archive, vision NOT called again.
     second = await statuses._analyze_story_rows(db, [story], vision_fn=v)
     assert second[0][1] is True and v.calls == 1
-    assert len(db.added) == 1
+    from app.models.story_analysis import StoryProductAnalysis
+    analyses = [o for o in db.added if isinstance(o, StoryProductAnalysis)]
+    assert len(analyses) == 1                 # analyzed once; the cache hit added no second analysis
 
 
 @pytest.mark.asyncio

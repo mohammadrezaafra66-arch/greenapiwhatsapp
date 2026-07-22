@@ -53,6 +53,13 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE warmup_sender_config ADD COLUMN IF NOT EXISTS eligibility_override_note text"))
         await conn.execute(text(
             "ALTER TABLE warmup_sender_config ADD COLUMN IF NOT EXISTS eligibility_overridden_by varchar(60)"))
+        # V40 PART 5 — mention source (pv/group/status). Backfill pre-V40 rows from group_chat_id:
+        # a WhatsApp group chat id ends in @g.us; anything else (a @c.us private chat) is pv.
+        await conn.execute(text("ALTER TABLE product_mention_logs ADD COLUMN IF NOT EXISTS source varchar(10)"))
+        await conn.execute(text(
+            "UPDATE product_mention_logs SET source = "
+            "CASE WHEN group_chat_id LIKE '%@g.us' THEN 'group' ELSE 'pv' END "
+            "WHERE source IS NULL"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS is_deleted boolean DEFAULT false"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS edited_text text"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS original_message_id varchar(200)"))

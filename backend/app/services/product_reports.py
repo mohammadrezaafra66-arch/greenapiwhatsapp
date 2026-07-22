@@ -29,26 +29,39 @@ def clamp_limit(limit: int, hi: int = 500) -> int:
     return max(1, min(int(limit), hi))
 
 
-async def top_products_rows(db: AsyncSession, *, days: int, limit: int) -> list[dict]:
+def _split_sources(raw: str | None) -> list[str]:
+    """Turn the string_agg of distinct sources into a clean, stable list (pv/group/status)."""
+    if not raw:
+        return []
+    return sorted({s.strip() for s in raw.split(",") if s and s.strip()})
+
+
+async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
+                            source: str | None = None) -> list[dict]:
     """The exact top-products aggregation the tab uses: per product_name over the last `days`,
-    mention_count (all rows), group_count (distinct group), sender_count (distinct sender), and the
-    last mention time. Returns raw rows (rank + raw `last_mention` datetime) so each caller can
-    format the timestamp however it needs (Shamsi for the UI, ISO for the public API)."""
+    mention_count (all rows), group_count (distinct group), sender_count (distinct sender), the
+    distinct `sources` contributing (pv/group/status), and the last mention time. When `source` is
+    given, only mentions from that source are counted (the report's منبع filter). Returns raw rows
+    (rank + raw `last_mention` datetime) so each caller formats the timestamp as it needs."""
     limit = clamp_limit(limit)
-    rows = (await db.execute(
+    q = (
         select(
             ProductMentionLog.product_name,
             func.max(ProductMentionLog.product_id).label("product_id"),
             func.count().label("mention_count"),
             func.count(func.distinct(ProductMentionLog.group_chat_id)).label("group_count"),
             func.count(func.distinct(ProductMentionLog.sender_phone)).label("sender_count"),
+            func.string_agg(func.distinct(ProductMentionLog.source), ",").label("sources"),
             func.max(ProductMentionLog.mentioned_at).label("last_mention"),
         )
         .where(ProductMentionLog.mentioned_at >= _cutoff(days))
         .group_by(ProductMentionLog.product_name)
         .order_by(func.count().desc())
         .limit(limit)
-    )).all()
+    )
+    if source:
+        q = q.where(ProductMentionLog.source == source)
+    rows = (await db.execute(q)).all()
     return [
         {
             "rank": i + 1,
@@ -58,6 +71,7 @@ async def top_products_rows(db: AsyncSession, *, days: int, limit: int) -> list[
             "mention_count": r.mention_count,
             "group_count": r.group_count,
             "sender_count": r.sender_count,
+            "sources": _split_sources(getattr(r, "sources", None)),
             "last_mention": r.last_mention,   # raw datetime (may be None)
         }
         for i, r in enumerate(rows)

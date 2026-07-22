@@ -54,7 +54,7 @@ def cors_headers_for(origin: str | None, allowed: list[str],
 
 
 @router.get("/top-products")
-async def public_top_products(range: int = 30, limit: int = 30,
+async def public_top_products(range: int = 30, limit: int = 30, source: str | None = None,
                               db: AsyncSession = Depends(get_db)):
     """Top-N most-mentioned products over the last `range` DAYS — the exact rows the tab shows.
 
@@ -66,11 +66,12 @@ async def public_top_products(range: int = 30, limit: int = 30,
     limit = pr.clamp_limit(limit)
     from app.services.price_service import get_products
     product_ids = {p.get("name"): p.get("id") for p in await get_products(500) if p.get("name")}
-    rows = await pr.top_products_rows(db, days=days, limit=limit)
+    rows = await pr.top_products_rows(db, days=days, limit=limit, source=source)
     return {
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "range_days": days,
         "limit": limit,
+        "source": source,
         "count": len(rows),
         "products": [
             {
@@ -82,6 +83,7 @@ async def public_top_products(range: int = 30, limit: int = 30,
                 "mention_count": r["mention_count"],
                 "group_count": r["group_count"],
                 "sender_count": r["sender_count"],
+                "sources": r["sources"],
                 "last_mentioned_at": _iso(r["last_mention"]),
                 "last_mentioned_shamsi": to_shamsi(r["last_mention"]),
             }
