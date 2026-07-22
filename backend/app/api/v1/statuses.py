@@ -1,5 +1,8 @@
+import os
 import uuid
+import logging
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -9,6 +12,18 @@ from app.models.status_send import StatusSend
 from app.services.green_api import GreenAPIClient
 
 router = APIRouter(prefix="/statuses", tags=["statuses"])
+logger = logging.getLogger("afrakala.statuses")
+
+
+async def _persist_incoming(db: AsyncSession, instance_id: str, statuses: list[dict]) -> None:
+    """V40 PART 1 — persist fetched incoming stories + download their media locally (best-effort).
+    Never lets a persistence error break the live fetch the UI depends on."""
+    try:
+        from app.services.story_media import persist_incoming_statuses
+        await persist_incoming_statuses(db, instance_id, statuses)
+        await db.commit()
+    except Exception as e:
+        logger.warning("persist incoming statuses failed for %s: %s", instance_id, e)
 
 
 class TextStatusBody(BaseModel):
@@ -193,6 +208,8 @@ async def incoming_statuses(account_id: str | None = None, db: AsyncSession = De
             msg = "این قابلیت در پلن Green API این حساب فعال نیست (خطای ۴۰۳)"
         return {"account": account.name, "account_id": str(account.id),
                 "count": 0, "statuses": [], "error": msg}
+    # V40 PART 1 — persist fetched stories + download their media before the ~24h WhatsApp expiry.
+    await _persist_incoming(db, account.instance_id, statuses)
     return {
         "account": account.name,
         "account_id": str(account.id),
@@ -208,7 +225,19 @@ async def get_incoming_statuses(account_id: str, db: AsyncSession = Depends(get_
         raise HTTPException(404, "Account not found")
     client = GreenAPIClient(account.instance_id, account.api_token)
     statuses = await client.get_incoming_statuses()
+    # V40 PART 1 — persist fetched stories + download their media locally.
+    await _persist_incoming(db, account.instance_id, statuses)
     return {"count": len(statuses), "statuses": statuses}
+
+
+@router.get("/media/{status_row_id}")
+async def get_status_media(status_row_id: str, db: AsyncSession = Depends(get_db)):
+    """V40 PART 1 — serve the locally-persisted story image (never the expiring WhatsApp URL)."""
+    from app.models.received_status import ReceivedStatus
+    row = await db.get(ReceivedStatus, uuid.UUID(status_row_id))
+    if row is None or not row.local_media_path or not os.path.exists(row.local_media_path):
+        raise HTTPException(404, "تصویر استوری در دسترس نیست")
+    return FileResponse(row.local_media_path)
 
 
 @router.get("/{message_id}/stats")
