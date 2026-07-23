@@ -24,6 +24,11 @@ GRADUATE_DAY = 25
 # V20 PART 3 — shown when an enrolled cold number has NO eligible warm sender at all.
 NO_PEER_NOTICE = "هیچ اکانت گرم مرجعی انتخاب نشده — یک اکانت گرم را به‌عنوان فرستنده علامت بزنید."
 
+# V41 PART 5 — distinct labels for a number going through the mesh RECOVERY re-warm (Green API's
+# 10-day sequence), so its card is visibly a recovery, not a generic onboarding.
+RECOVERY_BADGE_FA = "در حال بازیابی گرم‌سازی"
+RECOVERY_RESET_LABEL_FA = "دفعات بازنشانی به‌دلیل اختلال"
+
 # Persian labels for the account ROLE in the warm-up system.
 ROLE_LABELS_FA = {
     "being_warmed": "در حال گرم‌سازی",
@@ -114,7 +119,11 @@ def build_number_card(enrollment, edges, now: datetime | None = None,
     now = now or datetime.utcnow()
     state = getattr(enrollment, "state", WarmupState.ENROLLED.value)
     day = day_index(enrollment, now)
-    progress = 100 if state == WarmupState.GRADUATED.value else int(min(100, round(day / GRADUATE_DAY * 100)))
+    # V41 PART 5 — a recovery-mode number follows Green API's ~10-day sequence, so its progress bar
+    # must fill against the recovery graduate day, not the general 25-day onboarding horizon.
+    recovery = recovery_enabled(enrollment)
+    grad_day = RECOVERY_GRADUATE_DAY if recovery else GRADUATE_DAY
+    progress = 100 if state == WarmupState.GRADUATED.value else int(min(100, round(day / grad_day * 100)))
 
     peers = []
     messageable_count = 0
@@ -168,8 +177,17 @@ def build_number_card(enrollment, edges, now: datetime | None = None,
         "role": role,
         "badge": STATE_LABELS_FA.get(state, state),
         "day_index": day,
-        "graduate_day": GRADUATE_DAY,
+        "graduate_day": grad_day,
         "progress_pct": progress,
+        # V41 PART 5 — recovery re-warm visibility: whether this number is in recovery mode, and the
+        # restart-on-disruption counter (how many times PART 2's guard reset it to Day 1, with the
+        # last reason/time). Flat, always-present fields — 0/false/None for every normal card.
+        "recovery_mode": recovery,
+        "recovery_badge": RECOVERY_BADGE_FA if recovery else None,
+        "recovery_reset_count": int(getattr(enrollment, "recovery_reset_count", 0) or 0),
+        "recovery_reset_label": RECOVERY_RESET_LABEL_FA,
+        "recovery_last_reset_at": _iso(getattr(enrollment, "recovery_last_reset_at", None)),
+        "recovery_last_reset_reason": getattr(enrollment, "recovery_last_reset_reason", None),
         "sent_today": sent,
         "received_today": received,
         "day_target": target,

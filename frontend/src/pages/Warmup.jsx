@@ -204,7 +204,15 @@ function MeshDashboard() {
                     {n.role === "graduated_peer" ? ROLE_LABELS.graduated_peer : ROLE_LABELS.being_warmed}
                   </span>
                 </span>
-                <span className={`badge ${BADGE_CLASS[n.state] || ""}`}>{n.badge}</span>
+                <span className="flex items-center gap-1">
+                  {/* V41 PART 5 — distinct badge for a mesh-recovery re-warm (Green API's 10-day sequence) */}
+                  {n.recovery_mode && (
+                    <span className="badge bg-purple-500/20 text-purple-300 border-purple-500/40 text-[10px]">
+                      {n.recovery_badge}
+                    </span>
+                  )}
+                  <span className={`badge ${BADGE_CLASS[n.state] || ""}`}>{n.badge}</span>
+                </span>
               </div>
 
               {n.banner && (
@@ -215,6 +223,15 @@ function MeshDashboard() {
 
               <p className="text-xs text-slate-400">روز {fa(n.day_index)} — پیشرفت تا فارغ‌التحصیلی</p>
               <Progress value={n.progress_pct} max={100} color="bg-emerald-500" />
+
+              {/* V41 PART 5 — restart-on-disruption counter: how many times the recovery cycle was
+                  reset to Day 1, with the last reason. Only shown for a recovery number that reset. */}
+              {n.recovery_mode && n.recovery_reset_count > 0 && (
+                <p className="text-xs text-amber-300">
+                  {n.recovery_reset_label}: {fa(n.recovery_reset_count)}
+                  {n.recovery_last_reset_reason ? ` (${n.recovery_last_reset_reason})` : ""}
+                </p>
+              )}
 
               <div className="grid grid-cols-2 gap-2 text-xs text-slate-400">
                 <span>ارسال امروز: {fa(n.sent_today)}{n.day_target ? ` / ${fa(n.day_target)}` : ""}</span>
