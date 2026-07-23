@@ -29,6 +29,34 @@ NO_PEER_NOTICE = "هیچ اکانت گرم مرجعی انتخاب نشده — 
 RECOVERY_BADGE_FA = "در حال بازیابی گرم‌سازی"
 RECOVERY_RESET_LABEL_FA = "دفعات بازنشانی به‌دلیل اختلال"
 
+# V41 Path B — the pending "waiting to auto-apply" note shown BEFORE 7105325764 is enrolled in
+# recovery mode. Reflects the last automated recheck's findings so the operator sees current status
+# at a glance without asking for a fresh diagnostic (the auto-apply itself happens in the beat task).
+RECOVERY_PENDING_TITLE_FA = "در انتظار شروع خودکار بازیابی"
+
+
+def build_recovery_pending(status: dict | None) -> dict:
+    """Build the pending-state note from the most recent recovery recheck finding (or None if no
+    recheck has run yet). Pure/RNG-free. Message mirrors the last check: breaker فعال/پاک شده and
+    whether a qualifying همراه (peer) sender was یافت شد/یافت نشد."""
+    breaker = bool(status.get("breaker_tripped")) if status else None
+    peer_ok = bool(status.get("peer_qualifies")) if status else None
+    if status is None:
+        # No recheck yet — the daily task has not run since this feature deployed.
+        msg = "در انتظار — هنوز بررسی خودکار انجام نشده است."
+    else:
+        breaker_fa = "فعال" if breaker else "پاک شده"
+        peer_fa = "یافت شد" if peer_ok else "یافت نشد"
+        msg = f"در انتظار — بریکر: {breaker_fa}، فرستنده‌ی همراه واجدشرایط: {peer_fa}"
+    return {
+        "waiting": True,
+        "title": RECOVERY_PENDING_TITLE_FA,
+        "message": msg,
+        "breaker_tripped": breaker,
+        "peer_qualifies": peer_ok,
+        "last_checked_at": (status.get("at") if status else None),
+    }
+
 # Persian labels for the account ROLE in the warm-up system.
 ROLE_LABELS_FA = {
     "being_warmed": "در حال گرم‌سازی",
@@ -217,7 +245,8 @@ def build_dashboard(enrollments, edges_by_instance: dict, breaker_tripped: bool 
                     capacity_full_instances: set | None = None,
                     peer_load: list | None = None,
                     not_connected_instances: set | None = None,
-                    breaker_offenders: list | None = None) -> dict:
+                    breaker_offenders: list | None = None,
+                    recovery_pending: dict | None = None) -> dict:
     """The full dashboard payload: one card per enrolled number (mesh + group placements),
     an account ROLE overview (being-warmed vs peer/sender vs none), a no-peer notice when no
     warm sender is marked, plus a global banner when the chain-ban breaker is tripped.
@@ -253,6 +282,10 @@ def build_dashboard(enrollments, edges_by_instance: dict, breaker_tripped: bool 
     return {
         "breaker_tripped": bool(breaker_tripped),
         "global_banner": global_banner,
+        # V41 Path B — pending auto-apply note for 7105325764 (present only while it is NOT yet
+        # enrolled in recovery mode; None once the daily task has auto-applied and the normal
+        # recovery card takes over).
+        "recovery_pending": recovery_pending,
         "graduate_day": GRADUATE_DAY,
         "numbers": cards,
         "total": len(cards),

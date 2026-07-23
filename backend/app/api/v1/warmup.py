@@ -136,13 +136,30 @@ async def mesh_dashboard(db: AsyncSession = Depends(get_db)):
     # mesh; flag it so its card shows the connect-first notice (db status is the cheap proxy).
     active_ids = {a.instance_id for a in accounts}
     not_connected = {e.instance_id for e in enrollments if e.instance_id not in active_ids}
+
+    # V41 Path B — while the recovery target is NOT yet enrolled in recovery mode, surface the last
+    # automated recheck's finding (breaker/peer) as a pending note so the operator sees current
+    # status at a glance. Once auto-applied, the target's normal recovery card takes over and this
+    # is None. Reuses the daily task's recorded status — no fresh diagnostic/action here.
+    from app.services.warmup_recovery_enroll import RECOVERY_TARGET_INSTANCE
+    from app.services.warmup_recovery_autoenroll import latest_recheck_status
+    from app.services.warmup_dashboard import build_recovery_pending
+    target_enr = next((e for e in enrollments if e.instance_id == RECOVERY_TARGET_INSTANCE), None)
+    target_in_recovery = bool(target_enr is not None
+                              and getattr(target_enr, "recovery_mode", False)
+                              and getattr(target_enr, "is_enabled", False))
+    recovery_pending = None
+    if not target_in_recovery:
+        recovery_pending = build_recovery_pending(await latest_recheck_status(db))
+
     return build_dashboard(enrollments, edges_by_instance, breaker_tripped=tripped,
                            memberships_by_instance=memberships_by_instance,
                            has_eligible_peer=has_eligible_peer, roles=roles,
                            capacity_full_instances=snap["capacity_full_instances"],
                            peer_load=snap["peer_load"],
                            not_connected_instances=not_connected,
-                           breaker_offenders=offenders)
+                           breaker_offenders=offenders,
+                           recovery_pending=recovery_pending)
 
 
 async def _account_or_404(account_id: str, db) -> Account:

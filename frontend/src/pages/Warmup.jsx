@@ -150,6 +150,15 @@ function MeshDashboard() {
         </div>
       )}
 
+      {/* V41 Path B — pending auto-apply status for the recovery target (shown until it is
+          enrolled in recovery mode; reflects the last daily recheck, no action taken here). */}
+      {dash.data?.recovery_pending?.waiting && (
+        <div className="card text-sm bg-amber-500/10 border-amber-500/40 text-amber-200">
+          <div className="font-medium">⏳ {dash.data.recovery_pending.title}</div>
+          <div className="text-xs mt-1">{dash.data.recovery_pending.message}</div>
+        </div>
+      )}
+
       {/* V20 PART 3 — no-peer notice + warm-sender roster */}
       {!dash.loading && dash.data?.has_eligible_peer === false && numbers.length > 0 && (
         <div className={`card text-sm ${BANNER_CLASS.no_peer}`}>
