@@ -25,3 +25,13 @@ export const TOP_PRODUCTS_RANGE_OPTIONS = [
 // The defaults the tab loads with — MUST stay unchanged (guardrail 2).
 export const TOP_PRODUCTS_DEFAULT_DAYS = 30;
 export const TOP_PRODUCTS_DEFAULT_LIMIT = 150;
+
+// The maximum count the backend honors (its top-products clamp ceiling). Options never exceed it.
+export const TOP_PRODUCTS_MAX_LIMIT = 1000;
+
+// V43 PART 2 — product-count («تعداد») options, ascending. 50/100/150 are the previously-existing
+// options (150 stays the default); 200…1000 in 100-unit steps are the additive new ones. Purely
+// additive, capped at the backend's 1000 ceiling.
+export const TOP_PRODUCTS_LIMIT_OPTIONS = [
+  50, 100, 150, 200, 300, 400, 500, 600, 700, 800, 900, 1000,
+];

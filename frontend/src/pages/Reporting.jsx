@@ -3,8 +3,11 @@ import { ReportingApi as Api } from "../api.js";
 import { Spinner, Empty, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
 import {
-  TOP_PRODUCTS_RANGE_OPTIONS, TOP_PRODUCTS_DEFAULT_DAYS, TOP_PRODUCTS_DEFAULT_LIMIT,
+  TOP_PRODUCTS_RANGE_OPTIONS, TOP_PRODUCTS_LIMIT_OPTIONS,
+  TOP_PRODUCTS_DEFAULT_DAYS, TOP_PRODUCTS_DEFAULT_LIMIT,
 } from "./reporting.js";
+
+const faNum = (n) => Number(n).toLocaleString("fa-IR", { useGrouping: false });
 
 const fa = (n) => Number(n || 0).toLocaleString("fa-IR");
 
@@ -706,9 +709,9 @@ function TopProductsTab() {
         <div>
           <label className="label">تعداد</label>
           <select className="input" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
-            <option value={50}>۵۰</option>
-            <option value={100}>۱۰۰</option>
-            <option value={150}>۱۵۰</option>
+            {TOP_PRODUCTS_LIMIT_OPTIONS.map((n) => (
+              <option key={n} value={n}>{faNum(n)}</option>
+            ))}
           </select>
         </div>
         <div>

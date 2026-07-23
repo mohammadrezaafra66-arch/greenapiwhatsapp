@@ -43,7 +43,10 @@ async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
     distinct `sources` contributing (pv/group/status), and the last mention time. When `source` is
     given, only mentions from that source are counted (the report's منبع filter). Returns raw rows
     (rank + raw `last_mention` datetime) so each caller formats the timestamp as it needs."""
-    limit = clamp_limit(limit)
+    # V43 PART 2 — the tab's تعداد picker now goes up to 1000, so the top-products aggregation honors
+    # a limit that high (the grouped query stays fast at this size). Other callers of clamp_limit
+    # keep their own ceilings; only this shared top-products path is raised.
+    limit = clamp_limit(limit, hi=1000)
     q = (
         select(
             ProductMentionLog.product_name,
