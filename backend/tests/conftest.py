@@ -7,13 +7,18 @@ flip an inline decision. This is purely test isolation; production behavior is u
 import pytest
 
 from app.services import peer_pacer
+from app.services import ai_vision_model_cache
 
 
 @pytest.fixture(autouse=True)
 def _reset_pacers():
     peer_pacer.reset()
+    # V42 — the resolved-vision-model cache is process-global too; reset it so a model discovered or
+    # a failure streak recorded by one test can never leak into another.
+    ai_vision_model_cache.reset()
     yield
     peer_pacer.reset()
+    ai_vision_model_cache.reset()
 
 
 @pytest.fixture(autouse=True)
