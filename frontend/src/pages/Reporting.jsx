@@ -2,6 +2,9 @@ import React from "react";
 import { ReportingApi as Api } from "../api.js";
 import { Spinner, Empty, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
+import {
+  TOP_PRODUCTS_RANGE_OPTIONS, TOP_PRODUCTS_DEFAULT_DAYS, TOP_PRODUCTS_DEFAULT_LIMIT,
+} from "./reporting.js";
 
 const fa = (n) => Number(n || 0).toLocaleString("fa-IR");
 
@@ -603,8 +606,8 @@ function BestHoursTab() {
 function TopProductsTab() {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
-  const [days, setDays] = React.useState(30);
-  const [limit, setLimit] = React.useState(150);
+  const [days, setDays] = React.useState(TOP_PRODUCTS_DEFAULT_DAYS);
+  const [limit, setLimit] = React.useState(TOP_PRODUCTS_DEFAULT_LIMIT);
   const [source, setSource] = React.useState(""); // "" | pv | group | status
   const [sellersModal, setSellersModal] = React.useState(null); // {product_name, sellers, loading}
   const [trendModal, setTrendModal] = React.useState(null); // {phone, data, loading}
@@ -695,9 +698,9 @@ function TopProductsTab() {
         <div>
           <label className="label">بازه</label>
           <select className="input" value={days} onChange={(e) => setDays(Number(e.target.value))}>
-            <option value={7}>۷ روز</option>
-            <option value={30}>۳۰ روز</option>
-            <option value={90}>۹۰ روز</option>
+            {TOP_PRODUCTS_RANGE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
           </select>
         </div>
         <div>
