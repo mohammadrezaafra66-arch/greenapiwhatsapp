@@ -140,6 +140,28 @@ async def test_range_is_days_passthrough():
     assert out["range_days"] == 7 and out["limit"] == 50
 
 
+# ── the public top-products endpoint now honors a limit up to 1000 (matches the UI ceiling) ──
+@pytest.mark.asyncio
+async def test_public_top_products_limit_up_to_1000():
+    rows = [
+        _AggRow(product_name=f"محصول {i}", product_id=None, mention_count=1000 - i,
+                group_count=1, sender_count=1, last_mention=LAST)
+        for i in range(1000)
+    ]
+    out = await pub.public_top_products(range=36500, limit=1000, db=_FakeDB(rows, []))
+    # Previously the public endpoint clamped this to 500; it now honors the full 1000.
+    assert out["limit"] == 1000
+    assert out["count"] == 1000
+    assert out["products"][0]["rank"] == 1 and out["products"][-1]["rank"] == 1000
+
+
+@pytest.mark.asyncio
+async def test_public_top_products_clamps_above_1000():
+    # Above the shared ceiling, it still clamps to 1000 (no unbounded query).
+    out = await pub.public_top_products(range=30, limit=5000, db=_FakeDB(AGG, []))
+    assert out["limit"] == 1000
+
+
 # ── scoped, env-configurable CORS allowlist ───────────────────────────────────────────────────
 def test_default_allowlist_includes_the_lan_origin():
     from app.config import settings

@@ -63,7 +63,12 @@ async def public_top_products(range: int = 30, limit: int = 30, source: str | No
     50 / 100 / 150). Each row: rank, product_name, mention_count (all mentions in range),
     group_count (distinct groups), sender_count (distinct senders), last_mentioned_at."""
     days = max(1, int(range))
-    limit = pr.clamp_limit(limit)
+    # Match the UI tab's own top-products ceiling (raised to 1000 in V43 PART 2). The public and UI
+    # endpoints share one aggregation, so their limits must not diverge — otherwise the LAN report
+    # silently truncates at 500 while the in-app tab shows up to 1000. (The sibling mentioners
+    # endpoint deliberately stays at the default 500, matching its own UI counterpart product_sellers,
+    # which is unchanged.)
+    limit = pr.clamp_limit(limit, hi=1000)
     from app.services.price_service import get_products
     product_ids = {p.get("name"): p.get("id") for p in await get_products(500) if p.get("name")}
     rows = await pr.top_products_rows(db, days=days, limit=limit, source=source)
