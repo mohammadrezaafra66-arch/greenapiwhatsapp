@@ -36,6 +36,23 @@ def task_transcribe_group_voice(self, gm_id: str):
         # 30s, 60s, 120s, 240s backoff (idempotent: a 'done' row is skipped on retry).
         raise self.retry(exc=exc, countdown=30 * (2 ** self.request.retries))
 
+@celery_app.task(name="tasks.recovery_autoenroll_recheck")
+def task_recovery_autoenroll_recheck():
+    """V41 Path B — automated wait-and-apply for 7105325764's mesh recovery enrollment.
+
+    Runs once daily. Reuses the EXISTING breaker/peer/enroll logic without change: it does nothing
+    until BOTH the chain-ban breaker is naturally clear AND an account naturally passes the existing
+    >=14-day-clean peer bar, then auto-applies the recovery enrollment exactly once. It NEVER resets
+    the breaker, NEVER relaxes the peer bar, and NEVER touches any other account's enrollment.
+    Idempotent: a safe no-op if 7105325764 is already enrolled in recovery mode."""
+    async def _run():
+        from app.database import AsyncSessionLocal
+        from app.services.warmup_recovery_autoenroll import run_recovery_autoenroll_check
+        async with AsyncSessionLocal() as db:
+            await run_recovery_autoenroll_check(db)
+    run_async(_run())
+
+
 @celery_app.task(name="tasks.clear_old_product_mentions")
 def task_clear_old_product_mentions():
     async def _c():

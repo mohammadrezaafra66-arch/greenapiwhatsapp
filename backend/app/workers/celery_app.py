@@ -40,6 +40,12 @@ celery_app.conf.beat_schedule = {
     "sync-account-states": {"task": "tasks.sync_account_states", "schedule": 300.0},
     "poll-accounts": {"task": "tasks.poll_accounts", "schedule": 10.0},
     "clear-product-mentions": {"task": "tasks.clear_old_product_mentions", "schedule": 86400.0},
+    # V41 Path B — daily automated wait-and-apply for 7105325764's mesh recovery enrollment. Once a
+    # day is ample given the timeframes (breaker ages out over ~48h; peers cross the 14-day-clean bar
+    # around 2026-07-29). Reuses the existing breaker/peer/enroll rules unchanged; auto-applies only
+    # when BOTH clear naturally, then becomes an idempotent no-op. 01:30 Tehran (quiet window).
+    "recovery-autoenroll-recheck": {"task": "tasks.recovery_autoenroll_recheck",
+                                    "schedule": crontab(hour=1, minute=30)},
     "backfill-group-members": {"task": "tasks.backfill_group_member_counts", "schedule": 21600.0},  # every 6h
     "recover-orphaned-campaigns": {"task": "tasks.recover_orphaned_campaigns", "schedule": 600.0},  # every 10 min
     "check-status-schedules": {"task": "tasks.check_status_schedules", "schedule": 300.0},  # every 5 min
