@@ -1,0 +1,552 @@
+{
+  "generatedFrom": "components/Layout.jsx (NAV) + App.jsx (routes)",
+  "groups": [
+    {
+      "label": "ارسال پیام",
+      "icon": "📤",
+      "leaves": [
+        {
+          "group": "ارسال پیام",
+          "label": "کمپین‌ها",
+          "to": "/campaigns"
+        },
+        {
+          "group": "ارسال پیام",
+          "label": "ارسال گروهی",
+          "to": "/wa-collections"
+        },
+        {
+          "group": "ارسال پیام",
+          "label": "صف ارسال",
+          "to": "/send-queue"
+        }
+      ]
+    },
+    {
+      "label": "مخاطبان",
+      "icon": "👥",
+      "leaves": [
+        {
+          "group": "مخاطبان",
+          "label": "مخاطبین",
+          "to": "/contacts"
+        },
+        {
+          "group": "مخاطبان",
+          "label": "دسته‌بندی مخاطبین",
+          "to": "/contact-groups"
+        },
+        {
+          "group": "مخاطبان",
+          "label": "گروه‌های واتساپ",
+          "to": "/groups"
+        },
+        {
+          "group": "مخاطبان",
+          "label": "مجموعه‌های گروهی",
+          "to": "/wa-collections"
+        },
+        {
+          "group": "مخاطبان",
+          "label": "لیست سیاه",
+          "to": "/blacklist"
+        }
+      ]
+    },
+    {
+      "label": "محتوا",
+      "icon": "✍️",
+      "leaves": [
+        {
+          "group": "محتوا",
+          "label": "قالب‌های پیام",
+          "to": "/templates"
+        },
+        {
+          "group": "محتوا",
+          "label": "دکمه‌های تعاملی",
+          "to": "/button-auto-replies"
+        },
+        {
+          "group": "محتوا",
+          "label": "استوری‌ها",
+          "to": "/statuses"
+        },
+        {
+          "group": "محتوا",
+          "label": "برنامه استوری",
+          "to": "/status-scheduler"
+        },
+        {
+          "group": "محتوا",
+          "label": "فایل‌ها",
+          "to": "/files"
+        },
+        {
+          "group": "محتوا",
+          "label": "کارت تماس و موقعیت",
+          "to": "/content"
+        },
+        {
+          "group": "محتوا",
+          "label": "لینک‌های تبلیغاتی",
+          "to": "/advertising-links"
+        }
+      ]
+    },
+    {
+      "label": "گفتگوها",
+      "icon": "💬",
+      "leaves": [
+        {
+          "group": "گفتگوها",
+          "label": "صندوق ورودی",
+          "to": "/inbox"
+        },
+        {
+          "group": "گفتگوها",
+          "label": "تاریخچه پیام‌ها",
+          "to": "/journals"
+        },
+        {
+          "group": "گفتگوها",
+          "label": "پاسخ خودکار",
+          "to": "/keyword-rules"
+        },
+        {
+          "group": "گفتگوها",
+          "label": "پایش گروه‌ها",
+          "to": "/group-monitoring"
+        },
+        {
+          "group": "گفتگوها",
+          "label": "تماس‌ها",
+          "to": "/calls"
+        }
+      ]
+    },
+    {
+      "label": "شماره‌ها",
+      "icon": "📱",
+      "leaves": [
+        {
+          "group": "شماره‌ها",
+          "label": "راه‌اندازی شمارهٔ جدید",
+          "to": "/onboarding"
+        },
+        {
+          "group": "شماره‌ها",
+          "label": "حساب‌های واتساپ",
+          "to": "/accounts"
+        },
+        {
+          "group": "شماره‌ها",
+          "label": "حساب‌های تلگرام",
+          "to": "/telegram-accounts"
+        },
+        {
+          "group": "شماره‌ها",
+          "label": "زمان‌بندی حساب‌ها",
+          "to": "/account-schedules"
+        },
+        {
+          "group": "شماره‌ها",
+          "label": "محافظت و سلامت",
+          "to": "/protection"
+        },
+        {
+          "group": "شماره‌ها",
+          "label": "گرم‌سازی هوشمند",
+          "to": "/warmup"
+        },
+        {
+          "group": "شماره‌ها",
+          "label": "همکاری تیمی",
+          "to": "/team-collaboration"
+        },
+        {
+          "group": "شماره‌ها",
+          "label": "مدیریت پارتنر",
+          "to": "/partner-instances"
+        }
+      ]
+    },
+    {
+      "label": "گزارش‌ها",
+      "icon": "📊",
+      "leaves": [
+        {
+          "group": "گزارش‌ها",
+          "label": "گزارش روزانه",
+          "to": "/reporting"
+        },
+        {
+          "group": "گزارش‌ها",
+          "label": "رصد محصولات",
+          "to": "/products"
+        },
+        {
+          "group": "گزارش‌ها",
+          "label": "مخاطبین فعال واتساپ",
+          "to": "/active-contacts"
+        },
+        {
+          "group": "گزارش‌ها",
+          "label": "بهترین ساعت ارسال",
+          "to": "/reporting"
+        },
+        {
+          "group": "گزارش‌ها",
+          "label": "بازده کمپین (ROI)",
+          "to": "/campaigns"
+        }
+      ]
+    },
+    {
+      "label": "تنظیمات",
+      "icon": "⚙️",
+      "leaves": [
+        {
+          "group": "تنظیمات",
+          "label": "کلیدهای هوش مصنوعی",
+          "to": "/ai-keys"
+        },
+        {
+          "group": "تنظیمات",
+          "label": "تنظیمات هوش مصنوعی",
+          "to": "/ai-settings"
+        },
+        {
+          "group": "تنظیمات",
+          "label": "قابلیت‌های Green API",
+          "to": "/capabilities"
+        },
+        {
+          "group": "تنظیمات",
+          "label": "لینک‌های گروه و کانال",
+          "to": "/join-links"
+        },
+        {
+          "group": "تنظیمات",
+          "label": "شماره‌های خودی (حذف از رصد)",
+          "to": "/own-numbers"
+        },
+        {
+          "group": "تنظیمات",
+          "label": "شماره‌های اضطراری",
+          "to": "/reporting"
+        }
+      ]
+    }
+  ],
+  "leaves": [
+    {
+      "group": null,
+      "label": "داشبورد",
+      "to": "/"
+    },
+    {
+      "group": "ارسال پیام",
+      "label": "کمپین‌ها",
+      "to": "/campaigns"
+    },
+    {
+      "group": "ارسال پیام",
+      "label": "ارسال گروهی",
+      "to": "/wa-collections"
+    },
+    {
+      "group": "ارسال پیام",
+      "label": "صف ارسال",
+      "to": "/send-queue"
+    },
+    {
+      "group": "مخاطبان",
+      "label": "مخاطبین",
+      "to": "/contacts"
+    },
+    {
+      "group": "مخاطبان",
+      "label": "دسته‌بندی مخاطبین",
+      "to": "/contact-groups"
+    },
+    {
+      "group": "مخاطبان",
+      "label": "گروه‌های واتساپ",
+      "to": "/groups"
+    },
+    {
+      "group": "مخاطبان",
+      "label": "مجموعه‌های گروهی",
+      "to": "/wa-collections"
+    },
+    {
+      "group": "مخاطبان",
+      "label": "لیست سیاه",
+      "to": "/blacklist"
+    },
+    {
+      "group": "محتوا",
+      "label": "قالب‌های پیام",
+      "to": "/templates"
+    },
+    {
+      "group": "محتوا",
+      "label": "دکمه‌های تعاملی",
+      "to": "/button-auto-replies"
+    },
+    {
+      "group": "محتوا",
+      "label": "استوری‌ها",
+      "to": "/statuses"
+    },
+    {
+      "group": "محتوا",
+      "label": "برنامه استوری",
+      "to": "/status-scheduler"
+    },
+    {
+      "group": "محتوا",
+      "label": "فایل‌ها",
+      "to": "/files"
+    },
+    {
+      "group": "محتوا",
+      "label": "کارت تماس و موقعیت",
+      "to": "/content"
+    },
+    {
+      "group": "محتوا",
+      "label": "لینک‌های تبلیغاتی",
+      "to": "/advertising-links"
+    },
+    {
+      "group": "گفتگوها",
+      "label": "صندوق ورودی",
+      "to": "/inbox"
+    },
+    {
+      "group": "گفتگوها",
+      "label": "تاریخچه پیام‌ها",
+      "to": "/journals"
+    },
+    {
+      "group": "گفتگوها",
+      "label": "پاسخ خودکار",
+      "to": "/keyword-rules"
+    },
+    {
+      "group": "گفتگوها",
+      "label": "پایش گروه‌ها",
+      "to": "/group-monitoring"
+    },
+    {
+      "group": "گفتگوها",
+      "label": "تماس‌ها",
+      "to": "/calls"
+    },
+    {
+      "group": "شماره‌ها",
+      "label": "راه‌اندازی شمارهٔ جدید",
+      "to": "/onboarding"
+    },
+    {
+      "group": "شماره‌ها",
+      "label": "حساب‌های واتساپ",
+      "to": "/accounts"
+    },
+    {
+      "group": "شماره‌ها",
+      "label": "حساب‌های تلگرام",
+      "to": "/telegram-accounts"
+    },
+    {
+      "group": "شماره‌ها",
+      "label": "زمان‌بندی حساب‌ها",
+      "to": "/account-schedules"
+    },
+    {
+      "group": "شماره‌ها",
+      "label": "محافظت و سلامت",
+      "to": "/protection"
+    },
+    {
+      "group": "شماره‌ها",
+      "label": "گرم‌سازی هوشمند",
+      "to": "/warmup"
+    },
+    {
+      "group": "شماره‌ها",
+      "label": "همکاری تیمی",
+      "to": "/team-collaboration"
+    },
+    {
+      "group": "شماره‌ها",
+      "label": "مدیریت پارتنر",
+      "to": "/partner-instances"
+    },
+    {
+      "group": "گزارش‌ها",
+      "label": "گزارش روزانه",
+      "to": "/reporting"
+    },
+    {
+      "group": "گزارش‌ها",
+      "label": "رصد محصولات",
+      "to": "/products"
+    },
+    {
+      "group": "گزارش‌ها",
+      "label": "مخاطبین فعال واتساپ",
+      "to": "/active-contacts"
+    },
+    {
+      "group": "گزارش‌ها",
+      "label": "بهترین ساعت ارسال",
+      "to": "/reporting"
+    },
+    {
+      "group": "گزارش‌ها",
+      "label": "بازده کمپین (ROI)",
+      "to": "/campaigns"
+    },
+    {
+      "group": "تنظیمات",
+      "label": "کلیدهای هوش مصنوعی",
+      "to": "/ai-keys"
+    },
+    {
+      "group": "تنظیمات",
+      "label": "تنظیمات هوش مصنوعی",
+      "to": "/ai-settings"
+    },
+    {
+      "group": "تنظیمات",
+      "label": "قابلیت‌های Green API",
+      "to": "/capabilities"
+    },
+    {
+      "group": "تنظیمات",
+      "label": "لینک‌های گروه و کانال",
+      "to": "/join-links"
+    },
+    {
+      "group": "تنظیمات",
+      "label": "شماره‌های خودی (حذف از رصد)",
+      "to": "/own-numbers"
+    },
+    {
+      "group": "تنظیمات",
+      "label": "شماره‌های اضطراری",
+      "to": "/reporting"
+    }
+  ],
+  "distinctNavRoutes": [
+    "/",
+    "/account-schedules",
+    "/accounts",
+    "/active-contacts",
+    "/advertising-links",
+    "/ai-keys",
+    "/ai-settings",
+    "/blacklist",
+    "/button-auto-replies",
+    "/calls",
+    "/campaigns",
+    "/capabilities",
+    "/contact-groups",
+    "/contacts",
+    "/content",
+    "/files",
+    "/group-monitoring",
+    "/groups",
+    "/inbox",
+    "/join-links",
+    "/journals",
+    "/keyword-rules",
+    "/onboarding",
+    "/own-numbers",
+    "/partner-instances",
+    "/products",
+    "/protection",
+    "/reporting",
+    "/send-queue",
+    "/status-scheduler",
+    "/statuses",
+    "/team-collaboration",
+    "/telegram-accounts",
+    "/templates",
+    "/wa-collections",
+    "/warmup"
+  ],
+  "routerRoutes": [
+    "/",
+    "/account-schedules",
+    "/accounts",
+    "/active-contacts",
+    "/advertising-links",
+    "/ai-keys",
+    "/ai-settings",
+    "/blacklist",
+    "/button-auto-replies",
+    "/calls",
+    "/campaigns",
+    "/capabilities",
+    "/contact-groups",
+    "/contacts",
+    "/content",
+    "/files",
+    "/group-monitoring",
+    "/groups",
+    "/inbox",
+    "/join-links",
+    "/journals",
+    "/keyword-rules",
+    "/onboarding",
+    "/own-numbers",
+    "/partner-instances",
+    "/products",
+    "/protection",
+    "/reporting",
+    "/send-queue",
+    "/status-scheduler",
+    "/statuses",
+    "/team-collaboration",
+    "/telegram-accounts",
+    "/templates",
+    "/wa-collections",
+    "/warmup"
+  ],
+  "duplicates": [
+    {
+      "to": "/campaigns",
+      "labels": [
+        "کمپین‌ها",
+        "بازده کمپین (ROI)"
+      ]
+    },
+    {
+      "to": "/reporting",
+      "labels": [
+        "گزارش روزانه",
+        "بهترین ساعت ارسال",
+        "شماره‌های اضطراری"
+      ]
+    },
+    {
+      "to": "/wa-collections",
+      "labels": [
+        "ارسال گروهی",
+        "مجموعه‌های گروهی"
+      ]
+    }
+  ],
+  "routesInNavNotRouter": [],
+  "routerRoutesNotInSidebar": [],
+  "counts": {
+    "distinctNavRoutes": 36,
+    "routerRoutes": 36,
+    "navLeafEntries": 40,
+    "duplicateRoutes": 3
+  }
+}
