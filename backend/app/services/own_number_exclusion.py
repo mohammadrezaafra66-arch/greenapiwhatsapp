@@ -27,9 +27,23 @@ def normalize_own_number(phone: str | None) -> str:
 
 
 async def get_excluded_cores(db) -> set[str]:
-    """Every currently-excluded phone core. Small table → cheap to read per detection pass."""
-    rows = (await db.execute(select(OwnNumberExclusion.phone_core))).scalars().all()
-    return {c for c in rows if c}
+    """Every currently-excluded phone core. Small table → cheap to read per detection pass.
+
+    Tolerant of any session-like object: a real AsyncSession result always exposes `.scalars()`; a
+    lightweight test double that does not simply yields "nothing excluded" (safe default) instead of
+    raising, so callers that pass a minimal fake session are never broken by this extra read."""
+    result = await db.execute(select(OwnNumberExclusion.phone_core))
+    rows = result.scalars().all() if hasattr(result, "scalars") else []
+    # phone_core is a String column → real rows are strings. Filtering to non-empty strings also makes
+    # this safe against a minimal test double whose generic result yields unrelated (unhashable) rows.
+    return {c for c in rows if isinstance(c, str) and c}
+
+
+def is_excluded_core(phone: str | None, cores: set[str]) -> bool:
+    """Sync membership test against a pre-fetched core set — for tight loops / comprehensions where
+    a per-row DB query (and an await) would be wrong. Empty/blank numbers are never excluded."""
+    core = normalize_own_number(phone)
+    return bool(core) and core in cores
 
 
 async def is_excluded(db, phone: str | None, *, cores: set[str] | None = None) -> bool:

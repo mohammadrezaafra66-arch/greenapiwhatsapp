@@ -250,10 +250,21 @@ async def handle_incoming(instance_id: str, payload: dict):
                 except Exception as e:
                     print(f"[Keyword] match/reply failed (non-fatal): {e}")
 
+        # V45 PART 2.1 — exclude OUR OWN numbers from product detection ENTIRELY. If the sender is
+        # one of our own numbers, skip detection before any AI/detector call and never write a
+        # ProductMentionLog row: it's our own promotional content, not real market signal.
+        _own_excluded = False
+        if text:
+            try:
+                from app.services.own_number_exclusion import is_excluded as _is_own_excluded
+                _own_excluded = await _is_own_excluded(db, sender_phone)
+            except Exception as e:
+                logger.warning("[OwnNumber] exclusion check failed (non-fatal): %s", e)
+
         # Product mention detection (PV + groups/broadcast-like chats). Known assistant/catalog
         # products are stored with product_id; unknown advertised products are extracted from the
         # message text with product_id=None so reports can show them as «خارج از دستیار».
-        if text:
+        if text and not _own_excluded:
             try:
                 from app.services.price_service import get_products
                 from app.services.product_match import detect_product_mentions

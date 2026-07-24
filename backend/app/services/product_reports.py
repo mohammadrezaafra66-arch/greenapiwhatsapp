@@ -14,7 +14,7 @@ key), and the drill-down filters by product_name. So product_name is the correct
 from __future__ import annotations
 from datetime import datetime, timedelta
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_, or_, not_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.reporting import ProductMentionLog
@@ -24,6 +24,21 @@ from app.services.product_match import product_group_key
 
 def _cutoff(days: int) -> datetime:
     return datetime.utcnow() - timedelta(days=max(1, days))
+
+
+def exclude_own_condition(cores):
+    """V45 PART 2.3 — a SQL predicate that drops any mention whose stored sender_phone contains one
+    of our own-number national cores (in ANY format: 09…, 98…, …@c.us all embed the 10-digit core).
+    Null-safe: a mention with no sender_phone is KEPT (only real matches are removed). Returns None
+    when there is nothing to exclude, so callers can skip adding a clause."""
+    cores = [c for c in (cores or set()) if c]
+    if not cores:
+        return None
+    return and_(*[
+        or_(ProductMentionLog.sender_phone.is_(None),
+            not_(ProductMentionLog.sender_phone.like(f"%{core}%")))
+        for core in cores
+    ])
 
 
 def clamp_limit(limit: int, hi: int = 500) -> int:
@@ -38,7 +53,8 @@ def _split_sources(raw: str | None) -> list[str]:
 
 
 async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
-                            source: str | None = None, search: str | None = None) -> list[dict]:
+                            source: str | None = None, search: str | None = None,
+                            exclude_cores=None) -> list[dict]:
     """The exact top-products aggregation the tab uses: per product_name over the last `days`,
     mention_count (all rows), group_count (distinct group), sender_count (distinct sender), the
     distinct `sources` contributing (pv/group/status), and the last mention time. When `source` is
@@ -70,6 +86,16 @@ async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
     )
     if source:
         q = q.where(ProductMentionLog.source == source)
+    # V45 PART 2.3 — defense-in-depth: even if a pre-existing/legacy row from one of our own numbers
+    # slipped in before the detection-time guards, keep it out of the top-products report. Cores are
+    # fetched from the exclusion list by default (exclude_cores=None); an explicit set (incl. empty)
+    # overrides that. Fetching here (not at the endpoint) keeps every caller's signature stable.
+    if exclude_cores is None:
+        from app.services.own_number_exclusion import get_excluded_cores
+        exclude_cores = await get_excluded_cores(db)
+    _own = exclude_own_condition(exclude_cores)
+    if _own is not None:
+        q = q.where(_own)
     rows = (await db.execute(q)).all()
 
     # V44 — merge near-identical product-name spellings into ONE row by a normalized key (reusing the

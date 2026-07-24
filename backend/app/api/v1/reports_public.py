@@ -71,6 +71,8 @@ async def public_top_products(range: int = 30, limit: int = 30, source: str | No
     limit = pr.clamp_limit(limit, hi=1000)
     from app.services.price_service import get_products
     product_ids = {p.get("name"): p.get("id") for p in await get_products(500) if p.get("name")}
+    # V45 PART 2.3 — top_products_rows fetches the own-number exclusion list itself and filters those
+    # rows out of the shared aggregation (so the public report matches the in-app tab).
     rows = await pr.top_products_rows(db, days=days, limit=limit, source=source)
     return {
         "generated_at": datetime.utcnow().isoformat() + "Z",

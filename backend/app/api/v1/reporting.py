@@ -176,6 +176,8 @@ async def top_repeated_products(limit: int = 150, days: int = 30, source: str | 
     from app.services import product_reports as pr
     from app.services.price_service import get_products
     product_ids = {p.get("name"): p.get("id") for p in await get_products(500) if p.get("name")}
+    # V45 PART 2.3 — top_products_rows fetches the own-number exclusion list itself and filters those
+    # rows out of the report (defense in depth behind the detection-time guards).
     rows = await pr.top_products_rows(db, days=days, limit=limit, source=source, search=search)
     return {
         "total_products": len(rows),

@@ -309,11 +309,18 @@ async def _analyze_story_rows(db, rows, *, vision_fn=None):
     from app.services.story_analyzer import build_story_analyzer
     from app.services.story_analysis import analyze_story_once
     from app.services.catalog_spot_alert import get_our_phone_cores, maybe_raise_spot_alert
+    from app.services.own_number_exclusion import get_excluded_cores, is_excluded_core
     products = await get_products(500)
     analyzer = build_story_analyzer(products, vision_fn=vision_fn)
     our_cores = await get_our_phone_cores(db)
+    # V45 PART 2.2 — never run the (costly vision) analyzer on our OWN numbers. Defense in depth:
+    # callers pre-filter, but skipping here too guarantees no own-number story can ever reach the AI
+    # path or persist a story_product_analysis row, no matter how it was invoked.
+    excluded_cores = await get_excluded_cores(db)
     out = []
     for story in rows:
+        if is_excluded_core(getattr(story, "sender_phone", None), excluded_cores):
+            continue
         analysis, from_cache = await analyze_story_once(db, story, analyzer=analyzer)
         if not from_cache and analysis.detected_product_name:
             _log_story_mention(db, story, analysis)
@@ -334,6 +341,15 @@ async def analyze_story(status_row_id: str, db: AsyncSession = Depends(get_db)):
     story = await db.get(ReceivedStatus, uuid.UUID(status_row_id))
     if story is None:
         raise HTTPException(404, "استوری یافت نشد")
+    # V45 PART 2.2 — an own-number story is never analyzed (no vision/AI call, no persisted row).
+    from app.services.own_number_exclusion import is_excluded as _is_own_excluded
+    if await _is_own_excluded(db, getattr(story, "sender_phone", None)):
+        return {
+            "excluded": True,
+            "detected_product": None,
+            "assistant_status": "خارج از رصد (شمارهٔ خودی)",
+            "from_cache": False,
+        }
     (analysis, from_cache), = await _analyze_story_rows(db, [story])
     await db.commit()
     return _analysis_payload(analysis, from_cache)
@@ -399,7 +415,13 @@ async def analyze_today_statuses(account_id: str | None = None, db: AsyncSession
         if acc:
             q = q.where(ReceivedStatus.instance_id == acc.instance_id)
     rows = (await db.execute(q)).scalars().all()
-    results = await _analyze_story_rows(db, rows)
+    # V45 PART 2.2 — drop our OWN numbers before any AI/vision call. Partition here (not just inside
+    # _analyze_story_rows) so the summary can report own-number exclusions honestly and separately.
+    from app.services.own_number_exclusion import get_excluded_cores, is_excluded_core
+    _excluded_cores = await get_excluded_cores(db)
+    eligible = [r for r in rows if not is_excluded_core(getattr(r, "sender_phone", None), _excluded_cores)]
+    excluded_own = len(rows) - len(eligible)
+    results = await _analyze_story_rows(db, eligible)
     await db.commit()
     products_found = sum(1 for a, _ in results if a.detected_product_name)
     outside = sum(1 for a, _ in results if a.detected_product_name and not a.in_assistant)
@@ -412,11 +434,14 @@ async def analyze_today_statuses(account_id: str | None = None, db: AsyncSession
     if skipped:
         message += (f" ⚠️ {skipped} استوری به دلیل در دسترس نبودن سرویس هوش مصنوعی تحلیل نشد "
                     f"و برای تلاش مجدد باقی ماند.")
+    if excluded_own:
+        message += f" {excluded_own} استوری متعلق به شماره‌های خودی نادیده گرفته شد."
     return {
         "analyzed": analyzed,
         "products_found": products_found,
         "outside_assistant": outside,
         "skipped_ai_unavailable": skipped,
+        "excluded_own_numbers": excluded_own,
         "message": message,
     }
 
