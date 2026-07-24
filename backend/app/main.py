@@ -24,7 +24,7 @@ from app.api.v1 import (
     capabilities as capabilities_router,
     adlinks, warmup, warmup_helpers,
     group_monitor, telegram, onboarding,
-    reports_public, own_numbers,
+    reports_public, own_numbers, active_contacts,
 )
 from app.config import settings
 
@@ -1232,6 +1232,7 @@ for router in [
     capabilities_router.router, adlinks.router, warmup.router,
     warmup_helpers.router, group_monitor.router, telegram.router,
     onboarding.router, reports_public.router, own_numbers.router,
+    active_contacts.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

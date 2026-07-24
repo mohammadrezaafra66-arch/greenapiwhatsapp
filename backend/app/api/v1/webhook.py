@@ -307,6 +307,19 @@ async def handle_incoming(instance_id: str, payload: dict):
             except Exception as e:
                 logger.warning("[ProductMention] detection error: %s", e)
 
+        # V45 PART 3 — harvest active WhatsApp numbers seen on a PUBLIC/BROADCAST surface (group /
+        # channel / forum / broadcast-list — never a private DM, never our own numbers) into the
+        # «مخاطبین فعال واتساپ» lead list. Best-effort so it can never disrupt the webhook.
+        try:
+            from app.services.active_contact_harvest import (
+                message_source_for_chat_id, upsert_active_contact)
+            _harvest_src = message_source_for_chat_id(sender.get("chatId", ""))
+            if _harvest_src:
+                await upsert_active_contact(db, sender_phone, name=sender.get("senderName", ""),
+                                            source=_harvest_src)
+        except Exception as e:
+            logger.warning("[ActiveContact] harvest failed (non-fatal): %s", e)
+
         # V25 PART 1 — human-helper warm-up assist: if this cold number just received an
         # incoming message from a known helper's phone, mark the helper's task done and
         # auto-thank them. PV only; guarded & best-effort so it can never disrupt the webhook.

@@ -56,12 +56,14 @@ from app.models.received_status import ReceivedStatus
 from app.models.story_analysis import StoryProductAnalysis
 from app.models.catalog_alert import CatalogSpotAlert
 from app.models.own_number import OwnNumberExclusion
+from app.models.active_contact import ActiveWhatsappContact
 
 __all__ = [
     "ReceivedStatus",
     "StoryProductAnalysis",
     "CatalogSpotAlert",
     "OwnNumberExclusion",
+    "ActiveWhatsappContact",
     "AccountOnboarding",
     "InstanceLiveState",
     "WhatsappNumberCheck",

@@ -27,6 +27,14 @@ async def _persist_incoming(db: AsyncSession, instance_id: str, statuses: list[d
         await _annotate_row_ids(db, instance_id, statuses, normalize_status)
     except Exception as e:
         logger.warning("persist incoming statuses failed for %s: %s", instance_id, e)
+    # V45 PART 3 — harvest each story's poster into the «مخاطبین فعال واتساپ» lead list (deduped;
+    # own numbers excluded). Best-effort so it never breaks the live fetch the Stories tab depends on.
+    try:
+        from app.services.active_contact_harvest import harvest_status_senders
+        await harvest_status_senders(db, statuses)
+        await db.commit()
+    except Exception as e:
+        logger.warning("harvest status senders failed for %s: %s", instance_id, e)
 
 
 async def _annotate_row_ids(db, instance_id, statuses, normalize_status) -> None:

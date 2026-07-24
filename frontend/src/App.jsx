@@ -38,6 +38,7 @@ import TelegramAccounts from "./pages/TelegramAccounts.jsx";
 import TeamCollaboration from "./pages/TeamCollaboration.jsx";
 import Onboarding from "./pages/Onboarding.jsx";
 import OwnNumbers from "./pages/OwnNumbers.jsx";
+import ActiveContacts from "./pages/ActiveContacts.jsx";
 
 export default function App() {
   return (
@@ -81,6 +82,7 @@ export default function App() {
         <Route path="group-monitoring" element={<GroupMonitoring />} />
         <Route path="telegram-accounts" element={<TelegramAccounts />} />
         <Route path="own-numbers" element={<OwnNumbers />} />
+        <Route path="active-contacts" element={<ActiveContacts />} />
         <Route path="*" element={<div className="text-slate-400">صفحه یافت نشد</div>} />
       </Route>
       </Routes>
