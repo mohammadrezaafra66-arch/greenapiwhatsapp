@@ -64,6 +64,7 @@ const NAV = [
   },
   {
     label: "سلامت و ضدمسدودی", icon: "🛡️", children: [
+      { to: "/accounts-overview", label: "نمای کلی حساب‌ها" },
       { to: "/protection", label: "محافظت و سلامت", badgeKey: "incidents", badgeRed: true },
       { to: "/warmup", label: "گرم‌سازی هوشمند" },
       { to: "/team-collaboration", label: "همکاری تیمی" },
@@ -123,6 +124,7 @@ const PAGES = [
   { to: "/onboarding", label: "راه‌اندازی شمارهٔ جدید", syn: "onboarding راه اندازی سیم کارت setup wizard گام به گام گرم کردن شماره جدید anti-ban" },
   { to: "/accounts", label: "حساب‌های واتساپ", syn: "accounts شماره پروفایل" },
   { to: "/account-schedules", label: "زمان‌بندی حساب‌ها", syn: "schedule" },
+  { to: "/accounts-overview", label: "نمای کلی حساب‌ها", syn: "accounts overview نمای کلی وضعیت حساب‌ها گرمی نقش واجد شرایط یکجا all accounts status unified" },
   { to: "/protection", label: "محافظت و سلامت", syn: "yellowcard کارت زرد امنیت سلامت incident" },
   { to: "/warmup", label: "گرم‌سازی هوشمند", syn: "warmup warm up گرم سازی phrases" },
   { to: "/team-collaboration", label: "همکاری تیمی", syn: "team collaboration همکاری تیمی گرم سازی افراد واقعی cold account warmth log alerts" },

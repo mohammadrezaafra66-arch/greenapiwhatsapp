@@ -63,10 +63,15 @@ test("baseline snapshot records the confirmed structure (36 routes, 1 dup, 3 pha
   assert.equal(baseline.counts.navLeafEntries - baseline.counts.distinctNavRoutes, 4);
 });
 
-test("the saved baseline equals a freshly-built inventory (snapshot is current)", () => {
+test("the freshly-built inventory equals the baseline route-set plus the V48 addition", () => {
+  // V48 — the baseline snapshot is the frozen pre-V47-reorg reference (36 routes). The reorg
+  // preserved that route SET exactly; V48 adds exactly ONE new page (`/accounts-overview`). So the
+  // live route set must equal the baseline set plus that single intentional addition.
   const fresh = buildInventory(
     readFileSync(new URL("../components/Layout.jsx", import.meta.url), "utf8"),
     readFileSync(new URL("../App.jsx", import.meta.url), "utf8"));
-  assert.deepEqual(fresh.distinctNavRoutes, baseline.distinctNavRoutes);
-  assert.deepEqual(fresh.routerRoutes, baseline.routerRoutes);
+  const expectedNav = [...baseline.distinctNavRoutes, "/accounts-overview"].sort();
+  const expectedRouter = [...baseline.routerRoutes, "/accounts-overview"].sort();
+  assert.deepEqual(fresh.distinctNavRoutes, expectedNav);
+  assert.deepEqual(fresh.routerRoutes, expectedRouter);
 });

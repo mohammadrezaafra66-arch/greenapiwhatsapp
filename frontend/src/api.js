@@ -27,6 +27,8 @@ export const Dashboard = {
 // ── Accounts ───────────────────────────────────────────
 export const Accounts = {
   list: () => http.get("/accounts/").then((r) => r.data),
+  // V48 — unified "all accounts at a glance" overview (aggregation of the four detail pages).
+  overview: () => http.get("/accounts/overview").then((r) => r.data),
   create: (name, instance_id, api_token) =>
     http
       .post("/accounts/", null, { params: { name, instance_id, api_token } })

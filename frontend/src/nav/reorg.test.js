@@ -15,7 +15,7 @@ const APPROVED = [
   ["گفتگوها", ["/inbox", "/journals", "/keyword-rules", "/group-monitoring", "/calls"]],
   ["استوری و محتوا", ["/statuses", "/status-scheduler", "/advertising-links", "/content", "/files"]],
   ["شماره‌ها", ["/onboarding", "/accounts", "/telegram-accounts", "/account-schedules", "/partner-instances"]],
-  ["سلامت و ضدمسدودی", ["/protection", "/warmup", "/team-collaboration"]],
+  ["سلامت و ضدمسدودی", ["/accounts-overview", "/protection", "/warmup", "/team-collaboration"]],
   ["گزارش‌ها و تحلیل", ["/reporting", "/products"]],
   ["تنظیمات", ["/ai-keys", "/ai-settings", "/own-numbers", "/join-links", "/capabilities"]],
 ];
@@ -37,12 +37,13 @@ test("NOTHING LOST — every baseline route is still reachable after the reorg",
   assert.deepEqual(d.lostSidebarRoutes, []);
   // Every baseline router route is still a router route (no page dropped).
   for (const r of baseline.routerRoutes) assert.ok(current.routerRoutes.includes(r), `lost route ${r}`);
-  // Route count is preserved (regroup/rename only).
-  assert.equal(current.counts.distinctNavRoutes, baseline.counts.distinctNavRoutes);
-  assert.equal(current.counts.routerRoutes, baseline.counts.routerRoutes);
+  // V48 — the reorg was regroup/rename-only (count preserved); V48 then adds exactly ONE new page,
+  // so the live count is the baseline count + 1 (the intentional /accounts-overview addition).
+  assert.equal(current.counts.distinctNavRoutes, baseline.counts.distinctNavRoutes + 1);
+  assert.equal(current.counts.routerRoutes, baseline.counts.routerRoutes + 1);
 });
 
-test("the ONLY intentional entry changes are the dedup + the 3 phantom-alias removals", () => {
+test("the ONLY intentional entry changes are the V47 dedup/phantom removals + the V48 new page", () => {
   const d = diffInventory(baseline, current);
   const removed = d.removedEntries.map((e) => `${e.to}::${e.label}`).sort();
   const added = d.addedEntries.map((e) => `${e.to}::${e.label}`).sort();
@@ -53,7 +54,11 @@ test("the ONLY intentional entry changes are the dedup + the 3 phantom-alias rem
     "/wa-collections::ارسال گروهی",               // duplicate leaf (removed)
     "/wa-collections::مجموعه‌های گروهی",          // duplicate leaf (removed)
   ].sort());
-  assert.deepEqual(added, ["/wa-collections::ارسال گروهی / مجموعه‌ها"]); // the single unified entry
+  // V47's single unified wa-collections entry + V48's single new overview page — nothing else.
+  assert.deepEqual(added, [
+    "/accounts-overview::نمای کلی حساب‌ها",       // V48 — the one new unified overview page
+    "/wa-collections::ارسال گروهی / مجموعه‌ها",   // V47 — the single unified entry
+  ].sort());
 });
 
 test("the /wa-collections duplicate is gone (each route now appears once in the sidebar)", () => {
