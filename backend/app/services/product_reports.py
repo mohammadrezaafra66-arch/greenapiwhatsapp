@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.reporting import ProductMentionLog
 from app.services.phone_extract import contacts_for
+from app.services.product_match import product_group_key
 
 
 def _cutoff(days: int) -> datetime:
@@ -47,6 +48,10 @@ async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
     # a limit that high (the grouped query stays fast at this size). Other callers of clamp_limit
     # keep their own ceilings; only this shared top-products path is raised.
     limit = clamp_limit(limit, hi=1000)
+    # Aggregate per RAW product_name in SQL (fast, uses the DB's distinct counts). The V44 merge below
+    # then folds near-identical spellings together in Python, so the SQL limit is NOT applied here —
+    # otherwise a low-ranked spelling variant could fall outside the window and never merge into its
+    # real product. The retained data is small (a few days), so fetching all groups is cheap.
     q = (
         select(
             ProductMentionLog.product_name,
@@ -60,24 +65,55 @@ async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
         .where(ProductMentionLog.mentioned_at >= _cutoff(days))
         .group_by(ProductMentionLog.product_name)
         .order_by(func.count().desc())
-        .limit(limit)
     )
     if source:
         q = q.where(ProductMentionLog.source == source)
     rows = (await db.execute(q)).all()
+
+    # V44 — merge near-identical product-name spellings into ONE row by a normalized key (reusing the
+    # project's existing normalizers via product_match.product_group_key), so the same real product is
+    # not fragmented across spacing/digit-script/case/letter variants. mention_count (the ranking
+    # metric) and sources/last_mention are exact; group_count/sender_count are summed as an upper
+    # bound (the same group or sender using two spellings of one product is rare). The most-frequent
+    # spelling is shown, and any catalog match makes the merged row in-assistant.
+    merged: dict[str, dict] = {}
+    for r in rows:
+        key = product_group_key(r.product_name)
+        e = merged.get(key)
+        if e is None:
+            e = {"product_name": r.product_name, "product_id": None, "mention_count": 0,
+                 "group_count": 0, "sender_count": 0, "sources": set(),
+                 "last_mention": None, "_top": -1}
+            merged[key] = e
+        mc = int(r.mention_count or 0)
+        e["mention_count"] += mc
+        e["group_count"] += int(r.group_count or 0)
+        e["sender_count"] += int(r.sender_count or 0)
+        for s in _split_sources(getattr(r, "sources", None)):
+            e["sources"].add(s)
+        lm = getattr(r, "last_mention", None)
+        if lm is not None and (e["last_mention"] is None or lm > e["last_mention"]):
+            e["last_mention"] = lm
+        if mc > e["_top"]:                       # display the most-common spelling
+            e["_top"] = mc
+            e["product_name"] = r.product_name
+        if e["product_id"] is None and r.product_id:   # any catalog match → in-assistant
+            e["product_id"] = r.product_id
+
+    ordered = sorted(merged.values(), key=lambda e: e["mention_count"], reverse=True)[:limit]
     return [
         {
             "rank": i + 1,
-            "product_name": r.product_name,
-            "product_id": r.product_id,
-            "in_assistant": bool(r.product_id),
-            "mention_count": r.mention_count,
-            "group_count": r.group_count,
-            "sender_count": r.sender_count,
-            "sources": _split_sources(getattr(r, "sources", None)),
-            "last_mention": r.last_mention,   # raw datetime (may be None)
+            "product_name": e["product_name"],
+            "product_id": e["product_id"],
+            "in_assistant": bool(e["product_id"]),
+            "mention_count": e["mention_count"],
+            "group_count": e["group_count"],
+            "sender_count": e["sender_count"],
+            "sources": sorted(e["sources"]),
+            "last_mention": e["last_mention"],   # raw datetime (may be None)
         }
-        for i, r in enumerate(rows)
+        for i, e in enumerate(ordered)
     ]
 
 

@@ -52,6 +52,20 @@ def _tokenize(text: str) -> set:
     return set(_TOKEN_RE.findall((text or "").translate(_DIGIT_TRANS).lower()))
 
 
+def product_group_key(name: str) -> str:
+    """V44 — canonical key for grouping near-identical product NAMES into one report row.
+
+    Composes the project's EXISTING normalizers, so no new/divergent normalization is introduced:
+      1. group_detection.normalize_fa — unifies Arabic→Persian letters (ي/ی, ك/ک, ى/ی…), maps
+         Persian/Arabic digits to ASCII, strips diacritics/tatweel, case-folds, collapses whitespace.
+      2. the same _TOKEN_RE used for catalog matching — keeps only word tokens (ordered), so spacing,
+         punctuation, and ZWNJ differences collapse too.
+    So «ال‌جی»/«ال جی», «سری 8»/«سری ۸», «NC701»/«Nc701», «پارتى»/«پارتی» share one key, while
+    genuinely different products do not. Returns "" for an empty/None name."""
+    from app.services.group_detection import normalize_fa
+    return " ".join(_TOKEN_RE.findall(normalize_fa(name)))
+
+
 def product_tokens(name: str):
     """Return (keywords, hard_tokens) for a product name.
     keywords   = distinctive brand/word tokens (non-stopword, len>=3).
