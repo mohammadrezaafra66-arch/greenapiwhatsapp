@@ -4,35 +4,35 @@ import { IncidentsApi, Inbox as InboxApi, QueueApi } from "../api.js";
 
 const fa = (n) => (n == null ? "" : String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]));
 
-// V14 PART H — the new information architecture (7 groups, «ابزارها» dissolved).
-// Every leaf points to an EXISTING route, so no bookmarked page 404s.
+// V47 PART 4 (THREAD C) — the approved information architecture (reviewed in the ui-research
+// prototype). This is a REGROUP/rename/dedup of navigation ENTRIES only; every leaf still points to
+// an EXISTING route, so nothing is lost or 404s (verified by the automated nav-inventory diff in
+// src/nav). Changes vs. the old tree:
+//   • «شماره‌ها» (was 8 items) split into «شماره‌ها» (line lifecycle) + «سلامت و ضدمسدودی» (keep-alive).
+//   • «مخاطبین فعال واتساپ» moved from «گزارش‌ها» to «مخاطبان و سرنخ‌ها» (it is a lead list, not a report).
+//   • «قالب‌های پیام» + «دکمه‌های تعاملی» moved from «محتوا» into «ارسال و کمپین».
+//   • /wa-collections DEDUPED (previously two leaves under two labels → one).
+//   • Three phantom-alias leaves removed — their content lives on its real parent page as an in-page
+//     tab already: «بهترین ساعت ارسال» + «شماره‌های اضطراری» are tabs in /reporting, and «بازده کمپین
+//     (ROI)» is a tab in /campaigns. Still searchable via the ⌘K palette synonyms below.
 const NAV = [
   { label: "داشبورد", to: "/", icon: "🏠", end: true },
   {
-    label: "ارسال پیام", icon: "📤", children: [
+    label: "ارسال و کمپین", icon: "📤", children: [
       { to: "/campaigns", label: "کمپین‌ها" },
-      { to: "/wa-collections", label: "ارسال گروهی" },
+      { to: "/wa-collections", label: "ارسال گروهی / مجموعه‌ها" },
       { to: "/send-queue", label: "صف ارسال", badgeKey: "queue" },
+      { to: "/templates", label: "قالب‌های پیام" },
+      { to: "/button-auto-replies", label: "دکمه‌های تعاملی" },
     ],
   },
   {
-    label: "مخاطبان", icon: "👥", children: [
+    label: "مخاطبان و سرنخ‌ها", icon: "👥", children: [
       { to: "/contacts", label: "مخاطبین" },
       { to: "/contact-groups", label: "دسته‌بندی مخاطبین" },
       { to: "/groups", label: "گروه‌های واتساپ" },
-      { to: "/wa-collections", label: "مجموعه‌های گروهی" },
       { to: "/blacklist", label: "لیست سیاه" },
-    ],
-  },
-  {
-    label: "محتوا", icon: "✍️", children: [
-      { to: "/templates", label: "قالب‌های پیام" },
-      { to: "/button-auto-replies", label: "دکمه‌های تعاملی" },
-      { to: "/statuses", label: "استوری‌ها" },
-      { to: "/status-scheduler", label: "برنامه استوری" },
-      { to: "/files", label: "فایل‌ها" },
-      { to: "/content", label: "کارت تماس و موقعیت" },
-      { to: "/advertising-links", label: "لینک‌های تبلیغاتی" },
+      { to: "/active-contacts", label: "مخاطبین فعال واتساپ" },
     ],
   },
   {
@@ -45,24 +45,34 @@ const NAV = [
     ],
   },
   {
+    label: "استوری و محتوا", icon: "✍️", children: [
+      { to: "/statuses", label: "استوری‌ها" },
+      { to: "/status-scheduler", label: "برنامه استوری" },
+      { to: "/advertising-links", label: "لینک‌های تبلیغاتی" },
+      { to: "/content", label: "کارت تماس و موقعیت" },
+      { to: "/files", label: "فایل‌ها" },
+    ],
+  },
+  {
     label: "شماره‌ها", icon: "📱", children: [
       { to: "/onboarding", label: "راه‌اندازی شمارهٔ جدید" },
       { to: "/accounts", label: "حساب‌های واتساپ" },
       { to: "/telegram-accounts", label: "حساب‌های تلگرام" },
       { to: "/account-schedules", label: "زمان‌بندی حساب‌ها" },
-      { to: "/protection", label: "محافظت و سلامت", badgeKey: "incidents", badgeRed: true },
-      { to: "/warmup", label: "گرم‌سازی هوشمند" },
-      { to: "/team-collaboration", label: "همکاری تیمی" },
       { to: "/partner-instances", label: "مدیریت پارتنر" },
     ],
   },
   {
-    label: "گزارش‌ها", icon: "📊", children: [
+    label: "سلامت و ضدمسدودی", icon: "🛡️", children: [
+      { to: "/protection", label: "محافظت و سلامت", badgeKey: "incidents", badgeRed: true },
+      { to: "/warmup", label: "گرم‌سازی هوشمند" },
+      { to: "/team-collaboration", label: "همکاری تیمی" },
+    ],
+  },
+  {
+    label: "گزارش‌ها و تحلیل", icon: "📊", children: [
       { to: "/reporting", label: "گزارش روزانه" },
       { to: "/products", label: "رصد محصولات" },
-      { to: "/active-contacts", label: "مخاطبین فعال واتساپ" },
-      { to: "/reporting", label: "بهترین ساعت ارسال" },
-      { to: "/campaigns", label: "بازده کمپین (ROI)" },
     ],
   },
   { separator: true },
@@ -70,12 +80,21 @@ const NAV = [
     label: "تنظیمات", icon: "⚙️", children: [
       { to: "/ai-keys", label: "کلیدهای هوش مصنوعی" },
       { to: "/ai-settings", label: "تنظیمات هوش مصنوعی" },
-      { to: "/capabilities", label: "قابلیت‌های Green API" },
-      { to: "/join-links", label: "لینک‌های گروه و کانال" },
       { to: "/own-numbers", label: "شماره‌های خودی (حذف از رصد)" },
-      { to: "/reporting", label: "شماره‌های اضطراری" },
+      { to: "/join-links", label: "لینک‌های گروه و کانال" },
+      { to: "/capabilities", label: "قابلیت‌های Green API" },
     ],
   },
+];
+
+// ⭐ Pinned/favorites — the most-used destinations, one click from anywhere. Every one also lives in
+// its real group below; this is a shortcut rail, so it never removes anything from the tree.
+const PINNED = [
+  { to: "/", label: "داشبورد", icon: "🏠", end: true },
+  { to: "/inbox", label: "صندوق ورودی", icon: "💬", badgeKey: "inbox" },
+  { to: "/campaigns", label: "کمپین‌ها", icon: "📤" },
+  { to: "/send-queue", label: "صف ارسال", icon: "🕒", badgeKey: "queue" },
+  { to: "/protection", label: "محافظت و سلامت", icon: "🛡️", badgeKey: "incidents", badgeRed: true },
 ];
 
 // Flat page list (+ synonyms) for the ⌘K palette.
@@ -307,6 +326,16 @@ export default function Layout() {
         </div>
 
         <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+          {/* ⭐ Pinned/favorites shortcut rail (also present in their real groups below). */}
+          {!collapsed && <p className="px-3 pt-1 pb-0.5 text-[11px] font-bold text-slate-500">⭐ میان‌بُرها</p>}
+          {PINNED.map((p) => (
+            <NavLink key={`pin${p.to}`} to={p.to} end={p.end} title={p.label} className={leafClass}>
+              <span className="text-base">{p.icon}</span>
+              {!collapsed && <span className="font-medium">{p.label}</span>}
+              {!collapsed && <Badge n={p.badgeKey ? badges[p.badgeKey] : 0} red={p.badgeRed} />}
+            </NavLink>
+          ))}
+          <div className="my-2 border-t border-slate-800" />
           {NAV.map((n, i) =>
             n.separator ? (
               <div key={`sep${i}`} className="my-2 border-t border-slate-800" />

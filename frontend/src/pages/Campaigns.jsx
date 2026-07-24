@@ -59,6 +59,10 @@ export default function Campaigns() {
 
   const [roi, setRoi] = React.useState(null);
   const [recall, setRecall] = React.useState(null);
+  // V47 PART 4 (THREAD C) — «بازده کمپین (ROI)» used to be a phantom sidebar leaf that just aliased
+  // /campaigns. It is now an in-page tab here (same page it always went to), reusing the existing
+  // per-campaign ROI modal below — no functional change, only the entry point moved onto its page.
+  const [tab, setTab] = React.useState("campaigns");
   const openRoi = async (c) => {
     try {
       const d = await Api.roi(c.id);
@@ -93,13 +97,32 @@ export default function Campaigns() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">گروه‌های پیام</h2>
-        <button className="btn-primary" onClick={() => setShowAdd(true)}>+ گروه پیام جدید</button>
+        {tab === "campaigns" && (
+          <button className="btn-primary" onClick={() => setShowAdd(true)}>+ گروه پیام جدید</button>
+        )}
+      </div>
+
+      {/* V47 PART 4 — in-page tabs: the campaign list + the ROI (بازده) view (was a phantom leaf). */}
+      <div className="flex gap-2 flex-wrap">
+        {[{ key: "campaigns", label: "کمپین‌ها" }, { key: "roi", label: "بازده کمپین (ROI)" }].map((t) => (
+          <button
+            key={t.key}
+            className={`px-3 py-2 rounded-lg text-sm ${tab === t.key ? "bg-brand/20 text-brand" : "text-slate-300 hover:bg-slate-800"}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {loading && <Spinner />}
       {error && <div className="card text-red-400">{error}</div>}
-      {data && data.length === 0 && <Empty label="گروه پیامی وجود ندارد." />}
 
+      {tab === "roi" && <RoiTab data={data} onOpenRoi={openRoi} />}
+
+      {tab === "campaigns" && data && data.length === 0 && <Empty label="گروه پیامی وجود ندارد." />}
+
+      {tab === "campaigns" && (
       <div className="space-y-3">
         {data?.map((c) => (
           <div key={c.id} className="card">
@@ -145,6 +168,7 @@ export default function Campaigns() {
           </div>
         ))}
       </div>
+      )}
 
       {showAdd && <AddCampaignModal onClose={() => setShowAdd(false)} onDone={reload} />}
       {edit && (
@@ -159,6 +183,27 @@ export default function Campaigns() {
       {analytics && <AnalyticsModal data={analytics} onClose={() => setAnalytics(null)} />}
       {roi && <RoiModal roi={roi} onClose={() => setRoi(null)} onChanged={() => openRoi({ id: roi.campaignId, name: roi.name })} />}
       {recall && <RecallModal campaign={recall} onClose={() => setRecall(null)} />}
+    </div>
+  );
+}
+
+// V47 PART 4 (THREAD C) — the in-page «بازده کمپین (ROI)» tab. Lists the same campaigns, each with a
+// button that opens the EXISTING per-campaign ROI report (RoiModal), so ROI is reachable on its own
+// page instead of via a misleading separate sidebar leaf. No new ROI logic — pure reuse.
+function RoiTab({ data, onOpenRoi }) {
+  if (!data || data.length === 0) return <Empty label="گروه پیامی برای گزارش بازده وجود ندارد." />;
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-slate-400">برای دیدن قیف تبدیل و نرخ خرید هر کمپین، «مشاهده بازده» را بزنید.</p>
+      {data.map((c) => (
+        <div key={c.id} className="card flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <span className="font-bold">{c.name}</span>
+            <span className="text-xs text-slate-400">ارسال: {fa(c.sent_count)} / {fa(c.total_contacts)}</span>
+          </div>
+          <button className="btn-secondary text-xs" onClick={() => onOpenRoi(c)}>💰 مشاهده بازده (ROI)</button>
+        </div>
+      ))}
     </div>
   );
 }
