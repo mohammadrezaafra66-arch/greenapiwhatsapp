@@ -55,11 +55,13 @@ from app.models.account_onboarding import AccountOnboarding
 from app.models.received_status import ReceivedStatus
 from app.models.story_analysis import StoryProductAnalysis
 from app.models.catalog_alert import CatalogSpotAlert
+from app.models.own_number import OwnNumberExclusion
 
 __all__ = [
     "ReceivedStatus",
     "StoryProductAnalysis",
     "CatalogSpotAlert",
+    "OwnNumberExclusion",
     "AccountOnboarding",
     "InstanceLiveState",
     "WhatsappNumberCheck",

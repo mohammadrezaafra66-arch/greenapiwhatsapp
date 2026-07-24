@@ -60,6 +60,7 @@ const NAV = [
     label: "گزارش‌ها", icon: "📊", children: [
       { to: "/reporting", label: "گزارش روزانه" },
       { to: "/products", label: "رصد محصولات" },
+      { to: "/active-contacts", label: "مخاطبین فعال واتساپ" },
       { to: "/reporting", label: "بهترین ساعت ارسال" },
       { to: "/campaigns", label: "بازده کمپین (ROI)" },
     ],
@@ -71,6 +72,7 @@ const NAV = [
       { to: "/ai-settings", label: "تنظیمات هوش مصنوعی" },
       { to: "/capabilities", label: "قابلیت‌های Green API" },
       { to: "/join-links", label: "لینک‌های گروه و کانال" },
+      { to: "/own-numbers", label: "شماره‌های خودی (حذف از رصد)" },
       { to: "/reporting", label: "شماره‌های اضطراری" },
     ],
   },
@@ -112,6 +114,8 @@ const PAGES = [
   { to: "/ai-settings", label: "تنظیمات هوش مصنوعی", syn: "ai settings" },
   { to: "/capabilities", label: "قابلیت‌های Green API", syn: "capabilities method support پشتیبانی" },
   { to: "/join-links", label: "لینک‌های گروه و کانال", syn: "join links دعوت" },
+  { to: "/own-numbers", label: "شماره‌های خودی (حذف از رصد)", syn: "own numbers exclusion شماره خودی حذف رصد محصولات exclude" },
+  { to: "/active-contacts", label: "مخاطبین فعال واتساپ", syn: "active contacts lead خرید سرنخ مخاطبین فعال harvested" },
 ];
 
 const MOBILE_BAR = [

@@ -24,7 +24,7 @@ from app.api.v1 import (
     capabilities as capabilities_router,
     adlinks, warmup, warmup_helpers,
     group_monitor, telegram, onboarding,
-    reports_public,
+    reports_public, own_numbers,
 )
 from app.config import settings
 
@@ -1131,6 +1131,34 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text(stmt))
             except Exception as e:
                 print(f"[DDL V41] {e}")
+        # ── V45 PART 1 — "our own numbers" exclusion list (never counted as a product mention,
+        #    never analyzed by AI, never harvested as a lead). PART 3 — active-contacts lead list.
+        ddl_v45 = [
+            """CREATE TABLE IF NOT EXISTS own_number_exclusions (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                phone_core varchar(20) NOT NULL UNIQUE,
+                phone_raw varchar(30),
+                label varchar(200),
+                source varchar(20) NOT NULL DEFAULT 'manual',
+                added_at timestamp NOT NULL DEFAULT now()
+            )""",
+            """CREATE TABLE IF NOT EXISTS active_whatsapp_contacts (
+                id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                phone_core varchar(20) NOT NULL UNIQUE,
+                phone_display varchar(30),
+                display_name varchar(200),
+                first_seen_source varchar(20),
+                first_seen_at timestamp NOT NULL DEFAULT now(),
+                last_seen_at timestamp NOT NULL DEFAULT now(),
+                sighting_count integer NOT NULL DEFAULT 1
+            )""",
+            "CREATE INDEX IF NOT EXISTS ix_active_wa_contacts_first_seen ON active_whatsapp_contacts(first_seen_at)",
+        ]
+        for stmt in ddl_v45:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                print(f"[DDL V45] {e}")
     # Startup config sanity checks
     from app.config import settings as _settings
     if not _settings.supabase_anon_key:
@@ -1165,6 +1193,21 @@ async def lifespan(app: FastAPI):
                 logger.info("Startup: reconciled %d stale auto_warmup flag(s)", cleared)
     except Exception as e:
         logger.warning("Startup auto_warmup reconcile failed (non-fatal): %s", e)
+
+    # V45 PART 1 — pre-seed the own-number exclusion list from our own Green API instances
+    # (idempotent; additive, never touches manual entries). MUST run in its OWN session AFTER the
+    # DDL transaction has committed — the DDL block holds an ACCESS EXCLUSIVE lock on `accounts`, so
+    # querying accounts from a second connection while that block is open would deadlock startup.
+    try:
+        from app.services.own_number_exclusion import seed_from_accounts as _seed_own
+        from app.database import AsyncSessionLocal as _Sess
+        async with _Sess() as _sdb:
+            _added = await _seed_own(_sdb)
+            if _added:
+                await _sdb.commit()
+                logger.info("Startup: pre-seeded %d own-number exclusion(s)", _added)
+    except Exception as e:
+        logger.warning("Startup own-number seed failed (non-fatal): %s", e)
     yield
 
 app = FastAPI(title="Afrakala WhatsApp Sender", version="2.0.0", lifespan=lifespan)
@@ -1188,7 +1231,7 @@ for router in [
     partner.router, messages.router, incidents.router, calls.router,
     capabilities_router.router, adlinks.router, warmup.router,
     warmup_helpers.router, group_monitor.router, telegram.router,
-    onboarding.router, reports_public.router,
+    onboarding.router, reports_public.router, own_numbers.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

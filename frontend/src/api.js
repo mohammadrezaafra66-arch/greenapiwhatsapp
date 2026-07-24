@@ -210,6 +210,20 @@ export const Statuses = {
   mediaUrl: (storyId) => `${http.defaults.baseURL}/statuses/media/${storyId}`,
 };
 
+// ── Own-number exclusions (V45 PART 1) ─────────────────────
+export const OwnNumbersApi = {
+  list: () => http.get("/own-numbers/").then((r) => r.data),
+  add: (phone, label) => http.post("/own-numbers/", { phone, label }).then((r) => r.data),
+  remove: (id) => http.delete(`/own-numbers/${id}`).then((r) => r.data),
+  reseed: () => http.post("/own-numbers/reseed").then((r) => r.data),
+};
+
+// ── Active WhatsApp contacts lead list (V45 PART 3) ────────
+export const ActiveContactsApi = {
+  list: (params = {}) => http.get("/active-contacts/", { params }).then((r) => r.data),
+  exportUrl: () => `${http.defaults.baseURL}/active-contacts/export`,
+};
+
 // ── Templates ──────────────────────────────────────────
 export const Templates = {
   list: (category) =>
