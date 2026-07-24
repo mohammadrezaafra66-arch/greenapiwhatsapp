@@ -22,6 +22,27 @@ logger = logging.getLogger("afrakala.warmup.exclusion")
 GRADUATED = WarmupState.GRADUATED.value
 
 
+def mesh_role_for(enr_state, is_warm_peer: bool) -> str:
+    """PURE — the account's mesh ROLE, IDENTICAL to the mesh dashboard's own logic
+    (warmup.mesh_dashboard). `enr_state` is `(state, is_enabled)` from
+    `enrollment_states_by_instance`, or None when the account has no enrollment.
+
+      • being_warmed   = enrolled, enabled, and not yet GRADUATED
+      • peer_sender    = flagged is_warm_peer
+      • graduated_peer = enrolled and GRADUATED
+      • none           = otherwise
+
+    Single source of truth so the mesh dashboard and the V48 unified overview can never
+    disagree on an account's mesh role."""
+    if enr_state and enr_state[1] and enr_state[0] != GRADUATED:
+        return "being_warmed"
+    if is_warm_peer:
+        return "peer_sender"
+    if enr_state and enr_state[0] == GRADUATED:
+        return "graduated_peer"
+    return "none"
+
+
 async def enrollment_states_by_instance(db) -> dict:
     """{instance_id: (state, is_enabled)} for every warm-up enrollment. Fail-safe: returns
     {} if the table is unreadable, so campaigns fall back to legacy exclusion."""

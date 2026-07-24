@@ -91,7 +91,7 @@ async def mesh_dashboard(db: AsyncSession = Depends(get_db)):
     from app.models.warmup_mesh import WarmupEnrollment, WarmupMeshEdge, WarmupGroupMembership
     from app.services.warmup_dashboard import build_dashboard
     from app.services.warmup_killswitch import is_breaker_tripped
-    from app.services.warmup_exclusion import GRADUATED
+    from app.services.warmup_exclusion import GRADUATED, mesh_role_for
     enrollments = (await db.execute(select(WarmupEnrollment))).scalars().all()
     edges = (await db.execute(select(WarmupMeshEdge))).scalars().all()
     edges_by_instance: dict = {}
@@ -112,14 +112,8 @@ async def mesh_dashboard(db: AsyncSession = Depends(get_db)):
     warm_peers = 0
     for a in accounts:
         st = enr_state.get(a.instance_id)
-        if st and st[1] and st[0] != GRADUATED:
-            role = "being_warmed"
-        elif a.is_warm_peer:
-            role = "peer_sender"
-        elif st and st[0] == GRADUATED:
-            role = "graduated_peer"
-        else:
-            role = "none"
+        # V48 — single source of truth for the mesh role (shared with the unified overview).
+        role = mesh_role_for(st, bool(a.is_warm_peer))
         if role in ("peer_sender", "graduated_peer"):
             warm_peers += 1
         roles.append({"instance_id": a.instance_id, "name": a.name, "role": role})

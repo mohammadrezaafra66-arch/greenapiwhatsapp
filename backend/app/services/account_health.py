@@ -63,6 +63,44 @@ async def health_breakdown(account, db) -> dict:
     }
 
 
+async def protection_snapshot(account, db) -> dict:
+    """V48 — the EXACT per-account row the «محافظت و سلامت» page (`/incidents/protection`)
+    builds, extracted so the unified accounts overview reuses it verbatim (no drift).
+    Combines `health_breakdown` with the cooldown/throttle governors and the trailing-7d
+    reply rate. Output is byte-identical to what the protection endpoint returned inline."""
+    from app.services import governors
+    from app.models.account import AccountStatus
+    from app.utils.shamsi import to_shamsi
+    hb = await health_breakdown(account, db)
+    cutoff = datetime.utcnow() - timedelta(days=WINDOW_DAYS)
+    total = (await db.execute(select(func.count()).select_from(CampaignContact).where(
+        CampaignContact.account_id == account.id, CampaignContact.sent_at >= cutoff))).scalar() or 0
+    replied = (await db.execute(select(func.count()).select_from(CampaignContact).where(
+        CampaignContact.account_id == account.id, CampaignContact.sent_at >= cutoff,
+        CampaignContact.replied.is_(True)))).scalar() or 0
+    reply_rate = round(replied / total, 3) if total else None
+    cd = governors.in_cooldown(account)
+    status_val = account.status.value if hasattr(account.status, "value") else account.status
+    green_api_deleted = status_val == AccountStatus.green_api_deleted.value
+    return {
+        "account_id": str(account.id),
+        "name": account.name,
+        "status": status_val,
+        "green_api_deleted": green_api_deleted,
+        "green_api_deleted_message": "این اینستنس در Green API دیگر وجود ندارد" if green_api_deleted else None,
+        "health_score": 0.0 if cd else hb["score"],
+        "sent_today": hb["sent_today"],
+        "effective_cap": governors.effective_daily_cap(account),
+        "yellow_card_rate_7d": hb["yellow_card_rate"],
+        "reply_rate_7d": reply_rate,
+        "throttle_factor": account.throttle_factor or 1.0,
+        "throttle_until": to_shamsi(account.throttle_until),
+        "in_cooldown": cd,
+        "cooldown_until": to_shamsi(account.cooldown_until),
+        "incident_count_7d": account.incident_count_7d or 0,
+    }
+
+
 def pick_account_weighted(accounts, scores):
     """Weighted-random account choice by health score. Falls back to a neutral 0.5
     for any account without a score, and to a plain choice if all weights are ~0."""

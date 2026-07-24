@@ -48,39 +48,11 @@ async def list_incidents(unresolved: bool = False, db: AsyncSession = Depends(ge
 @router.get("/protection")
 async def protection(db: AsyncSession = Depends(get_db)):
     """Per-account safety status for the «محافظت و سلامت» page."""
+    from app.services.account_health import protection_snapshot
     accounts = (await db.execute(select(Account).where(Account.status != AccountStatus.deleted))).scalars().all()
-    cutoff = datetime.utcnow() - timedelta(days=7)
-    out = []
-    for a in accounts:
-        hb = await health_breakdown(a, db)
-        total = (await db.execute(select(func.count()).select_from(CampaignContact).where(
-            CampaignContact.account_id == a.id, CampaignContact.sent_at >= cutoff))).scalar() or 0
-        replied = (await db.execute(select(func.count()).select_from(CampaignContact).where(
-            CampaignContact.account_id == a.id, CampaignContact.sent_at >= cutoff,
-            CampaignContact.replied.is_(True)))).scalar() or 0
-        reply_rate = round(replied / total, 3) if total else None
-        cd = governors.in_cooldown(a)
-        status_val = a.status.value if hasattr(a.status, "value") else a.status
-        # V36 — an instance deleted upstream in Green API is terminal: don't dress it up as a
-        # cooldown/health problem, flag it so the card offers «حذف از پلتفرم».
-        green_api_deleted = status_val == AccountStatus.green_api_deleted.value
-        out.append({
-            "account_id": str(a.id),
-            "name": a.name,
-            "status": status_val,
-            "green_api_deleted": green_api_deleted,
-            "green_api_deleted_message": "این اینستنس در Green API دیگر وجود ندارد" if green_api_deleted else None,
-            "health_score": 0.0 if cd else hb["score"],
-            "sent_today": hb["sent_today"],
-            "effective_cap": governors.effective_daily_cap(a),
-            "yellow_card_rate_7d": hb["yellow_card_rate"],
-            "reply_rate_7d": reply_rate,
-            "throttle_factor": a.throttle_factor or 1.0,
-            "throttle_until": to_shamsi(a.throttle_until),
-            "in_cooldown": cd,
-            "cooldown_until": to_shamsi(a.cooldown_until),
-            "incident_count_7d": a.incident_count_7d or 0,
-        })
+    # V48 — per-account row now assembled by the shared `protection_snapshot` (reused verbatim
+    # by the unified accounts overview so the two pages can never drift).
+    out = [await protection_snapshot(a, db) for a in accounts]
     return {"accounts": out, "auto_failover": settings.auto_failover_on_yellow_card}
 
 

@@ -104,6 +104,17 @@ async def list_accounts(db: AsyncSession = Depends(get_db)):
     ]
 
 
+@router.get("/overview")
+async def accounts_overview(db: AsyncSession = Depends(get_db)):
+    """V48 — the unified "all accounts at a glance" view: one row per (non-deleted) account
+    combining connection state, warmth score/level + days-connected + recent incidents, sender
+    eligibility + override, health/throttle/cooldown, incident summary, and current role
+    (mesh peer / TC sender / cold / none). PURE AGGREGATION — every field is produced by the
+    same existing services the four detail pages use; nothing is recomputed here."""
+    from app.services.accounts_overview import build_overview
+    return {"accounts": await build_overview(db)}
+
+
 @router.post("/")
 async def create_account(
     name: str,
