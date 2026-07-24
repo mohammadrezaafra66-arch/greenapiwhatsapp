@@ -129,6 +129,64 @@ def task_apply_profile_picture_all(image_path: str):
     run_async(_run())
 
 
+_STORY_BACKLOG_KEY = "story_analysis_progress"
+
+
+def story_backlog_progress_key(job_id: str) -> str:
+    """The Redis key holding one backlog job's live progress JSON (polled by the Stories page)."""
+    return f"{_STORY_BACKLOG_KEY}:{job_id}"
+
+
+@celery_app.task(name="tasks.analyze_story_backlog")
+def task_analyze_story_backlog(job_id: str, instance_id: str | None = None,
+                               today_only: bool = False):
+    """V47 PART 2 (THREAD B) — analyze the full story backlog in the background, batched + resumable.
+
+    Publishes {done,total,analyzed,skipped_no_content,ai_unavailable,products_found,
+    outside_assistant,finished} to Redis under story_backlog_progress_key(job_id) so the Stories page
+    can poll live progress instead of blocking on a 30s request. Commits per batch (BATCH stories) so
+    a worker restart / cancellation loses at most one in-flight batch, never the whole run — the
+    already-committed batches survive and a re-dispatch simply picks up the remaining eligible stories.
+    Own numbers are excluded from the eligible set; video/empty-text stories get a terminal skipped
+    state so the eligible count can genuinely reach zero."""
+    import json
+    from app.services.story_backlog import (eligible_story_ids, process_backlog_batch, BATCH)
+
+    async def _run():
+        from sqlalchemy import select
+        from app.database import AsyncSessionLocal
+        from app.models.received_status import ReceivedStatus
+        from app.services import redis_rate_limiter
+        r = await redis_rate_limiter.get_redis()
+        key = story_backlog_progress_key(job_id)
+
+        async with AsyncSessionLocal() as db:
+            ids = await eligible_story_ids(db, instance_id=instance_id, today_only=today_only)
+
+        totals = {"done": 0, "total": len(ids), "analyzed": 0, "skipped_no_content": 0,
+                  "ai_unavailable": 0, "products_found": 0, "outside_assistant": 0,
+                  "finished": False}
+        await r.set(key, json.dumps(totals), ex=3600)
+
+        for i in range(0, len(ids), BATCH):
+            chunk = ids[i:i + BATCH]
+            async with AsyncSessionLocal() as db:
+                rows = list((await db.execute(
+                    select(ReceivedStatus).where(ReceivedStatus.id.in_(chunk)))).scalars().all())
+                res = await process_backlog_batch(db, rows)
+                await db.commit()               # incremental commit — this batch's work is now durable
+            for k in ("analyzed", "skipped_no_content", "ai_unavailable",
+                      "products_found", "outside_assistant"):
+                totals[k] += res[k]
+            totals["done"] += len(chunk)
+            await r.set(key, json.dumps(totals), ex=3600)
+
+        totals["finished"] = True
+        await r.set(key, json.dumps(totals), ex=3600)
+
+    run_async(_run())
+
+
 @celery_app.task(name="tasks.detect_yellow_cards")
 def task_detect_yellow_cards():
     """V14 F23.1 — poll getStateInstance per active account every 2 min (webhooks can be

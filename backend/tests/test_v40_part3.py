@@ -168,18 +168,22 @@ async def test_analyze_rows_analyzes_once_then_caches(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_bulk_summary_counts(monkeypatch):
+    # V47 PART 2 — the bulk summary is now produced by the reusable backlog batch processor (the
+    # endpoint only dispatches the async job). Same three stories, same honest counts.
     async def _catalog(*_a, **_k):
         return CATALOG
     monkeypatch.setattr("app.services.price_service.get_products", _catalog)
-    from app.api.v1 import statuses
+    from app.services.story_backlog import process_backlog_batch
     rows = [
         _story(text_content="کولر گازی گری 18000 موجود"),                       # in-assistant
         _story(text_content="یخچال ساید سامسونگ، قیمت 25 میلیون تومان"),        # outside
         _story(text_content="سلام دوستان، روز خوبی داشته باشید"),               # no product
     ]
     db = _DB(fetch_rows=rows)
-    out = await statuses.analyze_today_statuses(account_id=None, db=db)
+    out = await process_backlog_batch(db, rows)
     assert out["analyzed"] == 3
     assert out["products_found"] == 2
     assert out["outside_assistant"] == 1
-    assert db.commits == 1
+    assert out["skipped_no_content"] == 0
+    # The batch processor never commits — the Celery task owns per-batch commits.
+    assert db.commits == 0

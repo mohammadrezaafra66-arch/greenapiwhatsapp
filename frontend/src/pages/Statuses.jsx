@@ -44,7 +44,7 @@ function IncomingView({ data, loading, onRefresh, onAnalyzeToday, analyzingToday
         </p>
         <div className="flex items-center gap-2">
           <button className="btn-primary text-xs" disabled={analyzingToday} onClick={onAnalyzeToday}>
-            {analyzingToday ? "در حال تحلیل..." : "🧠 تحلیل همه استوری‌های امروز"}
+            {analyzingToday ? "در حال تحلیل..." : "🧠 تحلیل همه استوری‌ها"}
           </button>
           <button className="btn-secondary text-xs" disabled={loading} onClick={onRefresh}>
             {loading ? "در حال بارگذاری..." : "🔄 تازه‌سازی"}
@@ -110,7 +110,7 @@ function AnalysisView({ data, loading, onRefresh, onAnalyzeToday, analyzingToday
         </p>
         <div className="flex items-center gap-2">
           <button className="btn-primary text-xs" disabled={analyzingToday} onClick={onAnalyzeToday}>
-            {analyzingToday ? "در حال تحلیل..." : "🧠 تحلیل همه استوری‌های امروز"}
+            {analyzingToday ? "در حال تحلیل..." : "🧠 تحلیل همه استوری‌ها"}
           </button>
           <button className="btn-secondary text-xs" disabled={loading} onClick={onRefresh}>
             {loading ? "در حال بارگذاری..." : "🔄 تازه‌سازی"}
@@ -368,17 +368,42 @@ export default function Statuses() {
     }
   };
 
-  // V40 PART 3.4 — analyze every not-yet-analyzed story stored today (text + image, cached once).
+  // V47 PART 2 — analyze the FULL story backlog as a background job: kick it off, get a task_id
+  // instantly (no 30s cliff), then poll live progress instead of blocking on a single request.
   const [analyzingToday, setAnalyzingToday] = React.useState(false);
+  const [backlogProg, setBacklogProg] = React.useState(null); // {done,total,analyzed,skipped_no_content,...,finished}
+  const pollRef = React.useRef(null);
+  React.useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
   const analyzeToday = async () => {
     setAnalyzingToday(true);
     try {
       const res = await Api.analyzeToday(selectedAccount);
-      toast.success(res.message || "تحلیل انجام شد");
-      if (mainTab === "analysis") loadAnalysis();
+      setBacklogProg({ done: 0, total: res.total || 0, analyzed: 0, skipped_no_content: 0,
+        ai_unavailable: 0, products_found: 0, outside_assistant: 0, finished: (res.total || 0) === 0 });
+      if (!res.task_id || (res.total || 0) === 0) {
+        toast.success("استوری تحلیل‌نشده‌ای برای پردازش وجود ندارد");
+        setAnalyzingToday(false);
+        setTimeout(() => setBacklogProg(null), 4000);
+        return;
+      }
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(async () => {
+        try {
+          const p = await Api.analyzeProgress(res.task_id);
+          setBacklogProg(p);
+          if (p.finished) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+            setAnalyzingToday(false);
+            toast.success(p.message || "تحلیل استوری‌ها کامل شد");
+            if (mainTab === "analysis") loadAnalysis();
+            setTimeout(() => setBacklogProg(null), 6000);
+          }
+        } catch { /* transient — keep polling */ }
+      }, 2000);
     } catch (e) {
       toast.error(e?.response?.data?.detail || e.message);
-    } finally {
       setAnalyzingToday(false);
     }
   };
@@ -506,6 +531,29 @@ export default function Statuses() {
           </select>
         )}
       </div>
+
+      {/* V47 PART 2 — live backlog-analysis progress (background job, polled). */}
+      {backlogProg && (
+        <div className={`card text-sm ${backlogProg.finished
+          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200"
+          : "bg-sky-500/10 border-sky-500/30 text-sky-200"}`}>
+          {backlogProg.finished ? (
+            <span>
+              ✅ تحلیل استوری‌ها کامل شد — {fa(backlogProg.analyzed)} تحلیل شد،
+              {" "}{fa(backlogProg.products_found)} محصول
+              {backlogProg.skipped_no_content > 0 && <> · {fa(backlogProg.skipped_no_content)} رد شد (بدون محتوای قابل‌تحلیل)</>}
+              {backlogProg.ai_unavailable > 0 && <> · ⚠️ {fa(backlogProg.ai_unavailable)} در انتظار تلاش مجدد</>}
+            </span>
+          ) : (
+            <span>
+              🧠 در حال تحلیل استوری‌ها: {fa(backlogProg.done)} از {fa(backlogProg.total)}
+              {" · "}{fa(backlogProg.analyzed)} تحلیل شد
+              {backlogProg.skipped_no_content > 0 && <>، {fa(backlogProg.skipped_no_content)} رد شد (بدون محتوای قابل‌تحلیل)</>}
+              …
+            </span>
+          )}
+        </div>
+      )}
 
       {mainTab === "mine" ? (
         <>

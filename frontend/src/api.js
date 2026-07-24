@@ -203,8 +203,14 @@ export const Statuses = {
     http.get(`/statuses/${messageId}/stats`).then((r) => r.data),
   // V40 — story product analysis
   analyzeStory: (rowId) => http.post(`/statuses/${rowId}/analyze`).then((r) => r.data),
-  analyzeToday: (accountId) =>
-    http.post("/statuses/analyze-today", null, { params: accountId ? { account_id: accountId } : {} }).then((r) => r.data),
+  // V47 PART 2 — kicks off the background backlog job; returns {task_id,total} immediately (no 30s
+  // cliff). `todayOnly` opt-in keeps the old same-day-only scope; default is the FULL backlog.
+  analyzeToday: (accountId, todayOnly = false) =>
+    http.post("/statuses/analyze-today", null, {
+      params: { ...(accountId ? { account_id: accountId } : {}), ...(todayOnly ? { today_only: true } : {}) },
+    }).then((r) => r.data),
+  analyzeProgress: (taskId) =>
+    http.get(`/statuses/analyze-progress/${taskId}`).then((r) => r.data),
   analysisList: (accountId) =>
     http.get("/statuses/analysis", { params: accountId ? { account_id: accountId } : {} }).then((r) => r.data),
   mediaUrl: (storyId) => `${http.defaults.baseURL}/statuses/media/${storyId}`,

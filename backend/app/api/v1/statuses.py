@@ -406,52 +406,68 @@ async def story_analysis_list(account_id: str | None = None, limit: int = 200,
 
 
 @router.post("/analyze-today")
-async def analyze_today_statuses(account_id: str | None = None, db: AsyncSession = Depends(get_db)):
-    """V40 PART 3.4 — analyze every NOT-yet-analyzed story stored today, reusing the same per-story
-    analysis. Returns a short summary (analyzed, products found, outside-assistant count)."""
-    from datetime import datetime as _dt
-    from app.models.received_status import ReceivedStatus
-    from app.models.story_analysis import StoryProductAnalysis
-    start = _dt.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    q = (
-        select(ReceivedStatus)
-        .outerjoin(StoryProductAnalysis, StoryProductAnalysis.story_id == ReceivedStatus.id)
-        .where(ReceivedStatus.created_at >= start, StoryProductAnalysis.id.is_(None))
-    )
+async def analyze_today_statuses(account_id: str | None = None, today_only: bool = False,
+                                 db: AsyncSession = Depends(get_db)):
+    """V47 PART 2 (THREAD B) — start the story-analysis backlog job in the BACKGROUND and return a
+    task_id immediately (no 30s cliff, no lost-run risk).
+
+    Default scope is the FULL backlog (all un-analyzed stories, any day) — what a user actually
+    expects from «تحلیل همه استوری‌ها». `today_only=true` keeps the old narrow same-day scope as an
+    explicit opt-in. The real work runs in a Celery task that commits per batch and publishes live
+    progress; poll GET /statuses/analyze-progress/{task_id}. The route keeps its historical path so
+    the button keeps working — only its behavior changed from blocking to async.
+
+    (The endpoint name is retained for import stability; the underlying scope is the whole backlog.)"""
+    from app.services.story_backlog import eligible_story_ids
+    from app.workers.tasks import task_analyze_story_backlog, story_backlog_progress_key
+    from app.services import redis_rate_limiter
+    import json
+
+    instance_id = None
     if account_id:
         acc = await db.get(Account, uuid.UUID(account_id))
         if acc:
-            q = q.where(ReceivedStatus.instance_id == acc.instance_id)
-    rows = (await db.execute(q)).scalars().all()
-    # V45 PART 2.2 — drop our OWN numbers before any AI/vision call. Partition here (not just inside
-    # _analyze_story_rows) so the summary can report own-number exclusions honestly and separately.
-    from app.services.own_number_exclusion import get_excluded_cores, is_excluded_core
-    _excluded_cores = await get_excluded_cores(db)
-    eligible = [r for r in rows if not is_excluded_core(getattr(r, "sender_phone", None), _excluded_cores)]
-    excluded_own = len(rows) - len(eligible)
-    results = await _analyze_story_rows(db, eligible)
-    await db.commit()
-    products_found = sum(1 for a, _ in results if a.detected_product_name)
-    outside = sum(1 for a, _ in results if a.detected_product_name and not a.in_assistant)
-    # Stories the AI could not be run on at all: nothing was stored for them and they stay eligible.
-    # Reported separately so the summary never claims to have analyzed what it actually skipped.
-    skipped = sum(1 for a, _ in results if getattr(a, "vision_failed", False))
-    analyzed = len(results) - skipped
-    message = (f"{analyzed} استوری تحلیل شد، {products_found} محصول شناسایی شد "
-               f"({outside} خارج از دستیار).")
-    if skipped:
-        message += (f" ⚠️ {skipped} استوری به دلیل در دسترس نبودن سرویس هوش مصنوعی تحلیل نشد "
-                    f"و برای تلاش مجدد باقی ماند.")
-    if excluded_own:
-        message += f" {excluded_own} استوری متعلق به شماره‌های خودی نادیده گرفته شد."
-    return {
-        "analyzed": analyzed,
-        "products_found": products_found,
-        "outside_assistant": outside,
-        "skipped_ai_unavailable": skipped,
-        "excluded_own_numbers": excluded_own,
-        "message": message,
-    }
+            instance_id = acc.instance_id
+
+    # Fast, AI-free eligibility count for an accurate immediate total (own numbers already excluded).
+    ids = await eligible_story_ids(db, instance_id=instance_id, today_only=today_only)
+    job_id = uuid.uuid4().hex
+    # Seed the progress key up front so the very first poll sees an accurate total even before the
+    # worker picks up the task.
+    try:
+        r = await redis_rate_limiter.get_redis()
+        await r.set(story_backlog_progress_key(job_id), json.dumps(
+            {"done": 0, "total": len(ids), "analyzed": 0, "skipped_no_content": 0,
+             "ai_unavailable": 0, "products_found": 0, "outside_assistant": 0, "finished": False}),
+            ex=3600)
+    except Exception as e:
+        logger.warning("could not seed story-backlog progress for %s: %s", job_id, e)
+
+    task_analyze_story_backlog.delay(job_id, instance_id, today_only)
+    return {"started": True, "task_id": job_id, "total": len(ids)}
+
+
+@router.get("/analyze-progress/{task_id}")
+async def analyze_progress(task_id: str):
+    """V47 PART 2 — live progress for a backlog job (mirrors the pfp apply-all progress pattern).
+    Returns {done,total,analyzed,skipped_no_content,ai_unavailable,products_found,outside_assistant,
+    finished}. Defaults to a finished-zero shape if the key is gone (expired / unknown id)."""
+    import json
+    default = {"done": 0, "total": 0, "analyzed": 0, "skipped_no_content": 0, "ai_unavailable": 0,
+               "products_found": 0, "outside_assistant": 0, "finished": True}
+    try:
+        from app.services import redis_rate_limiter
+        from app.workers.tasks import story_backlog_progress_key
+        r = await redis_rate_limiter.get_redis()
+        raw = await r.get(story_backlog_progress_key(task_id))
+        if not raw:
+            return default
+        data = json.loads(raw)
+        from app.services.story_backlog import summary_message
+        data["message"] = summary_message(data)
+        return data
+    except Exception:
+        return default
 
 
 @router.get("/{message_id}/stats")
