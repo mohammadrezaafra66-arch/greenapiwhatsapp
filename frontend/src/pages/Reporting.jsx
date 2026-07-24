@@ -612,8 +612,16 @@ function TopProductsTab() {
   const [days, setDays] = React.useState(TOP_PRODUCTS_DEFAULT_DAYS);
   const [limit, setLimit] = React.useState(TOP_PRODUCTS_DEFAULT_LIMIT);
   const [source, setSource] = React.useState(""); // "" | pv | group | status
+  const [searchInput, setSearchInput] = React.useState(""); // raw text field value
+  const [search, setSearch] = React.useState(""); // debounced value sent to the backend
   const [sellersModal, setSellersModal] = React.useState(null); // {product_name, sellers, loading}
   const [trendModal, setTrendModal] = React.useState(null); // {phone, data, loading}
+
+  // V44 — debounce the search box so we send at most one request per pause, not per keystroke.
+  React.useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 350);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   const openTrend = async (phone) => {
     if (!phone) return;
@@ -641,13 +649,13 @@ function TopProductsTab() {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      setData(await Api.topProducts(limit, days, source));
+      setData(await Api.topProducts(limit, days, source, search));
     } catch (e) {
       toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setLoading(false);
     }
-  }, [days, limit, source]);
+  }, [days, limit, source, search]);
 
   const SOURCE_LABEL = { pv: "پی‌وی", group: "گروه", status: "استوری" };
 
@@ -723,13 +731,39 @@ function TopProductsTab() {
             <option value="status">استوری</option>
           </select>
         </div>
+        <div className="flex-1 min-w-[12rem]">
+          <label className="label">جستجوی محصول</label>
+          <div className="relative">
+            <input
+              type="text"
+              className="input w-full"
+              placeholder="نام محصول..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => setSearchInput("")}
+                className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                title="پاک کردن"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
         <button className="btn-secondary" onClick={exportExcel}>📥 خروجی اکسل</button>
         <span className="badge bg-slate-500/20 text-slate-300 border-slate-500/40">{fa(data?.total_products)} محصول</span>
       </div>
 
       {loading && !data && <div className="text-sm text-slate-400">در حال بارگذاری...</div>}
       {data && products.length === 0 && !loading && (
-        <div className="card text-sm text-slate-400">هنوز محصول پرتکراری ثبت نشده (از پیام‌های PV و گروه‌ها استخراج می‌شود).</div>
+        <div className="card text-sm text-slate-400">
+          {search.trim()
+            ? `محصولی با نام «${search.trim()}» یافت نشد.`
+            : "هنوز محصول پرتکراری ثبت نشده (از پیام‌های PV و گروه‌ها استخراج می‌شود)."}
+        </div>
       )}
 
       {products.length > 0 && (

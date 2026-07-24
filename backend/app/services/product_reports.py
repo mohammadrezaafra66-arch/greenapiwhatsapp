@@ -38,12 +38,14 @@ def _split_sources(raw: str | None) -> list[str]:
 
 
 async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
-                            source: str | None = None) -> list[dict]:
+                            source: str | None = None, search: str | None = None) -> list[dict]:
     """The exact top-products aggregation the tab uses: per product_name over the last `days`,
     mention_count (all rows), group_count (distinct group), sender_count (distinct sender), the
     distinct `sources` contributing (pv/group/status), and the last mention time. When `source` is
-    given, only mentions from that source are counted (the report's منبع filter). Returns raw rows
-    (rank + raw `last_mention` datetime) so each caller formats the timestamp as it needs."""
+    given, only mentions from that source are counted (the report's منبع filter). When `search` is
+    given (V44), only products whose NORMALIZED name contains the normalized search term are returned
+    — the same normalization used for grouping, so a search matches every spelling of a product.
+    Returns raw rows (rank + raw `last_mention` datetime) so each caller formats the timestamp."""
     # V43 PART 2 — the tab's تعداد picker now goes up to 1000, so the top-products aggregation honors
     # a limit that high (the grouped query stays fast at this size). Other callers of clamp_limit
     # keep their own ceilings; only this shared top-products path is raised.
@@ -100,7 +102,16 @@ async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
         if e["product_id"] is None and r.product_id:   # any catalog match → in-assistant
             e["product_id"] = r.product_id
 
-    ordered = sorted(merged.values(), key=lambda e: e["mention_count"], reverse=True)[:limit]
+    # V44 — server-side search over the FULL merged set (not just the loaded page), tolerant of the
+    # same normalization as the grouping: a search for one spelling («ال جی») matches every merged
+    # variant («ال‌جی»). A term that normalizes to empty (only spaces/punctuation) is treated as no
+    # filter. Applied BEFORE the limit so it searches all products in the window.
+    items = merged.items()
+    term = product_group_key(search) if search else ""
+    if term:
+        items = [(k, e) for k, e in items if term in k]
+    ordered = sorted((e for _k, e in items),
+                     key=lambda e: e["mention_count"], reverse=True)[:limit]
     return [
         {
             "rank": i + 1,

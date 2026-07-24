@@ -44,9 +44,9 @@ def _agg(name, **kw):
 async def test_all_time_max_limit_with_each_source(source, monkeypatch):
     captured = {}
     real = prs.top_products_rows
-    async def _spy(db, *, days, limit, source=None):
+    async def _spy(db, *, days, limit, source=None, search=None):   # V44 added `search`
         captured.update(days=days, limit=limit, source=source)
-        return await real(db, days=days, limit=limit, source=source)
+        return await real(db, days=days, limit=limit, source=source, search=search)
     monkeypatch.setattr(prs, "top_products_rows", _spy)
 
     rows = [_agg(f"محصول {i}") for i in range(MAX_LIMIT)]

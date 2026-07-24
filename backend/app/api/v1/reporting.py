@@ -166,15 +166,17 @@ async def clear_product_mentions(db: AsyncSession = Depends(get_db)):
 
 @router.get("/top-products")
 async def top_repeated_products(limit: int = 150, days: int = 30, source: str | None = None,
+                                search: str | None = None,
                                 db: AsyncSession = Depends(get_db)):
     """Most-frequently-mentioned products across PV/groups/stories (from product_mention_logs).
-    Optional `source` (pv|group|status) filters by where the mentions came from. Delegates to the
-    shared product_reports service so the public /reports API can never drift."""
+    Optional `source` (pv|group|status) filters by where the mentions came from. Optional `search`
+    (V44) filters by product name, normalized the same way as grouping so it matches every spelling.
+    Delegates to the shared product_reports service so the public /reports API can never drift."""
     from app.utils.shamsi import to_shamsi
     from app.services import product_reports as pr
     from app.services.price_service import get_products
     product_ids = {p.get("name"): p.get("id") for p in await get_products(500) if p.get("name")}
-    rows = await pr.top_products_rows(db, days=days, limit=limit, source=source)
+    rows = await pr.top_products_rows(db, days=days, limit=limit, source=source, search=search)
     return {
         "total_products": len(rows),
         "period_days": days,

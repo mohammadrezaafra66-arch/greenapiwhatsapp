@@ -315,8 +315,8 @@ export const ReportingApi = {
   dailyLogs: (date) => http.get(`/reporting/daily-logs${date ? `?date=${date}` : ""}`).then((r) => r.data),
   productMentions: () => http.get("/dashboard/product-mentions/recent").then((r) => r.data),
   clearMentions: () => http.delete("/reporting/product-mentions").then((r) => r.data),
-  topProducts: (limit = 150, days = 30, source = "") =>
-    http.get(`/reporting/top-products?limit=${limit}&days=${days}${source ? `&source=${source}` : ""}`).then((r) => r.data),
+  topProducts: (limit = 150, days = 30, source = "", search = "") =>
+    http.get(`/reporting/top-products?limit=${limit}&days=${days}${source ? `&source=${source}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`).then((r) => r.data),
   contactTrend: (phone, days = 90) =>
     http.get(`/reporting/contact-trend?phone=${encodeURIComponent(phone)}&days=${days}`).then((r) => r.data),
   bestHours: (days = 30) => http.get(`/reporting/best-hours?days=${days}`).then((r) => r.data),
