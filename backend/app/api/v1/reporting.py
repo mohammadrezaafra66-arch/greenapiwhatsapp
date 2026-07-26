@@ -171,10 +171,16 @@ async def top_repeated_products(limit: int = 150, days: int = 30, source: str | 
     """Most-frequently-mentioned products across PV/groups/stories (from product_mention_logs).
     Optional `source` (pv|group|status) filters by where the mentions came from. Optional `search`
     (V44) filters by product name, normalized the same way as grouping so it matches every spelling.
-    Delegates to the shared product_reports service so the public /reports API can never drift."""
+    Delegates to the shared product_reports service so the public /reports API can never drift.
+
+    V49 PART 2 — `days` is clamped to PRODUCT_MENTION_RETENTION_DAYS (90). Product mentions are purged
+    after 90 days (V49 PART 1), so a wider window can never surface more history; the endpoint echoes
+    the clamped `period_days` back so the UI never implies more history exists than actually does."""
     from app.utils.shamsi import to_shamsi
     from app.services import product_reports as pr
     from app.services.price_service import get_products
+    from app.workers.tasks import PRODUCT_MENTION_RETENTION_DAYS
+    days = min(max(1, int(days)), PRODUCT_MENTION_RETENTION_DAYS)
     product_ids = {p.get("name"): p.get("id") for p in await get_products(500) if p.get("name")}
     # V45 PART 2.3 — top_products_rows fetches the own-number exclusion list itself and filters those
     # rows out of the report (defense in depth behind the detection-time guards).
@@ -206,9 +212,12 @@ async def product_sellers(product_name: str, days: int = 30, limit: int = 100,
                           db: AsyncSession = Depends(get_db)):
     """All sellers who advertised a given product: contact, time (Shamsi), group.
     Powers the 'مشاهده فروشندگان اخیر' modal in the top-products table. Delegates to the shared
-    product_reports service (single source of truth shared with the public /reports API)."""
+    product_reports service (single source of truth shared with the public /reports API).
+    V49 PART 2 — `days` clamped to the 90-day retention ceiling (see top-products)."""
     from app.utils.shamsi import to_shamsi
     from app.services import product_reports as pr
+    from app.workers.tasks import PRODUCT_MENTION_RETENTION_DAYS
+    days = min(max(1, int(days)), PRODUCT_MENTION_RETENTION_DAYS)
     rows = await pr.product_mentioners_rows(db, product_name=product_name, days=days, limit=limit)
     sellers = [
         {

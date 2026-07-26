@@ -79,7 +79,8 @@ async def test_search_with_source_and_limit_together():
     db = _FakeDB(BATCH)
     out = await ui.top_repeated_products(limit=1000, days=36500, source="group", search="بوش", db=db)
     assert db.seen_source is True                    # source filter reached the SQL
-    assert out["source"] == "group" and out["period_days"] == 36500
+    # days=36500 is clamped to the 90-day retention ceiling (V49 PART 2); the rest is unchanged.
+    assert out["source"] == "group" and out["period_days"] == 90
     assert out["total_products"] == 1
     assert out["products"][0]["product_name"] == "جاروبرقی بوش سری 8"
     assert out["products"][0]["mention_count"] == 3  # merged count survives the combined filters

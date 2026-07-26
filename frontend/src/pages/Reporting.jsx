@@ -5,6 +5,7 @@ import { toast, confirmDialog } from "../ui/toast.jsx";
 import {
   TOP_PRODUCTS_RANGE_OPTIONS, TOP_PRODUCTS_LIMIT_OPTIONS,
   TOP_PRODUCTS_DEFAULT_DAYS, TOP_PRODUCTS_DEFAULT_LIMIT,
+  loadTopProductsFilters, saveTopProductsFilters,
 } from "./reporting.js";
 
 const faNum = (n) => Number(n).toLocaleString("fa-IR", { useGrouping: false });
@@ -607,13 +608,14 @@ function BestHoursTab() {
 
 // ── Tab 4: Top repeated products (auto-refresh 30s) ───────────
 function TopProductsTab() {
+  const initialFilters = React.useMemo(() => loadTopProductsFilters(), []);
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
-  const [days, setDays] = React.useState(TOP_PRODUCTS_DEFAULT_DAYS);
-  const [limit, setLimit] = React.useState(TOP_PRODUCTS_DEFAULT_LIMIT);
-  const [source, setSource] = React.useState(""); // "" | pv | group | status
-  const [searchInput, setSearchInput] = React.useState(""); // raw text field value
-  const [search, setSearch] = React.useState(""); // debounced value sent to the backend
+  const [days, setDays] = React.useState(initialFilters.days || TOP_PRODUCTS_DEFAULT_DAYS);
+  const [limit, setLimit] = React.useState(initialFilters.limit || TOP_PRODUCTS_DEFAULT_LIMIT);
+  const [source, setSource] = React.useState(initialFilters.source || ""); // "" | pv | group | status
+  const [searchInput, setSearchInput] = React.useState(initialFilters.search || ""); // raw text field value
+  const [search, setSearch] = React.useState(initialFilters.search || ""); // debounced value sent to the backend
   const [sellersModal, setSellersModal] = React.useState(null); // {product_name, sellers, loading}
   const [trendModal, setTrendModal] = React.useState(null); // {phone, data, loading}
 
@@ -622,6 +624,10 @@ function TopProductsTab() {
     const t = setTimeout(() => setSearch(searchInput), 350);
     return () => clearTimeout(t);
   }, [searchInput]);
+
+  React.useEffect(() => {
+    saveTopProductsFilters({ days, limit, source, search });
+  }, [days, limit, source, search]);
 
   const openTrend = async (phone) => {
     if (!phone) return;

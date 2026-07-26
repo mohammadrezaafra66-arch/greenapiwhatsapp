@@ -58,11 +58,12 @@ async def public_top_products(range: int = 30, limit: int = 30, source: str | No
                               db: AsyncSession = Depends(get_db)):
     """Top-N most-mentioned products over the last `range` DAYS — the exact rows the tab shows.
 
-    `range` is a number of days (the tab's بازه picker: 7 / 30 / 90); any positive int is accepted
-    so it always matches the tab for the same value. `limit` is the count (the تعداد picker:
-    50 / 100 / 150). Each row: rank, product_name, mention_count (all mentions in range),
-    group_count (distinct groups), sender_count (distinct senders), last_mentioned_at."""
-    days = max(1, int(range))
+    V49 PART 2 — `range` is a number of days (the tab's بازه picker: 7 / 14 / 30 / 60 / 90), clamped to
+    the 90-day retention ceiling: mentions are purged after 90 days, so a wider window can never return
+    more, and `range_days` echoes the clamped value so the report never overstates its history. `limit`
+    is the count. Each row: rank, product_name, mention_count, group_count, sender_count, last_mentioned_at."""
+    from app.workers.tasks import PRODUCT_MENTION_RETENTION_DAYS
+    days = min(max(1, int(range)), PRODUCT_MENTION_RETENTION_DAYS)
     # Match the UI tab's own top-products ceiling (raised to 1000 in V43 PART 2). The public and UI
     # endpoints share one aggregation, so their limits must not diverge — otherwise the LAN report
     # silently truncates at 500 while the in-app tab shows up to 1000. (The sibling mentioners
@@ -106,8 +107,10 @@ async def public_product_mentioners(product_name: str, range: int = 30, limit: i
     URL-encode names with spaces/special chars). Recent mentions over the last `range` DAYS, newest
     first: timestamp, group_name, sender_phone (the sender's own number), sender_phone_secondary
     (first extra number found in the message, if any), sender_display_name — plus all_contacts and
-    a message_preview (the same fields the in-app «خروجی اکسل» export uses)."""
-    days = max(1, int(range))
+    a message_preview (the same fields the in-app «خروجی اکسل» export uses).
+    V49 PART 2 — `range` clamped to the 90-day retention ceiling (see public /top-products)."""
+    from app.workers.tasks import PRODUCT_MENTION_RETENTION_DAYS
+    days = min(max(1, int(range)), PRODUCT_MENTION_RETENTION_DAYS)
     limit = pr.clamp_limit(limit)
     rows = await pr.product_mentioners_rows(db, product_name=product_name, days=days, limit=limit)
     return {

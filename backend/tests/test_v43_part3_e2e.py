@@ -1,6 +1,7 @@
-"""V43 PART 3 — end-to-end: the largest date-range (all time) + the max 1000-count limit + the V40
-source filter/tagging all work together through the existing top-products endpoint, with the exact
-selected params threaded to the shared aggregation and each source's tag preserved.
+"""V43 PART 3 (reconciled by V49 PART 2) — end-to-end: a date range clamped to the 90-day retention
+ceiling + the max 1000-count limit + the V40 source filter/tagging all work together through the
+existing top-products endpoint, with the clamped `days` threaded to the shared aggregation and each
+source's tag preserved.
 """
 from datetime import datetime
 from types import SimpleNamespace
@@ -8,8 +9,10 @@ import pytest
 
 from app.api.v1 import reporting as ui
 from app.services import product_reports as prs
+from app.workers.tasks import PRODUCT_MENTION_RETENTION_DAYS
 
-ALL_TIME_DAYS = 36500
+ALL_TIME_DAYS = 36500       # a wide legacy request; the endpoint clamps it to the 90-day ceiling
+CAP = PRODUCT_MENTION_RETENTION_DAYS   # 90
 MAX_LIMIT = 1000
 
 
@@ -38,10 +41,9 @@ def _agg(name, **kw):
     return SimpleNamespace(**base)
 
 
-# ── all-time + 1000 + each source, together — params threaded, source echoed ─
 @pytest.mark.parametrize("source", [None, "pv", "group", "status"])
 @pytest.mark.asyncio
-async def test_all_time_max_limit_with_each_source(source, monkeypatch):
+async def test_rolling_window_max_limit_with_each_source(source, monkeypatch):
     captured = {}
     real = prs.top_products_rows
     async def _spy(db, *, days, limit, source=None, search=None):   # V44 added `search`
@@ -52,10 +54,9 @@ async def test_all_time_max_limit_with_each_source(source, monkeypatch):
     rows = [_agg(f"محصول {i}") for i in range(MAX_LIMIT)]
     out = await ui.top_repeated_products(limit=MAX_LIMIT, days=ALL_TIME_DAYS, source=source,
                                          db=_FakeDB(rows))
-    # the exact selected filters reached the shared aggregation together.
-    assert captured == {"days": ALL_TIME_DAYS, "limit": MAX_LIMIT, "source": source}
-    # and the endpoint echoes the window + source and returns the full page.
-    assert out["period_days"] == ALL_TIME_DAYS
+    assert captured == {"days": CAP, "limit": MAX_LIMIT, "source": source}
+    # and the endpoint echoes the clamped window + source and returns the full page.
+    assert out["period_days"] == CAP == 90
     assert out["source"] == source
     assert out["total_products"] == MAX_LIMIT
     assert out["products"][-1]["rank"] == MAX_LIMIT
@@ -70,6 +71,7 @@ async def test_source_tags_preserved_with_new_options():
     ]
     out = await ui.top_repeated_products(limit=MAX_LIMIT, days=ALL_TIME_DAYS, source="status",
                                          db=_FakeDB(rows))
+    assert out["period_days"] == CAP
     p0, p1 = out["products"]
     # in_assistant tag flows from product_id (V40 behavior), unaffected by the wider limit/range.
     assert p0["in_assistant"] is False and p0["assistant_status"] == "خارج از دستیار"

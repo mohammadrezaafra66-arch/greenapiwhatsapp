@@ -134,10 +134,20 @@ async def test_public_mentioners_match_ui_sellers():
 
 
 @pytest.mark.asyncio
-async def test_range_is_days_passthrough():
+async def test_range_within_ceiling_passes_through():
     db = _FakeDB(AGG, MENTIONS)
     out = await pub.public_top_products(range=7, limit=50, db=db)
     assert out["range_days"] == 7 and out["limit"] == 50
+
+
+@pytest.mark.asyncio
+async def test_range_above_90_days_is_clamped():
+    # V49 PART 2 — the public LAN report honors the same 90-day retention ceiling as the in-app tab,
+    # so a wider request can never claim more history than actually survives the purge.
+    db = _FakeDB(AGG, MENTIONS)
+    for wide in (91, 180, 365, 36500):
+        out = await pub.public_top_products(range=wide, limit=50, db=db)
+        assert out["range_days"] == 90, f"range={wide} should clamp to 90"
 
 
 # ── the public top-products endpoint now honors a limit up to 1000 (matches the UI ceiling) ──
