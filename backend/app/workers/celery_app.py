@@ -93,4 +93,11 @@ celery_app.conf.beat_schedule = {
     "process-team-schedule": {"task": "tasks.process_team_schedule", "schedule": 300.0},
     # V30 PART 5 — send deferred/staggered thank-yous (overflow from bursty completions).
     "process-thank-yous": {"task": "tasks.process_thank_yous", "schedule": 120.0},
+    # V50 PART 2 — scheduled background fetch of incoming WhatsApp stories, so stories refresh
+    # automatically from every eligible connected account even if nobody opens the /statuses page.
+    # getIncomingStatuses is a read-only GET; a conservative 30-min cadence (1800s, matching
+    # sync-call-logs / recheck-ai-keys) keeps it lightweight while comfortably catching statuses
+    # before their ~24h WhatsApp expiry. Idempotent persistence means repeat fetches never
+    # re-download. The manual on-page refresh button is unaffected (additive).
+    "fetch-incoming-stories": {"task": "tasks.fetch_incoming_stories", "schedule": 1800.0},
 }

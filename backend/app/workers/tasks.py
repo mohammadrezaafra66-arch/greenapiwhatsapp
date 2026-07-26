@@ -930,3 +930,28 @@ def task_sync_account_states():
                     task_join_all_links.delay(str(account.id), account.instance_id, account.api_token, links)
                     print(f"[AutoJoin] queued {len(links)} link joins for newly-active account {account.name}")
     run_async(_s())
+
+
+@celery_app.task(name="tasks.fetch_incoming_stories")
+def task_fetch_incoming_stories():
+    """V50 PART 2 — scheduled background fetch of incoming WhatsApp stories.
+
+    Historically stories were fetched ONLY on-demand, when a human opened/refreshed the
+    /statuses page (which always used the single default account). If nobody visited the page —
+    or that one account was offline — stories silently stopped refreshing. This runs the V50 PART 1
+    multi-account fetch on a conservative interval so stories refresh automatically from EVERY
+    currently-eligible connected account, even when nobody visits the page.
+
+    Read-only Green API activity (getIncomingStatuses — the SAME documented on-demand method the
+    manual page already uses); it does not enable webhook/polling for messages or any other feature.
+    Unhealthy / mesh-recovery accounts are skipped by the shared eligibility gate inside the service.
+    Additive: the manual on-page refresh button is untouched and still fetches immediately."""
+    async def _f():
+        from app.database import AsyncSessionLocal
+        from app.services.story_fetch import fetch_stories_for_all_eligible_accounts
+        async with AsyncSessionLocal() as db:
+            summary = await fetch_stories_for_all_eligible_accounts(db)
+        print(f"[StoryFetch] eligible={summary['eligible']} fetched={summary['fetched']} "
+              f"failed={summary['failed']} skipped={summary['skipped']} "
+              f"statuses={summary['total_statuses']}")
+    run_async(_f())
