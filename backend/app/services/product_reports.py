@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.reporting import ProductMentionLog
 from app.services.phone_extract import contacts_for
-from app.services.product_match import product_group_key
+from app.services.product_match import is_reportable_product_name, product_group_key
 
 
 def _cutoff(days: int) -> datetime:
@@ -106,6 +106,8 @@ async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
     # spelling is shown, and any catalog match makes the merged row in-assistant.
     merged: dict[str, dict] = {}
     for r in rows:
+        if not is_reportable_product_name(r.product_name):
+            continue
         key = product_group_key(r.product_name)
         e = merged.get(key)
         if e is None:

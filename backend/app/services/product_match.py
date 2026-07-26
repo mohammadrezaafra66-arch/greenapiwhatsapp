@@ -35,10 +35,52 @@ _AD_WORDS = {
     "تومان", "ریال", "قیمت", "فروش", "موجود", "موجودی", "ارسال", "گارانتی",
     "ضمانت", "تحویل", "نقد", "اقساط", "خرید", "پیشنهاد", "تخفیف", "همکار",
 }
+_MONEY_WORDS = {"تومان", "تومن", "ریال", "میلیون"}
+_FINANCE_ONLY_WORDS = {
+    "واریز", "واریزی", "مبلغ", "فیش", "حساب", "حسابداری", "پذیرفته", "پرداخت",
+    "کارت", "رسید", "بانک", "شبا", "تسویه", "مانده", "بدهی", "طلب",
+}
 _NOISE_WORDS = {
     "سلام", "درود", "وقت", "بخیر", "ممنون", "لطفا", "لطفاً", "تماس", "واتساپ",
     "whatsapp", "wa", "http", "https", "لینک", "شماره", "آدرس",
 }
+# V49 PART 3 — Persian-script catalog tokens that are descriptors/colors/origins/series/sizes, NOT
+# brands. Subtracted from the catalog-derived brand lexicon so a generic word can't act as a brand
+# and let ordinary chat slip through the capacity+brand branch. «سام» (3 letters, also the given name
+# "Sam") is excluded as too ambiguous; distinctive short brands like «گلد»/«بوش»/«بکو» are kept.
+_NON_BRAND_TOKENS = {
+    "ماشین", "کیلویی", "سیلور", "ساید", "دودی", "هزار", "اسپرسوساز", "چین", "کره",
+    "مات", "دوقلو", "شکار", "مکس", "گرند", "پلاتینیوم", "استیل", "دیجیتال", "میلان",
+    "ساز", "چایساز", "آبمیوه", "سام", "نقره", "طوسی", "دلستر",
+    # generic verbs/adjectives and mis-merged compound tokens seen in catalog names — not brands
+    "ساخت", "سرخ", "پلاس", "بای", "کوخ", "ویامی", "اتوبخارگر", "میرجنرال", "چایسازجنرال",
+}
+
+
+def _looks_persian(token: str) -> bool:
+    return any("؀" <= ch <= "ۿ" for ch in (token or ""))
+
+
+def catalog_brand_tokens(products: list) -> set:
+    """V49 PART 3 — derive a brand lexicon from the EXISTING catalog product names (no hand-authored
+    brand list). Keeps distinctive Persian-script brand words (یونیوا/جنرال/گلد/بوش/سامسونگ/هایسنس/
+    ایوولی/بکو/الجی/دلونگی/فیلیپس/برلین…) and drops generic descriptors, latin model/series codes
+    (handled by the model-code path), digits, and the project's existing stop/product/ad word-sets.
+    So detection only learns brands the business actually deals in — nothing hardcoded from scratch."""
+    brands: set[str] = set()
+    for p in products or []:
+        for w in _TOKEN_RE.findall((p.get("name") or "").translate(_DIGIT_TRANS).lower()):
+            if len(w) < 3 or not _looks_persian(w):
+                continue                                   # latin tokens are model/series codes
+            if any(ch.isdigit() for ch in w):
+                continue
+            if (w in _STOPWORDS or w in _PRODUCT_WORDS or w in _AD_WORDS or w in _MONEY_WORDS
+                    or w in _FINANCE_ONLY_WORDS or w in _NOISE_WORDS or w in _NON_BRAND_TOKENS):
+                continue
+            brands.add(w)
+    return brands
+
+
 _BULLET_PREFIX_RE = re.compile(r"^[\s\-–—•▪▫*✅🔥⭐️🌟📌🔸🔹:؛،,.]+")
 _PHONE_RE = re.compile(r"(?:\+?98|0)?9\d{9}")
 _PRICE_TAIL_RE = re.compile(
@@ -89,7 +131,10 @@ def product_tokens(name: str):
 
 def _is_strong(token: str) -> bool:
     # A distinctive alphanumeric model code is enough on its own.
-    return len(token) >= 5 and any(c.isalpha() for c in token) and any(c.isdigit() for c in token)
+    t = (token or "").translate(_DIGIT_TRANS).lower()
+    if any(w in t for w in _MONEY_WORDS):
+        return False
+    return len(t) >= 5 and any(c.isalpha() for c in t) and any(c.isdigit() for c in t)
 
 
 def match_products(text: str, products: list) -> list:
@@ -133,7 +178,7 @@ def _clean_unknown_candidate(line: str) -> str:
     return s
 
 
-def _looks_like_unknown_product_line(line: str) -> bool:
+def _looks_like_unknown_product_line(line: str, *, brands: set | None = None) -> bool:
     raw = (line or "").strip()
     if not raw or len(raw) < 5 or len(raw) > 220:
         return False
@@ -146,25 +191,66 @@ def _looks_like_unknown_product_line(line: str) -> bool:
     has_capacity = bool(re.search(r"\b(?:[1-9]\d{3,4}|[1-9]\d\s*هزار)\b", low))
     has_model = any(_is_strong(t) for t in toks)
     has_price = bool(re.search(r"\d[\d,\s.]{3,}\s*(?:تومان|ریال|تومن|میلیون)", low))
-    return (has_product_word and (has_capacity or has_model or has_price or has_ad_word)) or (
-        has_model and (has_price or has_ad_word)
+    has_finance_only_word = bool(toks & _FINANCE_ONLY_WORDS)
+    # V49 PART 3 — a known catalog brand (جنرال/گلد/یونیوا/هایسنس…) present in the line. Lets us catch
+    # the very common "<capacity> <brand> ... موجود/قیمت" listing that carries NO generic appliance
+    # noun (کولر/پنل/اسپلیت) and NO ≥5-char model code, e.g. «۲۴ هزار جنرال گلد اکو موجود✅».
+    has_brand = bool(toks & (brands or set()))
+    if has_finance_only_word and not (has_product_word or has_capacity or has_model):
+        return False
+    return (
+        (has_product_word and (has_capacity or has_model or has_price or has_ad_word))
+        or (has_model and (has_price or has_ad_word))
+        # Brand branch is deliberately narrow: a real BTU/capacity token AND a commerce signal
+        # (ad word or an explicit price) must accompany the brand, so money/finance chatter — which
+        # never carries these brand tokens — cannot slip through.
+        or (has_brand and has_capacity and (has_ad_word or has_price))
     )
 
 
+def is_reportable_product_name(name: str) -> bool:
+    """Defense-in-depth for legacy report rows.
+
+    New detections are filtered by _looks_like_unknown_product_line(), but old rows may already have
+    stored finance/accounting text as a product name. Keep genuine product terms/model codes while
+    hiding money-only or one-word generic fragments from the top-products report.
+    """
+    raw = (name or "").strip()
+    if len(raw) < 4:
+        return False
+    low = raw.translate(_DIGIT_TRANS).lower()
+    toks = _tokenize(raw)
+    if not toks:
+        return False
+    has_product_word = bool(toks & _PRODUCT_WORDS)
+    has_capacity = bool(re.search(r"\b(?:[1-9]\d{3,4}|[1-9]\d\s*هزار)\b", low))
+    has_model = any(_is_strong(t) for t in toks)
+    has_finance_only_word = bool(toks & _FINANCE_ONLY_WORDS)
+    if has_finance_only_word and not (has_product_word or has_capacity or has_model):
+        return False
+    if len(toks) == 1 and not (has_product_word or has_capacity or has_model):
+        return False
+    return True
+
+
 def extract_unknown_products(text: str, *, known_names: set[str] | None = None,
-                             limit: int = 5) -> list[dict]:
+                             limit: int = 5, brands: set | None = None) -> list[dict]:
     """Extract advertised product titles that were not matched to the assistant catalog.
 
     This is intentionally conservative: it only accepts lines that look like commerce/product
     listings (model/capacity/price/product terms), so ordinary chat does not flood reports.
+    `brands` (V49 PART 3) is the catalog-derived brand lexicon that additionally catches
+    "<capacity> <brand> … موجود/قیمت" listings with no generic appliance noun or model code.
     """
     known_names = known_names or set()
     seen, out = set(), []
     for raw in re.split(r"[\n\r]+", text or ""):
-        if not _looks_like_unknown_product_line(raw):
+        if not _looks_like_unknown_product_line(raw, brands=brands):
             continue
         name = _clean_unknown_candidate(raw)
         if len(name) < 4 or name in known_names:
+            continue
+        if not is_reportable_product_name(name):
             continue
         if any(k and (k in name or name in k) for k in known_names):
             continue
@@ -187,5 +273,9 @@ def detect_product_mentions(text: str, products: list, *, unknown_limit: int = 5
     """Known catalog matches + unknown advertised products from a WhatsApp message."""
     known = match_known_products(text, products)
     known_names = {m["product_name"] for m in known}
-    unknown = extract_unknown_products(text, known_names=known_names, limit=unknown_limit)
+    # V49 PART 3 — learn the brand vocabulary from the same catalog already passed in, so the unknown
+    # extractor can recognise brand+capacity listings without any separate/hardcoded brand list.
+    brands = catalog_brand_tokens(products)
+    unknown = extract_unknown_products(text, known_names=known_names, limit=unknown_limit,
+                                       brands=brands)
     return known + unknown
