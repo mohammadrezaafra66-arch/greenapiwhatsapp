@@ -53,17 +53,36 @@ def task_recovery_autoenroll_recheck():
     run_async(_run())
 
 
+# V49 PART 1 — product-mention retention window. Was 2 days in production (a value that silently
+# capped every V43 date-range option — 7/14/30/60/90 — at ~2 days of real history because the
+# underlying rows were already purged). Deliberately raised to 90 days: the user's chosen ceiling,
+# and the exact bound the reconciled date-range UI (V49 PART 2) offers. ONLY product_mention_logs
+# follows this rule — story_product_analysis is kept indefinitely ("analyze once, cache forever",
+# V40) and downloaded story media in backend/.media is the only durable copy of a story's image, so
+# neither is purged here.
+PRODUCT_MENTION_RETENTION_DAYS = 90
+
+
+async def purge_old_product_mentions(db, *, now=None, retention_days: int = PRODUCT_MENTION_RETENTION_DAYS):
+    """Delete product_mention_logs rows older than `retention_days`. Factored out of the Celery task
+    so the boundary can be tested directly against a real session. Commits and returns the row count
+    deleted. `now` is injectable for deterministic tests (defaults to utcnow)."""
+    from app.models.reporting import ProductMentionLog
+    from sqlalchemy import delete
+    from datetime import datetime, timedelta
+    cutoff = (now or datetime.utcnow()) - timedelta(days=retention_days)
+    result = await db.execute(
+        delete(ProductMentionLog).where(ProductMentionLog.mentioned_at < cutoff))
+    await db.commit()
+    return result.rowcount
+
+
 @celery_app.task(name="tasks.clear_old_product_mentions")
 def task_clear_old_product_mentions():
     async def _c():
         from app.database import AsyncSessionLocal
-        from app.models.reporting import ProductMentionLog
-        from sqlalchemy import delete
-        from datetime import datetime, timedelta
         async with AsyncSessionLocal() as db:
-            cutoff = datetime.utcnow() - timedelta(days=2)
-            await db.execute(delete(ProductMentionLog).where(ProductMentionLog.mentioned_at < cutoff))
-            await db.commit()
+            await purge_old_product_mentions(db)
     run_async(_c())
 
 @celery_app.task(name="tasks.send_night_report")
