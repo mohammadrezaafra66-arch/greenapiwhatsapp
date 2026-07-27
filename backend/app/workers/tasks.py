@@ -150,6 +150,12 @@ def task_apply_profile_picture_all(image_path: str):
 
 _STORY_BACKLOG_KEY = "story_analysis_progress"
 
+# V51 PART 1 — how many eligible stories a SINGLE automatic post-fetch analysis run may process
+# (the manual «تحلیل همه استوری‌ها» button stays uncapped). Sized so one run finishes comfortably
+# inside the 30-min fetch cadence even with real vision-API latency/retries, never overlapping the
+# next cycle, while still draining a backlog over a few cycles. 3 batches of BATCH(=20) stories.
+AUTO_ANALYZE_MAX_STORIES = 60
+
 
 def story_backlog_progress_key(job_id: str) -> str:
     """The Redis key holding one backlog job's live progress JSON (polled by the Stories page)."""
@@ -158,7 +164,7 @@ def story_backlog_progress_key(job_id: str) -> str:
 
 @celery_app.task(name="tasks.analyze_story_backlog")
 def task_analyze_story_backlog(job_id: str, instance_id: str | None = None,
-                               today_only: bool = False):
+                               today_only: bool = False, max_stories: int | None = None):
     """V47 PART 2 (THREAD B) — analyze the full story backlog in the background, batched + resumable.
 
     Publishes {done,total,analyzed,skipped_no_content,ai_unavailable,products_found,
@@ -167,9 +173,18 @@ def task_analyze_story_backlog(job_id: str, instance_id: str | None = None,
     a worker restart / cancellation loses at most one in-flight batch, never the whole run — the
     already-committed batches survive and a re-dispatch simply picks up the remaining eligible stories.
     Own numbers are excluded from the eligible set; video/empty-text stories get a terminal skipped
-    state so the eligible count can genuinely reach zero."""
+    state so the eligible count can genuinely reach zero.
+
+    V51 PART 1 — `max_stories` optionally caps ONE run to the oldest N eligible stories (the automatic
+    post-fetch trigger passes AUTO_ANALYZE_MAX_STORIES; the manual button passes None = uncapped, so
+    its behavior is unchanged). Because eligibility is simply "has no analysis row yet", the untouched
+    remainder stays eligible and is picked up by the next run — the cap uses the SAME resumable
+    mechanism, it does not drop or lose any story. The per-batch vision-failure guard is untouched:
+    a rate-limited/dead key leaves a story uncached (ai_unavailable) so it stays eligible for retry,
+    never a false "no product found"."""
     import json
-    from app.services.story_backlog import (eligible_story_ids, process_backlog_batch, BATCH)
+    from app.services.story_backlog import (eligible_story_ids, process_backlog_batch,
+                                            cap_backlog_ids, BATCH)
 
     async def _run():
         from sqlalchemy import select
@@ -181,6 +196,9 @@ def task_analyze_story_backlog(job_id: str, instance_id: str | None = None,
 
         async with AsyncSessionLocal() as db:
             ids = await eligible_story_ids(db, instance_id=instance_id, today_only=today_only)
+        # V51 PART 1 — bound an automatic run to the oldest N eligible stories. The remainder keeps
+        # its "no analysis row" state, so the next run resumes exactly where this one stopped.
+        ids = cap_backlog_ids(ids, max_stories)
 
         totals = {"done": 0, "total": len(ids), "analyzed": 0, "skipped_no_content": 0,
                   "ai_unavailable": 0, "products_found": 0, "outside_assistant": 0,
@@ -945,7 +963,14 @@ def task_fetch_incoming_stories():
     Read-only Green API activity (getIncomingStatuses — the SAME documented on-demand method the
     manual page already uses); it does not enable webhook/polling for messages or any other feature.
     Unhealthy / mesh-recovery accounts are skipped by the shared eligibility gate inside the service.
-    Additive: the manual on-page refresh button is untouched and still fetches immediately."""
+    Additive: the manual on-page refresh button is untouched and still fetches immediately.
+
+    V51 PART 1 — once the fetch finishes, chain the EXISTING resumable analysis job
+    (tasks.analyze_story_backlog) as a follow-up so the freshly-fetched stories get analyzed
+    automatically, capped to AUTO_ANALYZE_MAX_STORIES per cycle. It is dispatched with .delay() (a
+    separate queued task) so fetch never blocks on the vision calls, and it reuses the same
+    batched/incremental-commit path + vision-failure guard the manual button uses — not a new
+    analysis mechanism."""
     async def _f():
         from app.database import AsyncSessionLocal
         from app.services.story_fetch import fetch_stories_for_all_eligible_accounts
@@ -955,3 +980,9 @@ def task_fetch_incoming_stories():
               f"failed={summary['failed']} skipped={summary['skipped']} "
               f"statuses={summary['total_statuses']}")
     run_async(_f())
+    # Chain the existing resumable analysis job as a non-blocking follow-up (capped per cycle).
+    import uuid as _uuid
+    analysis_job_id = _uuid.uuid4().hex
+    task_analyze_story_backlog.delay(analysis_job_id, None, False, AUTO_ANALYZE_MAX_STORIES)
+    print(f"[StoryFetch] chained auto-analysis job {analysis_job_id} "
+          f"(cap={AUTO_ANALYZE_MAX_STORIES})")

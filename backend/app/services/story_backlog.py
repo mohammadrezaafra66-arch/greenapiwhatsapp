@@ -87,6 +87,19 @@ async def eligible_story_ids(db, *, instance_id: str | None = None,
     return [rid for rid, phone in rows if not is_excluded_core(phone, cores)]
 
 
+def cap_backlog_ids(ids: list, max_stories: int | None) -> list:
+    """V51 PART 1 — bound one analysis run to the oldest `max_stories` eligible ids.
+
+    `eligible_story_ids` returns oldest-first, so slicing keeps the oldest un-analyzed stories and
+    leaves the newest for the next run. `None` (the manual button) means uncapped — return the list
+    unchanged. A negative cap is treated as 0 (process nothing). Because eligibility is purely "has
+    no analysis row yet", the dropped tail is NOT lost — it stays eligible and the next run resumes
+    from exactly there."""
+    if max_stories is None:
+        return ids
+    return ids[:max(0, max_stories)]
+
+
 async def process_backlog_batch(db, rows, *, vision_fn=None, now: datetime | None = None) -> dict:
     """Process one batch of already-fetched story rows. Does NOT commit — the caller (task) commits
     per batch so a restart loses at most this batch, never the whole run.
