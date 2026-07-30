@@ -49,21 +49,21 @@ function ContactCell({ contacts, senderPhone }) {
       toast.error("کپی ناموفق بود");
     }
   };
-  if (list.length === 0) return <span className="text-slate-600 text-xs">—</span>;
+  if (list.length === 0) return <span className="text-muted text-xs">—</span>;
   return (
     <div className="flex flex-col gap-1">
       {list.map((phone, i) => (
         <div key={i} className="flex items-center gap-1">
-          <span className="font-mono text-xs text-emerald-400" dir="ltr">{phone}</span>
+          <span className="font-mono text-xs text-brand" dir="ltr">{phone}</span>
           <button
             onClick={() => copy(phone)}
-            className="text-slate-500 hover:text-slate-300 text-xs"
+            className="text-muted hover:text-ink text-xs"
             title="کپی"
           >
             📋
           </button>
           {senderPhone && phone === senderPhone && (
-            <span className="text-[10px] text-sky-400">فرستنده</span>
+            <span className="text-[10px] text-sky-700">فرستنده</span>
           )}
         </div>
       ))}
@@ -82,7 +82,7 @@ export default function Reporting() {
         {TABS.map((t) => (
           <button
             key={t.key}
-            className={`px-3 py-2 rounded-lg text-sm ${tab === t.key ? "bg-brand/20 text-brand" : "text-slate-300 hover:bg-slate-800"}`}
+            className={`px-3 py-2 rounded-lg text-sm ${tab === t.key ? "bg-brand-light text-brand" : "text-muted hover:bg-canvas"}`}
             onClick={() => setTab(t.key)}
           >
             {t.label}
@@ -134,7 +134,7 @@ function SpotAlertsTab() {
   const alerts = data?.alerts || [];
   return (
     <div className="space-y-4">
-      <div className="card bg-sky-500/10 border-sky-500/30 text-sky-200 text-sm">
+      <div className="card bg-sky-50 border-sky-200 text-sky-700 text-sm">
         هشدار زمانی ثبت می‌شود که محصولی از دستیار توسط یک مخاطب بیرونی تبلیغ شود. این نسخه فقط
         «دیده‌شدن» را گزارش می‌کند و مقایسه‌ی قیمت ندارد (به‌محض افزوده‌شدن استخراج قیمت در آینده،
         به هشدار «قیمت‌شکنی» ارتقا می‌یابد).
@@ -144,20 +144,20 @@ function SpotAlertsTab() {
           <input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} />
           فقط خوانده‌نشده‌ها
         </label>
-        <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40">
+        <span className="badge bg-amber-50 text-amber-700 border-amber-200">
           {fa(data?.unread_count)} خوانده‌نشده
         </span>
-        <button className="btn-secondary text-xs" onClick={load}>🔄 تازه‌سازی</button>
+        <button className="btn-secondary btn-sm" onClick={load}>🔄 تازه‌سازی</button>
       </div>
 
       {loading && !data && <Spinner />}
       {data && alerts.length === 0 && !loading && <Empty label="هشداری ثبت نشده." />}
 
       {alerts.length > 0 && (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="table-wrap">
+          <table className="table w-full text-sm">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="text-right p-2">مخاطب</th>
                 <th className="text-right p-2">شماره</th>
                 <th className="text-right p-2">محصول (در دستیار)</th>
@@ -168,17 +168,17 @@ function SpotAlertsTab() {
             </thead>
             <tbody>
               {alerts.map((a) => (
-                <tr key={a.id} className={`border-b border-slate-800 ${a.is_read ? "opacity-60" : ""}`}>
+                <tr key={a.id} className={`border-b border-line ${a.is_read ? "opacity-60" : ""}`}>
                   <td className="p-2">{a.contact_name || "—"}</td>
-                  <td className="p-2 text-slate-300" dir="ltr">{a.contact_phone}</td>
+                  <td className="p-2 text-muted" dir="ltr">{a.contact_phone}</td>
                   <td className="p-2 font-bold">{a.product_name}</td>
-                  <td className="p-2 text-slate-300 text-xs">{SRC[a.source] || a.source}</td>
-                  <td className="p-2 text-slate-400 text-xs" dir="ltr">{a.time_shamsi}</td>
+                  <td className="p-2 text-muted text-xs">{SRC[a.source] || a.source}</td>
+                  <td className="p-2 text-muted text-xs" dir="ltr">{a.time_shamsi}</td>
                   <td className="p-2 text-center">
                     {a.is_read ? (
-                      <span className="text-emerald-400 text-xs">خوانده‌شده</span>
+                      <span className="text-brand text-xs">خوانده‌شده</span>
                     ) : (
-                      <button className="btn-secondary text-xs" onClick={() => markRead(a.id)}>علامت خوانده‌شده</button>
+                      <button className="btn-secondary btn-sm" onClick={() => markRead(a.id)}>علامت خوانده‌شده</button>
                     )}
                   </td>
                 </tr>
@@ -236,14 +236,14 @@ function EmergencySection() {
       <h3 className="text-lg font-bold">شماره‌های اضطراری</h3>
 
       {loading && <Spinner />}
-      {error && <div className="card text-red-400">{error}</div>}
+      {error && <div className="card bg-red-50 text-red-700 border-red-200">{error}</div>}
       {data && data.length === 0 && <Empty label="شماره‌ای ثبت نشده است." />}
 
       {data && data.length > 0 && (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="table-wrap">
+          <table className="table w-full text-sm">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="text-right p-2">نام</th>
                 <th className="text-right p-2">شماره</th>
                 <th className="text-right p-2">نوع</th>
@@ -253,17 +253,17 @@ function EmergencySection() {
             </thead>
             <tbody>
               {data.map((c) => (
-                <tr key={c.id} className="border-b border-slate-800">
+                <tr key={c.id} className="border-b border-line">
                   <td className="p-2 font-bold">{c.name}</td>
                   <td className="p-2 font-mono text-xs">{c.phone}</td>
-                  <td className="p-2 text-slate-300">{c.purpose || "—"}</td>
+                  <td className="p-2 text-muted">{c.purpose || "—"}</td>
                   <td className="p-2">
-                    <span className={`badge ${c.is_active ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-slate-500/20 text-slate-300 border-slate-500/40"}`}>
+                    <span className={`badge ${c.is_active ? "bg-brand-light text-brand border-brand/30" : "bg-slate-100 text-slate-600 border-slate-300"}`}>
                       {c.is_active ? "فعال" : "غیرفعال"}
                     </span>
                   </td>
                   <td className="p-2">
-                    <button className="text-red-400 hover:underline" onClick={() => remove(c.id)}>حذف</button>
+                    <button className="btn-danger btn-sm" onClick={() => remove(c.id)}>حذف</button>
                   </td>
                 </tr>
               ))}
@@ -326,14 +326,14 @@ function SubscribersSection() {
       <h3 className="text-lg font-bold">گیرندگان گزارش شبانه</h3>
 
       {loading && <Spinner />}
-      {error && <div className="card text-red-400">{error}</div>}
+      {error && <div className="card bg-red-50 text-red-700 border-red-200">{error}</div>}
       {data && data.length === 0 && <Empty label="گیرنده‌ای ثبت نشده است." />}
 
       {data && data.length > 0 && (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="table-wrap">
+          <table className="table w-full text-sm">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="text-right p-2">نام</th>
                 <th className="text-right p-2">شماره</th>
                 <th className="text-right p-2">فعال</th>
@@ -342,16 +342,16 @@ function SubscribersSection() {
             </thead>
             <tbody>
               {data.map((s) => (
-                <tr key={s.id} className="border-b border-slate-800">
+                <tr key={s.id} className="border-b border-line">
                   <td className="p-2 font-bold">{s.name || "—"}</td>
                   <td className="p-2 font-mono text-xs">{s.phone}</td>
                   <td className="p-2">
-                    <span className={`badge ${s.is_active ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-slate-500/20 text-slate-300 border-slate-500/40"}`}>
+                    <span className={`badge ${s.is_active ? "bg-brand-light text-brand border-brand/30" : "bg-slate-100 text-slate-600 border-slate-300"}`}>
                       {s.is_active ? "فعال" : "غیرفعال"}
                     </span>
                   </td>
                   <td className="p-2">
-                    <button className="text-red-400 hover:underline" onClick={() => remove(s.id)}>حذف</button>
+                    <button className="btn-danger btn-sm" onClick={() => remove(s.id)}>حذف</button>
                   </td>
                 </tr>
               ))}
@@ -407,14 +407,14 @@ function DailyTab() {
       </div>
 
       {loading && <Spinner />}
-      {error && <div className="card text-red-400">{error}</div>}
+      {error && <div className="card bg-red-50 text-red-700 border-red-200">{error}</div>}
       {rows && rows.length === 0 && !loading && <Empty label="گزارشی برای این روز نیست." />}
 
       {rows && rows.length > 0 && (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="table-wrap">
+          <table className="table w-full text-sm">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="text-right p-2">حساب</th>
                 <th className="text-right p-2">کمپین</th>
                 <th className="text-right p-2">گیرنده</th>
@@ -424,15 +424,15 @@ function DailyTab() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-slate-800">
+                <tr key={r.id} className="border-b border-line">
                   <td className="p-2">{r.account_name || "—"}</td>
                   <td className="p-2">{r.campaign_name || "—"}</td>
                   <td className="p-2">
                     <div>{r.recipient_name || "—"}</div>
-                    <div className="font-mono text-xs text-slate-500">{r.recipient_phone}</div>
+                    <div className="font-mono text-xs text-muted">{r.recipient_phone}</div>
                   </td>
                   <td className="p-2">{r.status || "—"}</td>
-                  <td className="p-2 text-xs text-slate-500">{tsFmt(r.sent_at)}</td>
+                  <td className="p-2 text-xs text-muted">{tsFmt(r.sent_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -480,7 +480,7 @@ function MentionsTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <p className="text-sm text-slate-500">هر ۳۰ ثانیه بروزرسانی می‌شود.</p>
+        <p className="text-sm text-muted">هر ۳۰ ثانیه بروزرسانی می‌شود.</p>
         <div className="flex gap-2">
           <button className="btn-secondary" onClick={load}>بروزرسانی</button>
           <button className="btn-danger" onClick={clear}>پاک کردن لاگ</button>
@@ -488,14 +488,14 @@ function MentionsTab() {
       </div>
 
       {loading && !rows && <Spinner />}
-      {error && <div className="card text-red-400">{error}</div>}
+      {error && <div className="card bg-red-50 text-red-700 border-red-200">{error}</div>}
       {rows && rows.length === 0 && <Empty label="موردی ثبت نشده است." />}
 
       {rows && rows.length > 0 && (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="table-wrap">
+          <table className="table w-full text-sm">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="text-right p-2">محصول</th>
                 <th className="text-right p-2">وضعیت</th>
                 <th className="text-right p-2">فرستنده</th>
@@ -507,21 +507,21 @@ function MentionsTab() {
             </thead>
             <tbody>
               {rows.map((m, i) => (
-                <tr key={i} className="border-b border-slate-800">
+                <tr key={i} className="border-b border-line">
                   <td className="p-2 font-bold">{m.product}</td>
                   <td className="p-2">
-                    <span className={`badge text-xs ${m.in_assistant ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border-amber-500/40"}`}>
+                    <span className={`badge text-xs ${m.in_assistant ? "bg-brand-light text-brand border-brand/30" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
                       {m.assistant_status || (m.in_assistant ? "در دستیار داریم" : "خارج از دستیار")}
                     </span>
                   </td>
                   <td className="p-2">{m.sender_name || m.sender || "—"}</td>
                   <td className="p-2"><ContactCell contacts={m.all_contacts} senderPhone={m.sender_phone} /></td>
-                  <td className="p-2 text-slate-300">{m.group || "—"}</td>
-                  <td className="p-2 text-slate-300">
+                  <td className="p-2 text-muted">{m.group || "—"}</td>
+                  <td className="p-2 text-muted">
                     {String(m.text || "").slice(0, 50)}
                     {String(m.text || "").length > 50 ? "…" : ""}
                   </td>
-                  <td className="p-2 text-xs text-slate-500">{tsFmt(m.time)}</td>
+                  <td className="p-2 text-xs text-muted">{tsFmt(m.time)}</td>
                 </tr>
               ))}
             </tbody>
@@ -568,7 +568,7 @@ function BestHoursTab() {
           </select>
         </div>
         {data?.best_hours?.length > 0 && (
-          <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">
+          <span className="badge bg-brand-light text-brand border-brand/30">
             بهترین ساعت‌ها برای ارسال: {data.best_hours.map((h) => fa(h)).join("، ")}
           </span>
         )}
@@ -576,7 +576,7 @@ function BestHoursTab() {
 
       {loading && !data && <Spinner />}
       {data && !hasData && (
-        <div className="card text-sm text-slate-400">
+        <div className="card text-sm text-muted">
           هنوز داده کافی ثبت نشده — با ارسال بیشتر، نرخ خوانده‌شدن به تفکیک ساعت اینجا نمایش داده می‌شود.
         </div>
       )}
@@ -590,14 +590,14 @@ function BestHoursTab() {
                 title={`ساعت ${h.hour} — خوانده ${h.read_pct}٪ · تحویل ${h.delivered_pct}٪ · ارسال ${h.sent}`}
               >
                 <div
-                  className={`w-full rounded-t ${best.has(h.hour) ? "bg-emerald-500" : "bg-sky-600"}`}
+                  className={`w-full rounded-t ${best.has(h.hour) ? "bg-brand" : "bg-sky-500"}`}
                   style={{ height: `${(h.read_pct / maxRead) * 100}%` }}
                 />
-                <span className="text-[10px] text-slate-500 mt-1">{h.hour}</span>
+                <span className="text-[10px] text-muted mt-1">{h.hour}</span>
               </div>
             ))}
           </div>
-          <p className="text-xs text-slate-400 mt-2">
+          <p className="text-xs text-muted mt-2">
             نرخ خوانده‌شدن به تفکیک ساعت (به وقت تهران). ستون‌های سبز = بهترین ساعت‌ها (حداقل {fa(data?.min_sample)} ارسال).
           </p>
         </div>
@@ -614,6 +614,7 @@ function TopProductsTab() {
   const [days, setDays] = React.useState(initialFilters.days || TOP_PRODUCTS_DEFAULT_DAYS);
   const [limit, setLimit] = React.useState(initialFilters.limit || TOP_PRODUCTS_DEFAULT_LIMIT);
   const [source, setSource] = React.useState(initialFilters.source || ""); // "" | pv | group | status
+  const [aiMerge, setAiMerge] = React.useState(Boolean(initialFilters.aiMerge));
   const [searchInput, setSearchInput] = React.useState(initialFilters.search || ""); // raw text field value
   const [search, setSearch] = React.useState(initialFilters.search || ""); // debounced value sent to the backend
   const [sellersModal, setSellersModal] = React.useState(null); // {product_name, sellers, loading}
@@ -626,8 +627,8 @@ function TopProductsTab() {
   }, [searchInput]);
 
   React.useEffect(() => {
-    saveTopProductsFilters({ days, limit, source, search });
-  }, [days, limit, source, search]);
+    saveTopProductsFilters({ days, limit, source, search, aiMerge });
+  }, [days, limit, source, search, aiMerge]);
 
   const openTrend = async (phone) => {
     if (!phone) return;
@@ -641,10 +642,13 @@ function TopProductsTab() {
     }
   };
 
-  const openSellersModal = async (productName) => {
+  const openSellersModal = async (product) => {
+    const productName = product?.product_name || "";
+    const canonicalKey = product?.canonical_key || "";
+    const matchKeys = Array.isArray(product?.match_keys) ? product.match_keys : [];
     setSellersModal({ product_name: productName, sellers: [], loading: true });
     try {
-      const res = await Api.productSellers(productName, days, 100);
+      const res = await Api.productSellers(productName, days, 100, canonicalKey, matchKeys);
       setSellersModal({ product_name: productName, sellers: res?.sellers || [], loading: false });
     } catch (e) {
       toast.error(e?.response?.data?.detail || e.message);
@@ -655,13 +659,13 @@ function TopProductsTab() {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      setData(await Api.topProducts(limit, days, source, search));
+      setData(await Api.topProducts(limit, days, source, search, aiMerge));
     } catch (e) {
       toast.error(e?.response?.data?.detail || e.message);
     } finally {
       setLoading(false);
     }
-  }, [days, limit, source, search]);
+  }, [days, limit, source, search, aiMerge]);
 
   const SOURCE_LABEL = { pv: "پی‌وی", group: "گروه", status: "استوری" };
 
@@ -672,9 +676,9 @@ function TopProductsTab() {
   }, [load]);
 
   const rankClass = (rank) => {
-    if (rank <= 10) return "bg-amber-500/20 text-amber-300 border-amber-500/40";
-    if (rank <= 50) return "bg-slate-400/20 text-slate-200 border-slate-400/40";
-    return "bg-slate-500/20 text-slate-300 border-slate-500/40";
+    if (rank <= 10) return "bg-amber-50 text-amber-700 border-amber-200";
+    if (rank <= 50) return "bg-slate-100 text-slate-700 border-slate-300";
+    return "bg-slate-50 text-slate-500 border-slate-200";
   };
 
   const exportExcel = () => {
@@ -751,7 +755,7 @@ function TopProductsTab() {
               <button
                 type="button"
                 onClick={() => setSearchInput("")}
-                className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                className="absolute left-2 top-1/2 -translate-y-1/2 text-muted hover:text-ink"
                 title="پاک کردن"
               >
                 ✕
@@ -759,13 +763,21 @@ function TopProductsTab() {
             )}
           </div>
         </div>
+        <label className="flex items-center gap-2 h-10 text-sm text-ink">
+          <input
+            type="checkbox"
+            checked={aiMerge}
+            onChange={(e) => setAiMerge(e.target.checked)}
+          />
+          <span>ادغام هوشمند AI</span>
+        </label>
         <button className="btn-secondary" onClick={exportExcel}>📥 خروجی اکسل</button>
-        <span className="badge bg-slate-500/20 text-slate-300 border-slate-500/40">{fa(data?.total_products)} محصول</span>
+        <span className="badge bg-slate-100 text-slate-600 border-slate-300">{fa(data?.total_products)} محصول</span>
       </div>
 
-      {loading && !data && <div className="text-sm text-slate-400">در حال بارگذاری...</div>}
+      {loading && !data && <div className="text-sm text-muted">در حال بارگذاری...</div>}
       {data && products.length === 0 && !loading && (
-        <div className="card text-sm text-slate-400">
+        <div className="card text-sm text-muted">
           {search.trim()
             ? `محصولی با نام «${search.trim()}» یافت نشد.`
             : "هنوز محصول پرتکراری ثبت نشده (از پیام‌های PV و گروه‌ها استخراج می‌شود)."}
@@ -773,10 +785,10 @@ function TopProductsTab() {
       )}
 
       {products.length > 0 && (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="table-wrap">
+          <table className="table w-full text-sm">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="text-right p-2">رتبه</th>
                 <th className="text-right p-2">نام محصول</th>
                 <th className="text-right p-2">وضعیت</th>
@@ -790,27 +802,27 @@ function TopProductsTab() {
             </thead>
             <tbody>
               {products.map((p) => (
-                <tr key={p.rank} className="border-b border-slate-800">
+                <tr key={p.rank} className="border-b border-line">
                   <td className="p-2">
                     <span className={`badge ${rankClass(p.rank)}`}>{fa(p.rank)}</span>
                   </td>
                   <td className="p-2 font-bold">{p.product_name}</td>
                   <td className="p-2">
-                    <span className={`badge text-xs ${p.in_assistant ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border-amber-500/40"}`}>
+                    <span className={`badge text-xs ${p.in_assistant ? "bg-brand-light text-brand border-brand/30" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
                       {p.assistant_status || (p.in_assistant ? "در دستیار داریم" : "خارج از دستیار")}
                     </span>
                   </td>
-                  <td className="p-2 text-xs text-slate-300">
+                  <td className="p-2 text-xs text-muted">
                     {(p.sources || []).map((s) => SOURCE_LABEL[s] || s).join("، ") || "—"}
                   </td>
                   <td className="p-2">{fa(p.mention_count)}</td>
-                  <td className="p-2 text-slate-300">{fa(p.group_count)}</td>
-                  <td className="p-2 text-slate-300">{fa(p.sender_count)}</td>
-                  <td className="p-2 text-xs text-slate-500">{p.last_mention_shamsi || "—"}</td>
+                  <td className="p-2 text-muted">{fa(p.group_count)}</td>
+                  <td className="p-2 text-muted">{fa(p.sender_count)}</td>
+                  <td className="p-2 text-xs text-muted">{p.last_mention_shamsi || "—"}</td>
                   <td className="p-2 text-center">
                     <button
-                      onClick={() => openSellersModal(p.product_name)}
-                      className="text-xs bg-emerald-700 hover:bg-emerald-600 text-white px-3 py-1 rounded whitespace-nowrap"
+                      onClick={() => openSellersModal(p)}
+                      className="btn-primary btn-sm whitespace-nowrap"
                     >
                       👁 مشاهده ({fa(p.sender_count)})
                     </button>
@@ -839,22 +851,22 @@ function ContactTrendModal({ modal, onClose }) {
   const d = modal.data;
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-slate-900 border border-slate-700 rounded-lg w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="p-3 border-b border-slate-700 flex items-center justify-between">
+      <div className="bg-surface border border-line rounded-lg shadow-card w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="p-3 border-b border-line flex items-center justify-between">
           <h3 className="font-bold">روند تبلیغات مخاطب · <span dir="ltr">{modal.phone}</span></h3>
-          <button className="text-slate-400 hover:text-white" onClick={onClose}>✕</button>
+          <button className="text-muted hover:text-ink" onClick={onClose}>✕</button>
         </div>
         <div className="p-3 overflow-auto space-y-4">
-          {modal.loading && <div className="text-center py-8 text-slate-500">در حال بارگذاری...</div>}
+          {modal.loading && <div className="text-center py-8 text-muted">در حال بارگذاری...</div>}
           {d && d.total_mentions === 0 && !modal.loading && (
-            <div className="text-center py-8 text-slate-500">تبلیغی از این مخاطب ثبت نشده.</div>
+            <div className="text-center py-8 text-muted">تبلیغی از این مخاطب ثبت نشده.</div>
           )}
           {d && d.summary?.length > 0 && (
             <div>
-              <p className="text-sm text-slate-400 mb-2">خلاصه‌ی تکرار محصولات (۹۰ روز اخیر):</p>
+              <p className="text-sm text-muted mb-2">خلاصه‌ی تکرار محصولات (۹۰ روز اخیر):</p>
               <div className="flex flex-wrap gap-2">
                 {d.summary.map((s, i) => (
-                  <span key={i} className={`badge text-xs ${s.in_assistant ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border-amber-500/40"}`}>
+                  <span key={i} className={`badge text-xs ${s.in_assistant ? "bg-brand-light text-brand border-brand/30" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
                     {fa(s.count)}× {s.product_name}
                   </span>
                 ))}
@@ -862,30 +874,32 @@ function ContactTrendModal({ modal, onClose }) {
             </div>
           )}
           {d && d.timeline?.length > 0 && (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-slate-400 border-b border-slate-700">
-                  <th className="py-2 text-right">زمان</th>
-                  <th className="py-2 text-right">منبع</th>
-                  <th className="py-2 text-right">محصول</th>
-                  <th className="py-2 text-right">وضعیت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.timeline.map((t, i) => (
-                  <tr key={i} className="border-b border-slate-800">
-                    <td className="py-2 text-slate-400 text-xs" dir="ltr">{t.time_shamsi}</td>
-                    <td className="py-2 text-slate-300 text-xs">{SRC[t.source] || t.source}</td>
-                    <td className="py-2">{t.product_name || "—"}</td>
-                    <td className="py-2">
-                      <span className={`badge text-xs ${t.in_assistant ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border-amber-500/40"}`}>
-                        {t.assistant_status}
-                      </span>
-                    </td>
+            <div className="table-wrap">
+              <table className="table w-full text-sm">
+                <thead>
+                  <tr className="text-muted border-b border-line">
+                    <th className="py-2 text-right">زمان</th>
+                    <th className="py-2 text-right">منبع</th>
+                    <th className="py-2 text-right">محصول</th>
+                    <th className="py-2 text-right">وضعیت</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {d.timeline.map((t, i) => (
+                    <tr key={i} className="border-b border-line">
+                      <td className="py-2 text-muted text-xs" dir="ltr">{t.time_shamsi}</td>
+                      <td className="py-2 text-muted text-xs">{SRC[t.source] || t.source}</td>
+                      <td className="py-2">{t.product_name || "—"}</td>
+                      <td className="py-2">
+                        <span className={`badge text-xs ${t.in_assistant ? "bg-brand-light text-brand border-brand/30" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                          {t.assistant_status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
@@ -925,61 +939,63 @@ function SellersModal({ modal, days, onClose, onOpenTrend }) {
       onClick={onClose}
     >
       <div
-        className="bg-slate-900 border border-slate-700 rounded-xl max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col"
+        className="bg-surface border border-line rounded-xl shadow-card max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-4 border-b border-slate-700 flex justify-between items-center">
+        <div className="p-4 border-b border-line flex justify-between items-center">
           <div>
-            <h3 className="font-bold text-white">فروشندگان اخیر</h3>
-            <p className="text-sm text-slate-400">{modal.product_name}</p>
+            <h3 className="font-bold text-ink">فروشندگان اخیر</h3>
+            <p className="text-sm text-muted">{modal.product_name}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl leading-none">✕</button>
+          <button onClick={onClose} className="text-muted hover:text-ink text-xl leading-none">✕</button>
         </div>
 
         <div className="overflow-y-auto p-4">
           {modal.loading ? (
-            <div className="text-center py-8 text-slate-400">در حال بارگذاری...</div>
+            <div className="text-center py-8 text-muted">در حال بارگذاری...</div>
           ) : modal.sellers.length === 0 ? (
-            <div className="text-center py-8 text-slate-500">فروشنده‌ای یافت نشد</div>
+            <div className="text-center py-8 text-muted">فروشنده‌ای یافت نشد</div>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-slate-400 border-b border-slate-700">
-                  <th className="py-2 text-right">فرستنده</th>
-                  <th className="py-2 text-right">اطلاعات تماس</th>
-                  <th className="py-2 text-right">گروه</th>
-                  <th className="py-2 text-right">زمان</th>
-                  <th className="py-2 text-center">روند</th>
-                </tr>
-              </thead>
-              <tbody>
-                {modal.sellers.map((s, i) => (
-                  <tr key={i} className="border-b border-slate-800">
-                    <td className="py-2">{s.sender_name || "—"}</td>
-                    <td className="py-2">
-                      <ContactCell contacts={s.all_contacts} senderPhone={s.sender_phone} />
-                    </td>
-                    <td className="py-2 text-slate-300 text-xs">{s.group_name || "—"}</td>
-                    <td className="py-2 text-slate-400 text-xs" dir="ltr">{s.time_shamsi}</td>
-                    <td className="py-2 text-center">
-                      <button className="text-xs bg-sky-700 hover:bg-sky-600 text-white px-2 py-1 rounded whitespace-nowrap"
-                        onClick={() => onOpenTrend && onOpenTrend(s.sender_phone || (s.all_contacts || [])[0])}>
-                        📈 روند
-                      </button>
-                    </td>
+            <div className="table-wrap">
+              <table className="table w-full text-sm">
+                <thead>
+                  <tr className="text-muted border-b border-line">
+                    <th className="py-2 text-right">فرستنده</th>
+                    <th className="py-2 text-right">اطلاعات تماس</th>
+                    <th className="py-2 text-right">گروه</th>
+                    <th className="py-2 text-right">زمان</th>
+                    <th className="py-2 text-center">روند</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {modal.sellers.map((s, i) => (
+                    <tr key={i} className="border-b border-line">
+                      <td className="py-2">{s.sender_name || "—"}</td>
+                      <td className="py-2">
+                        <ContactCell contacts={s.all_contacts} senderPhone={s.sender_phone} />
+                      </td>
+                      <td className="py-2 text-muted text-xs">{s.group_name || "—"}</td>
+                      <td className="py-2 text-muted text-xs" dir="ltr">{s.time_shamsi}</td>
+                      <td className="py-2 text-center">
+                        <button className="text-xs bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 px-2 py-1 rounded whitespace-nowrap"
+                          onClick={() => onOpenTrend && onOpenTrend(s.sender_phone || (s.all_contacts || [])[0])}>
+                          📈 روند
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
-        <div className="p-3 border-t border-slate-700 flex items-center justify-between text-xs text-slate-500">
+        <div className="p-3 border-t border-line flex items-center justify-between text-xs text-muted">
           <span>
             {fa(modal.sellers.length)} فروشنده در {fa(days)} روز اخیر
           </span>
           {modal.sellers.length > 0 && (
-            <button className="btn-secondary text-xs" onClick={exportCsv}>📥 خروجی اکسل</button>
+            <button className="btn-secondary btn-sm" onClick={exportCsv}>📥 خروجی اکسل</button>
           )}
         </div>
       </div>

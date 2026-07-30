@@ -25,12 +25,12 @@ export default function ContactGroups() {
         <button className="btn-primary" onClick={() => setEdit({})}>+ گروه جدید</button>
       </div>
 
-      <div className="card text-sm text-slate-300 bg-sky-500/10 border-sky-500/30">
+      <div className="card text-sm bg-sky-50 text-sky-700 border-sky-200">
         مخاطبین خود را در گروه‌های دلخواه دسته‌بندی کنید تا ارسال پیام آسان‌تر شود.
       </div>
 
       {loading && <Spinner />}
-      {error && <div className="card text-red-400">{error}</div>}
+      {error && <div className="card bg-red-50 text-red-700 border-red-200">{error}</div>}
       {data && data.length === 0 && <Empty label="هیچ گروهی وجود ندارد." />}
 
       {data && data.length > 0 && (
@@ -39,21 +39,21 @@ export default function ContactGroups() {
             <div key={g.id} className="card space-y-3">
               <div className="flex items-center gap-2">
                 <span
-                  className="w-5 h-5 rounded-full border border-slate-600 flex-shrink-0"
+                  className="w-5 h-5 rounded-full border border-line flex-shrink-0"
                   style={{ background: g.color || "#25D366" }}
                 />
                 <span className="font-bold truncate">{g.name}</span>
-                <span className="badge bg-slate-500/20 text-slate-300 border-slate-500/40 mr-auto">
+                <span className="badge bg-slate-100 text-slate-600 border-slate-300 mr-auto">
                   {g.member_count ?? 0} عضو
                 </span>
               </div>
               {g.description && (
-                <p className="text-sm text-slate-400">{g.description}</p>
+                <p className="text-sm text-muted">{g.description}</p>
               )}
-              <div className="flex gap-2 text-sm">
-                <button className="text-emerald-400 hover:underline" onClick={() => setMembers(g)}>مشاهده اعضا</button>
-                <button className="text-sky-400 hover:underline" onClick={() => setEdit(g)}>ویرایش</button>
-                <button className="text-red-400 hover:underline" onClick={() => remove(g.id)}>حذف</button>
+              <div className="flex gap-2">
+                <button className="btn-secondary btn-sm" onClick={() => setMembers(g)}>مشاهده اعضا</button>
+                <button className="btn-ghost btn-sm" onClick={() => setEdit(g)}>ویرایش</button>
+                <button className="btn-danger btn-sm" onClick={() => remove(g.id)}>حذف</button>
               </div>
             </div>
           ))}
@@ -100,8 +100,8 @@ function GroupModal({ group, onClose, onDone }) {
         <div>
           <label className="label">رنگ</label>
           <div className="flex items-center gap-3">
-            <input type="color" className="h-10 w-16 rounded bg-slate-800 border border-slate-700 cursor-pointer" value={f.color} onChange={set("color")} />
-            <span className="text-sm text-slate-400">{f.color}</span>
+            <input type="color" className="h-10 w-16 rounded bg-canvas border border-line cursor-pointer" value={f.color} onChange={set("color")} />
+            <span className="text-sm text-muted">{f.color}</span>
           </div>
         </div>
         <button className="btn-primary w-full" disabled={saving} onClick={submit}>{saving ? "..." : "ذخیره"}</button>
@@ -154,23 +154,23 @@ function MembersModal({ group, onClose, onDone }) {
         <div>
           <h4 className="font-bold mb-2 text-sm">اعضای فعلی</h4>
           {loading && <Spinner />}
-          {error && <div className="text-red-400 text-sm">{error}</div>}
+          {error && <div className="text-red-700 text-sm">{error}</div>}
           {members && members.length === 0 && <Empty label="این گروه عضوی ندارد." />}
           {members && members.length > 0 && (
             <div className="space-y-1 max-h-52 overflow-y-auto">
               {members.map((m) => (
-                <div key={m.id} className="flex items-center gap-2 text-sm border-b border-slate-800 py-1">
+                <div key={m.id} className="flex items-center gap-2 text-sm border-b border-line py-1">
                   <span className="font-bold">{m.name || "بدون نام"}</span>
-                  <span className="text-slate-400" dir="ltr">{m.phone}</span>
-                  {m.has_whatsapp && <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">واتساپ</span>}
-                  <button className="text-red-400 hover:underline mr-auto" onClick={() => removeMember(m.id)}>حذف</button>
+                  <span className="text-muted" dir="ltr">{m.phone}</span>
+                  {m.has_whatsapp && <span className="badge bg-brand-light text-brand border-brand/30">واتساپ</span>}
+                  <button className="btn-danger btn-sm mr-auto" onClick={() => removeMember(m.id)}>حذف</button>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="border-t border-slate-700 pt-4">
+        <div className="border-t border-line pt-4">
           <h4 className="font-bold mb-2 text-sm">افزودن عضو</h4>
           <div className="flex gap-2">
             <input
@@ -184,16 +184,16 @@ function MembersModal({ group, onClose, onDone }) {
               {searching ? "..." : "جستجو"}
             </button>
           </div>
-          {results && results.length === 0 && <p className="text-slate-500 text-sm mt-2">مخاطبی یافت نشد.</p>}
+          {results && results.length === 0 && <p className="text-muted text-sm mt-2">مخاطبی یافت نشد.</p>}
           {results && results.length > 0 && (
             <div className="space-y-1 max-h-52 overflow-y-auto mt-2">
               {results.map((c) => (
-                <div key={c.id} className="flex items-center gap-2 text-sm border-b border-slate-800 py-1">
+                <div key={c.id} className="flex items-center gap-2 text-sm border-b border-line py-1">
                   <span className="font-bold">{c.name || "بدون نام"}</span>
-                  <span className="text-slate-400" dir="ltr">{c.phone}</span>
-                  {c.province && <span className="text-slate-500">{c.province}</span>}
-                  {c.has_whatsapp && <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">واتساپ</span>}
-                  <button className="text-emerald-400 hover:underline mr-auto" onClick={() => add(c.id)}>افزودن</button>
+                  <span className="text-muted" dir="ltr">{c.phone}</span>
+                  {c.province && <span className="text-muted">{c.province}</span>}
+                  {c.has_whatsapp && <span className="badge bg-brand-light text-brand border-brand/30">واتساپ</span>}
+                  <button className="btn-secondary btn-sm mr-auto" onClick={() => add(c.id)}>افزودن</button>
                 </div>
               ))}
             </div>

@@ -130,7 +130,7 @@ export default function Products() {
 
       {data && (
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="text-sm text-slate-400">
+          <div className="text-sm text-muted">
             {totalProducts} محصول در {data.length} برند | مرتب‌شده از ارزان به گران
           </div>
           <button className="btn-secondary text-xs" onClick={() => setShowTable((v) => !v)}>
@@ -147,12 +147,12 @@ export default function Products() {
               <option value="">همه برندها</option>
               {(table?.brands || []).map((b) => <option key={b} value={b}>{b}</option>)}
             </select>
-            <span className="text-xs text-slate-400">{table?.total ?? 0} محصول</span>
+            <span className="text-xs text-muted">{table?.total ?? 0} محصول</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-slate-400 border-b border-slate-700">
+                <tr className="text-muted border-b border-line">
                   <th className="text-right p-2">برند</th>
                   <th className="text-right p-2">نام/مدل</th>
                   <th className="text-right p-2">قیمت (تومان)</th>
@@ -160,14 +160,14 @@ export default function Products() {
               </thead>
               <tbody>
                 {(table?.items || []).map((p, i) => (
-                  <tr key={p.id ?? i} className="border-b border-slate-800">
-                    <td className="p-2 text-slate-300">{p.brand}</td>
+                  <tr key={p.id ?? i} className="border-b border-line">
+                    <td className="p-2 text-ink">{p.brand}</td>
                     <td className="p-2 font-bold">{p.name}{p.model ? ` — ${p.model}` : ""}</td>
-                    <td className="p-2">{p.price_formatted ? <span className="text-emerald-400">{p.price_formatted}</span> : <span className="text-slate-500">—</span>}</td>
+                    <td className="p-2">{p.price_formatted ? <span className="text-brand">{p.price_formatted}</span> : <span className="text-muted">—</span>}</td>
                   </tr>
                 ))}
                 {table && (table.items || []).length === 0 && (
-                  <tr><td colSpan={3} className="p-3 text-center text-slate-500">موردی یافت نشد</td></tr>
+                  <tr><td colSpan={3} className="p-3 text-center text-muted">موردی یافت نشد</td></tr>
                 )}
               </tbody>
             </table>
@@ -175,7 +175,7 @@ export default function Products() {
           {table && table.total > T_LIMIT && (
             <div className="flex items-center justify-between text-xs">
               <button className="btn-secondary text-xs" disabled={tSkip === 0} onClick={() => setTSkip(Math.max(0, tSkip - T_LIMIT))}>‹ قبلی</button>
-              <span className="text-slate-400">صفحه {Math.floor(tSkip / T_LIMIT) + 1} از {Math.max(1, Math.ceil(table.total / T_LIMIT))}</span>
+              <span className="text-muted">صفحه {Math.floor(tSkip / T_LIMIT) + 1} از {Math.max(1, Math.ceil(table.total / T_LIMIT))}</span>
               <button className="btn-secondary text-xs" disabled={tSkip + T_LIMIT >= table.total} onClick={() => setTSkip(tSkip + T_LIMIT)}>بعدی ›</button>
             </div>
           )}
@@ -184,11 +184,11 @@ export default function Products() {
 
       {/* V16 PART 1 — three distinct states: loading / disconnected / connected-but-empty */}
       {loading && !data && <Spinner />}
-      {error && <div className="card text-red-400">{error}</div>}
+      {error && <div className="card border-red-200 bg-red-50 text-red-700">{error}</div>}
       {supa && supa.status === "disconnected" && (
-        <div className="card border-amber-500/50 bg-amber-500/10 text-amber-200 text-sm">
+        <div className="card border-amber-200 bg-amber-50 text-amber-700 text-sm">
           ⚠️ اتصال به Supabase برقرار نیست — لپ‌تاپ Supabase (۱۹۲.۱۶۸.۱۷۰.۱۰) را روشن کنید یا آدرس آن را بررسی کنید.
-          <div className="text-xs text-amber-300/80 mt-1">{supa?.rest_products?.detail || supa?.tcp?.detail || ""}</div>
+          <div className="text-xs text-amber-600 mt-1">{supa?.rest_products?.detail || supa?.tcp?.detail || ""}</div>
         </div>
       )}
       {data && data.length === 0 && !loading && (!supa || supa.status !== "disconnected") && (
@@ -207,13 +207,13 @@ export default function Products() {
                 <button
                   type="button"
                   onClick={() => toggleBrand(g.brand)}
-                  className="w-full flex items-center justify-between bg-slate-800 rounded-lg p-3 hover:bg-slate-700 transition-colors text-right"
+                  className="w-full flex items-center justify-between bg-surface border border-line rounded-lg p-3 hover:bg-canvas transition-colors text-right"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-slate-400">{open ? "▼" : "◀"}</span>
+                    <span className="text-muted">{open ? "▼" : "◀"}</span>
                     <span className="font-bold">{g.brand}</span>
                   </div>
-                  <span className="badge bg-slate-700 text-slate-300 border-slate-600">
+                  <span className="badge bg-slate-100 text-slate-600 border-slate-300">
                     {g.product_count} محصول
                   </span>
                 </button>
@@ -222,7 +222,7 @@ export default function Products() {
                   <div className="card overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="text-slate-400 border-b border-slate-700">
+                        <tr className="text-muted border-b border-line">
                           <th className="text-right p-2">نام محصول</th>
                           <th className="text-right p-2">مدل</th>
                           <th className="text-right p-2">ظرفیت</th>
@@ -234,22 +234,22 @@ export default function Products() {
                           const mentioned = p.name in mentionByName;
                           const by = mentionByName[p.name];
                           return (
-                            <tr key={p.id ?? `${g.brand}-${i}`} className="border-b border-slate-800">
+                            <tr key={p.id ?? `${g.brand}-${i}`} className="border-b border-line">
                               <td className="p-2 font-bold">
                                 {p.name}
                                 {mentioned && (
-                                  <span className="badge mr-2 bg-amber-500/20 text-amber-300 border-amber-500/40">
+                                  <span className="badge mr-2 bg-amber-50 text-amber-700 border-amber-200">
                                     ذکر شده{by ? ` · ${by}` : ""}
                                   </span>
                                 )}
                               </td>
-                              <td className="p-2 text-slate-300">{p.model || "—"}</td>
-                              <td className="p-2 text-slate-300">{p.capacity || "—"}</td>
+                              <td className="p-2 text-ink">{p.model || "—"}</td>
+                              <td className="p-2 text-ink">{p.capacity || "—"}</td>
                               <td className="p-2">
                                 {p.price_formatted ? (
-                                  <span className="text-emerald-400">{p.price_formatted}</span>
+                                  <span className="text-brand">{p.price_formatted}</span>
                                 ) : (
-                                  <span className="text-slate-500">تماس بگیرید</span>
+                                  <span className="text-muted">تماس بگیرید</span>
                                 )}
                               </td>
                             </tr>

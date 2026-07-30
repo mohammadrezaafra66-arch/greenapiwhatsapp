@@ -17,7 +17,7 @@ export default function GroupMonitoring() {
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold">پایش گروه‌ها 🎧</h2>
-      <div className="card text-sm text-slate-300 bg-amber-500/10 border-amber-500/30">
+      <div className="card text-sm text-amber-700 bg-amber-50 border-amber-200">
         ⚠️ حساب «شنونده» فقط برای پایش گروه‌هاست و باید یک شماره جدا و سالم باشد. این حساب هرگز
         نباید در کمپین‌ها یا گرم‌سازی استفاده شود (سیستم این جداسازی را اجبار می‌کند). پاسخ خودکار
         به‌صورت پیش‌فرض خاموش است و فقط در ساعات کاری (۹ تا ۲۱ به‌وقت تهران) و با محدودیت نرخ ارسال می‌شود.
@@ -74,15 +74,15 @@ function GroupsTab() {
       <div className="card space-y-3">
         <div className="font-bold">حساب‌های شنونده</div>
         {listeners.length === 0 && (
-          <div className="text-slate-400 text-sm">هنوز حساب شنونده‌ای تعیین نشده است.</div>
+          <div className="text-muted text-sm">هنوز حساب شنونده‌ای تعیین نشده است.</div>
         )}
         {listeners.map((a) => (
-          <div key={a.id} className="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div key={a.id} className="flex items-center justify-between border-b border-line pb-2">
             <div>
               <span className="font-bold">{a.name}</span>{" "}
-              <span className="text-slate-400 text-xs">{a.phone || a.instance_id}</span>
+              <span className="text-muted text-xs">{a.phone || a.instance_id}</span>
             </div>
-            <button className="btn-ghost text-red-400" onClick={() => mark(a.id, false)}>
+            <button className="btn-danger btn-sm" onClick={() => mark(a.id, false)}>
               برداشتن نقش شنونده
             </button>
           </div>
@@ -143,15 +143,15 @@ function MonitoredGroups({ account }) {
   };
 
   if (loading) return <Spinner />;
-  if (error) return <div className="text-red-400 text-sm">{error}</div>;
+  if (error) return <div className="text-red-700 text-sm">{error}</div>;
   if (!data || data.length === 0)
     return <Empty label="گروهی یافت نشد. مطمئن شوید حساب شنونده عضو گروه‌هاست." />;
 
   return (
-    <div className="overflow-x-auto">
+    <div className="table-wrap">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-slate-400 border-b border-slate-700">
+          <tr className="text-muted border-b border-line">
             <th className="text-right p-2">گروه</th>
             <th className="text-right p-2">پایش</th>
             <th className="text-right p-2">پاسخ خودکار</th>
@@ -160,7 +160,7 @@ function MonitoredGroups({ account }) {
         </thead>
         <tbody>
           {data.map((g) => (
-            <tr key={g.group_id} className="border-b border-slate-800">
+            <tr key={g.group_id} className="border-b border-line">
               <td className="p-2">{g.group_name || g.group_id}</td>
               <td className="p-2">
                 <input
@@ -227,12 +227,12 @@ function KeywordsTab() {
     <div className="space-y-3">
       <div className="card flex items-end gap-2 flex-wrap">
         <div className="flex-1 min-w-[160px]">
-          <label className="text-xs text-slate-400">کلمه کلیدی</label>
+          <label className="text-xs text-muted">کلمه کلیدی</label>
           <input className="input w-full" value={word} onChange={(e) => setWord(e.target.value)}
                  placeholder="مثلاً قیمت" />
         </div>
         <div>
-          <label className="text-xs text-slate-400">نوع</label>
+          <label className="text-xs text-muted">نوع</label>
           <select className="input" value={kind} onChange={(e) => setKind(e.target.value)}>
             <option value="trigger">محرک (تشخیص/پاسخ)</option>
             <option value="forbidden">ممنوعه (هشدار به مدیر)</option>
@@ -243,10 +243,10 @@ function KeywordsTab() {
       {loading && <Spinner />}
       {data && data.length === 0 && <Empty label="کلمه کلیدی‌ای ثبت نشده است." />}
       {data && data.length > 0 && (
-        <div className="card overflow-x-auto">
+        <div className="card table-wrap">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="text-right p-2">کلمه</th>
                 <th className="text-right p-2">نوع</th>
                 <th className="text-right p-2"></th>
@@ -254,17 +254,17 @@ function KeywordsTab() {
             </thead>
             <tbody>
               {data.map((k) => (
-                <tr key={k.id} className="border-b border-slate-800">
+                <tr key={k.id} className="border-b border-line">
                   <td className="p-2 font-bold">{k.word}</td>
                   <td className="p-2">
                     {k.kind === "forbidden" ? (
-                      <span className="text-red-400">ممنوعه</span>
+                      <span className="text-red-700">ممنوعه</span>
                     ) : (
-                      <span className="text-emerald-400">محرک</span>
+                      <span className="text-brand">محرک</span>
                     )}
                   </td>
                   <td className="p-2 text-left">
-                    <button className="btn-ghost text-red-400" onClick={() => remove(k.id)}>حذف</button>
+                    <button className="btn-danger btn-sm" onClick={() => remove(k.id)}>حذف</button>
                   </td>
                 </tr>
               ))}
@@ -311,18 +311,18 @@ function RepliesTab() {
   return (
     <div className="space-y-3">
       <div className="card space-y-2">
-        <div className="text-sm text-slate-300">
+        <div className="text-sm text-muted">
           پاسخ‌های از پیش‌تعریف‌شده وقتی «حالت گفتگو» گروه روی «از پیش‌تعریف‌شده» باشد استفاده می‌شوند.
           پاسخ بدون کلمه کلیدی، پاسخ پیش‌فرض است.
         </div>
         <div className="flex items-end gap-2 flex-wrap">
           <div className="flex-1 min-w-[200px]">
-            <label className="text-xs text-slate-400">متن پاسخ</label>
+            <label className="text-xs text-muted">متن پاسخ</label>
             <input className="input w-full" value={text} onChange={(e) => setText(e.target.value)}
                    placeholder="مثلاً برای قیمت لطفاً خصوصی پیام دهید" />
           </div>
           <div>
-            <label className="text-xs text-slate-400">کلمه کلیدی (اختیاری)</label>
+            <label className="text-xs text-muted">کلمه کلیدی (اختیاری)</label>
             <select className="input" value={keywordId} onChange={(e) => setKeywordId(e.target.value)}>
               <option value="">پاسخ پیش‌فرض</option>
               {triggers.map((k) => (
@@ -336,10 +336,10 @@ function RepliesTab() {
       {loading && <Spinner />}
       {data && data.length === 0 && <Empty label="پاسخی ثبت نشده است." />}
       {data && data.length > 0 && (
-        <div className="card overflow-x-auto">
+        <div className="card table-wrap">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="text-right p-2">متن</th>
                 <th className="text-right p-2">کلمه کلیدی</th>
                 <th className="text-right p-2"></th>
@@ -347,11 +347,11 @@ function RepliesTab() {
             </thead>
             <tbody>
               {data.map((r) => (
-                <tr key={r.id} className="border-b border-slate-800">
+                <tr key={r.id} className="border-b border-line">
                   <td className="p-2">{r.reply_text}</td>
                   <td className="p-2">{r.keyword_id ? wordFor(r.keyword_id) || "—" : "پیش‌فرض"}</td>
                   <td className="p-2 text-left">
-                    <button className="btn-ghost text-red-400" onClick={() => remove(r.id)}>حذف</button>
+                    <button className="btn-danger btn-sm" onClick={() => remove(r.id)}>حذف</button>
                   </td>
                 </tr>
               ))}
@@ -375,22 +375,22 @@ function MessagesTab() {
   return (
     <div className="space-y-3">
       <div className="card flex items-center gap-2">
-        <label className="text-sm text-slate-400">فیلتر گروه:</label>
+        <label className="text-sm text-muted">فیلتر گروه:</label>
         <select className="input" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
           <option value="">همه گروه‌ها</option>
           {(monitored || []).map((m) => (
             <option key={m.id} value={m.group_id}>{m.group_name || m.group_id}</option>
           ))}
         </select>
-        <button className="btn-ghost" onClick={reload}>بروزرسانی</button>
+        <button className="btn-secondary btn-sm" onClick={reload}>بروزرسانی</button>
       </div>
       {loading && <Spinner />}
       {data && data.length === 0 && <Empty label="پیامی ثبت نشده است." />}
       {data && data.length > 0 && (
-        <div className="card overflow-x-auto">
+        <div className="card table-wrap">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="text-right p-2">فرستنده</th>
                 <th className="text-right p-2">پیام</th>
                 <th className="text-right p-2">کلمات محرک</th>
@@ -399,19 +399,19 @@ function MessagesTab() {
             </thead>
             <tbody>
               {data.map((m) => (
-                <tr key={m.id} className="border-b border-slate-800">
+                <tr key={m.id} className="border-b border-line">
                   <td className="p-2">
                     <div>{m.sender_name || "—"}</div>
-                    <div className="text-xs text-slate-500">{m.group_name}</div>
+                    <div className="text-xs text-muted">{m.group_name}</div>
                   </td>
                   <td className="p-2 max-w-[360px]">
                     {m.is_voice ? (
                       <div>
-                        🎤 <span className="text-slate-400 text-xs">پیام صوتی</span>
+                        🎤 <span className="text-muted text-xs">پیام صوتی</span>
                         {m.transcription ? (
-                          <div className="text-slate-300">{m.transcription}</div>
+                          <div className="text-ink">{m.transcription}</div>
                         ) : (
-                          <div className="text-slate-500 text-xs">
+                          <div className="text-muted text-xs">
                             {m.transcription_status === "pending" && "در حال رونویسی…"}
                             {m.transcription_status === "failed" && "رونویسی ناموفق"}
                           </div>
@@ -421,10 +421,10 @@ function MessagesTab() {
                       <span>{m.text || "—"}</span>
                     )}
                   </td>
-                  <td className="p-2 text-emerald-400">{m.matched_keywords || "—"}</td>
+                  <td className="p-2 text-brand">{m.matched_keywords || "—"}</td>
                   <td className="p-2">
-                    {m.flagged_forbidden && <span className="text-red-400 me-1">🚩 ممنوعه</span>}
-                    {m.replied && <span className="text-sky-400">✅ پاسخ داده شد</span>}
+                    {m.flagged_forbidden && <span className="text-red-700 me-1">🚩 ممنوعه</span>}
+                    {m.replied && <span className="text-sky-700">✅ پاسخ داده شد</span>}
                   </td>
                 </tr>
               ))}
@@ -451,16 +451,16 @@ function AlertsTab() {
 
   return (
     <div className="space-y-3">
-      <div className="card text-sm text-slate-300 bg-red-500/10 border-red-500/30">
+      <div className="card text-sm text-red-700 bg-red-50 border-red-200">
         کلمات ممنوعه/حساس در گروه‌های پایش‌شده اینجا فهرست می‌شوند (هیچ پیام خودکاری ارسال نمی‌شود).
       </div>
       {loading && <Spinner />}
       {data && data.length === 0 && <Empty label="هشداری ثبت نشده است." />}
       {data && data.length > 0 && (
-        <div className="card overflow-x-auto">
+        <div className="card table-wrap">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="text-right p-2">گروه</th>
                 <th className="text-right p-2">فرستنده</th>
                 <th className="text-right p-2">کلمه</th>
@@ -470,14 +470,14 @@ function AlertsTab() {
             </thead>
             <tbody>
               {data.map((a) => (
-                <tr key={a.id} className={"border-b border-slate-800 " + (a.is_read ? "opacity-50" : "")}>
+                <tr key={a.id} className={"border-b border-line " + (a.is_read ? "opacity-50" : "")}>
                   <td className="p-2">{a.group_name || a.group_id}</td>
                   <td className="p-2">{a.sender_name || a.sender}</td>
-                  <td className="p-2 text-red-400 font-bold">{a.word}</td>
+                  <td className="p-2 text-red-700 font-bold">{a.word}</td>
                   <td className="p-2 max-w-[320px]">{a.message_text}</td>
                   <td className="p-2 text-left">
                     {!a.is_read && (
-                      <button className="btn-ghost" onClick={() => markRead(a.id)}>خوانده شد</button>
+                      <button className="btn-secondary btn-sm" onClick={() => markRead(a.id)}>خوانده شد</button>
                     )}
                   </td>
                 </tr>

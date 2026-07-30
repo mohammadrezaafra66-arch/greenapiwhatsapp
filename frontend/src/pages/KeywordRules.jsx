@@ -27,19 +27,19 @@ export default function KeywordRules() {
         <button className="btn-primary" onClick={() => setEdit({})}>+ افزودن قانون</button>
       </div>
 
-      <div className="card text-sm text-slate-300 bg-sky-500/10 border-sky-500/30">
+      <div className="card text-sm bg-sky-50 text-sky-700 border-sky-200">
         هر پیام ورودی با این کلیدواژه‌ها بررسی می‌شود. اولین تطابق پاسخ می‌دهد.
       </div>
 
       {loading && <Spinner />}
-      {error && <div className="card text-red-400">{error}</div>}
+      {error && <div className="card bg-red-50 text-red-700 border-red-200">{error}</div>}
       {data && data.length === 0 && <Empty label="قانونی وجود ندارد." />}
 
       {data && data.length > 0 && (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="card table-wrap">
+          <table className="table w-full text-sm">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="text-right p-2">کلیدواژه</th>
                 <th className="text-right p-2">پاسخ</th>
                 <th className="text-right p-2">نوع تطبیق</th>
@@ -51,24 +51,24 @@ export default function KeywordRules() {
             </thead>
             <tbody>
               {data.map((r) => (
-                <tr key={r.id} className="border-b border-slate-800">
+                <tr key={r.id} className="border-b border-line">
                   <td className="p-2 font-bold">{r.keyword}</td>
-                  <td className="p-2 text-slate-300">
+                  <td className="p-2 text-muted">
                     {(r.reply_message || "").slice(0, 60)}
                     {(r.reply_message || "").length > 60 ? "…" : ""}
                   </td>
                   <td className="p-2">{MATCH_FA[r.match_type] || r.match_type}</td>
                   <td className="p-2">{SCOPE_FA[r.scope] || r.scope}</td>
                   <td className="p-2">
-                    <span className={`badge ${r.is_active ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-slate-500/20 text-slate-300 border-slate-500/40"}`}>
+                    <span className={`badge ${r.is_active ? "bg-brand-light text-brand border-brand/30" : "bg-slate-100 text-slate-600 border-slate-300"}`}>
                       {r.is_active ? "فعال" : "غیرفعال"}
                     </span>
                   </td>
                   <td className="p-2">{r.use_count}</td>
                   <td className="p-2">
                     <div className="flex gap-2">
-                      <button className="text-sky-400 hover:underline" onClick={() => setEdit(r)}>ویرایش</button>
-                      <button className="text-red-400 hover:underline" onClick={() => remove(r.id)}>حذف</button>
+                      <button className="btn-secondary btn-sm" onClick={() => setEdit(r)}>ویرایش</button>
+                      <button className="btn-danger btn-sm" onClick={() => remove(r.id)}>حذف</button>
                     </div>
                   </td>
                 </tr>
@@ -122,14 +122,14 @@ function RuleModal({ rule, onClose, onDone }) {
       <div className="space-y-3">
         <div><label className="label">کلیدواژه</label><input className="input" value={f.keyword} onChange={set("keyword")} /></div>
         <div><label className="label">متن پاسخ</label><textarea className="input h-24" value={f.reply_message} onChange={set("reply_message")} /></div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="label">نوع تطبیق</label>
             <select className="input" value={f.match_type} onChange={set("match_type")}>
               <option value="contains">شامل</option>
               <option value="exact">دقیق</option>
             </select>
-            <p className="text-xs text-slate-500 mt-1">دقیق = پیام باید عیناً همان کلیدواژه باشد | شامل = پیام حاوی کلیدواژه باشد</p>
+            <p className="text-xs text-muted mt-1">دقیق = پیام باید عیناً همان کلیدواژه باشد | شامل = پیام حاوی کلیدواژه باشد</p>
           </div>
           <div>
             <label className="label">حوزه</label>
@@ -138,7 +138,7 @@ function RuleModal({ rule, onClose, onDone }) {
               <option value="pv">خصوصی</option>
               <option value="group">گروه</option>
             </select>
-            <p className="text-xs text-slate-500 mt-1">خصوصی = فقط پیام‌های مستقیم | گروه = فقط پیام‌های گروهی | هر دو = همه پیام‌ها</p>
+            <p className="text-xs text-muted mt-1">خصوصی = فقط پیام‌های مستقیم | گروه = فقط پیام‌های گروهی | هر دو = همه پیام‌ها</p>
           </div>
         </div>
         <label className="flex items-center gap-2 text-sm">

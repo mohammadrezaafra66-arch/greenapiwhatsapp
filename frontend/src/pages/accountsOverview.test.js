@@ -47,7 +47,7 @@ const OVERRIDE = {
 const ALL = [HEALTHY, YOUNG, CARDED, COLD, NONE, OVERRIDE];
 
 test("warmthBadge maps level and derives it from score when missing", () => {
-  assert.match(warmthBadge({ level: "بالا" }).cls, /emerald/);
+  assert.match(warmthBadge({ level: "بالا" }).cls, /brand/);
   assert.match(warmthBadge({ level: "متوسط" }).cls, /amber/);
   assert.match(warmthBadge({ level: "کم" }).cls, /slate/);
   assert.equal(warmthBadge({ score: 85 }).level, "بالا");
@@ -80,7 +80,7 @@ test("roleChips: cold account links to team page", () => {
 
 test("eligibilityInfo formats each reason and the override", () => {
   assert.equal(eligibilityInfo(HEALTHY).eligible, true);
-  assert.match(eligibilityInfo(HEALTHY).cls, /emerald/);
+  assert.match(eligibilityInfo(HEALTHY).cls, /brand/);
   assert.match(eligibilityInfo(YOUNG).label, /خیلی جدید/);
   assert.match(eligibilityInfo(CARDED).label, /حادثهٔ اخیر/);
   assert.match(eligibilityInfo(OVERRIDE).label, /رد شرط ۱۴روزه/);
@@ -88,7 +88,7 @@ test("eligibilityInfo formats each reason and the override", () => {
 });
 
 test("healthInfo converts 0..1 to percent with color bands", () => {
-  assert.deepEqual({ ...healthInfo(HEALTHY) }, { pct: 100, cls: "text-emerald-300" });
+  assert.deepEqual({ ...healthInfo(HEALTHY) }, { pct: 100, cls: "text-brand" });
   assert.equal(healthInfo(CARDED).pct, 0);
   assert.match(healthInfo(CARDED).cls, /red/);
 });

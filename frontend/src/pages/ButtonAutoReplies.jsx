@@ -32,7 +32,7 @@ export default function ButtonAutoReplies() {
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold">پاسخ خودکار دکمه‌ها</h2>
-      <p className="text-sm text-slate-400">
+      <p className="text-sm text-muted">
         وقتی مخاطبی روی یک دکمه تعاملی می‌زند، سامانه بر اساس شناسه دکمه یا متن دقیق دکمه، پاسخ تعیین‌شده را می‌فرستد.
       </p>
 
@@ -42,13 +42,13 @@ export default function ButtonAutoReplies() {
           <input className="input" placeholder="یا متن دقیق دکمه (مثلاً قیمت)" value={f.button_text} onChange={set("button_text")} />
         </div>
         <textarea className="input h-20" placeholder="متن پاسخ خودکار..." value={f.reply_text} onChange={set("reply_text")} />
-        <button className="btn-primary" onClick={add}>افزودن قانون</button>
+        <button className="btn-primary w-full sm:w-auto" onClick={add}>افزودن قانون</button>
       </div>
 
       {loading ? <Spinner /> : (!data || data.length === 0) ? <Empty label="قانونی ثبت نشده." /> : (
-        <div className="card overflow-x-auto">
+        <div className="card table-wrap">
           <table className="w-full text-sm">
-            <thead className="text-slate-400 text-xs">
+            <thead className="text-muted text-xs">
               <tr>
                 <th className="text-right p-2">شناسه دکمه</th>
                 <th className="text-right p-2">متن دکمه</th>
@@ -59,16 +59,16 @@ export default function ButtonAutoReplies() {
             </thead>
             <tbody>
               {data.map((r) => (
-                <tr key={r.id} className="border-t border-slate-800">
+                <tr key={r.id} className="border-t border-line">
                   <td className="p-2 font-mono">{r.button_id || "—"}</td>
                   <td className="p-2">{r.button_text || "—"}</td>
-                  <td className="p-2 text-slate-300">{r.reply_text}</td>
+                  <td className="p-2 text-ink">{r.reply_text}</td>
                   <td className="p-2">
-                    <button className={`badge ${r.enabled ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-slate-600/30 text-slate-400 border-slate-600"}`} onClick={() => toggle(r)}>
+                    <button className={`badge ${r.enabled ? "bg-brand-light text-brand border-brand/30" : "bg-slate-100 text-slate-600 border-slate-300"}`} onClick={() => toggle(r)}>
                       {r.enabled ? "فعال" : "غیرفعال"}
                     </button>
                   </td>
-                  <td className="p-2"><button className="btn-danger text-xs" onClick={() => del(r.id)}>حذف</button></td>
+                  <td className="p-2"><button className="btn-danger btn-sm" onClick={() => del(r.id)}>حذف</button></td>
                 </tr>
               ))}
             </tbody>

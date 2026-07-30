@@ -107,7 +107,7 @@ export default function Campaigns() {
         {[{ key: "campaigns", label: "کمپین‌ها" }, { key: "roi", label: "بازده کمپین (ROI)" }].map((t) => (
           <button
             key={t.key}
-            className={`px-3 py-2 rounded-lg text-sm ${tab === t.key ? "bg-brand/20 text-brand" : "text-slate-300 hover:bg-slate-800"}`}
+            className={`px-3 py-2 rounded-lg text-sm ${tab === t.key ? "bg-brand-light text-brand" : "text-muted hover:bg-canvas"}`}
             onClick={() => setTab(t.key)}
           >
             {t.label}
@@ -116,7 +116,7 @@ export default function Campaigns() {
       </div>
 
       {loading && <Spinner />}
-      {error && <div className="card text-red-400">{error}</div>}
+      {error && <div className="card text-red-700">{error}</div>}
 
       {tab === "roi" && <RoiTab data={data} onOpenRoi={openRoi} />}
 
@@ -130,7 +130,7 @@ export default function Campaigns() {
               <div className="flex items-center gap-2">
                 <span className="font-bold">{c.name}</span>
                 <Badge status={c.status} />
-                <span className="badge bg-slate-700 text-slate-300 border-slate-600">{TYPE_FA[c.campaign_type] || c.campaign_type}</span>
+                <span className="badge bg-slate-100 text-slate-600 border-slate-300">{TYPE_FA[c.campaign_type] || c.campaign_type}</span>
               </div>
               <div className="flex flex-wrap gap-2">
                 {c.status === "running" ? (
@@ -156,12 +156,12 @@ export default function Campaigns() {
                 <button className="btn-danger" onClick={async () => { if (await confirmDialog("این گروه پیام حذف شود؟")) act(() => Api.remove(c.id)); }}>حذف</button>
               </div>
             </div>
-            <div className="flex justify-between text-sm mb-1 text-slate-400">
+            <div className="flex justify-between text-sm mb-1 text-muted">
               <span>پیشرفت: {c.sent_count} / {c.total_contacts}</span>
               <span>تحویل: {c.delivered_count} · خوانده: {c.read_count} · ناموفق: {c.failed_count}</span>
             </div>
             {(c.schedule_start_shamsi || c.schedule_end_shamsi) && (
-              <div className="text-xs text-slate-400">📅 {c.schedule_start_shamsi || "—"} تا {c.schedule_end_shamsi || "—"}</div>
+              <div className="text-xs text-muted">📅 {c.schedule_start_shamsi || "—"} تا {c.schedule_end_shamsi || "—"}</div>
             )}
             <Progress value={c.sent_count} max={c.total_contacts} />
             {(c.status === "running" || c.status === "paused") && <LiveLog campaignId={c.id} />}
@@ -194,12 +194,12 @@ function RoiTab({ data, onOpenRoi }) {
   if (!data || data.length === 0) return <Empty label="گروه پیامی برای گزارش بازده وجود ندارد." />;
   return (
     <div className="space-y-2">
-      <p className="text-sm text-slate-400">برای دیدن قیف تبدیل و نرخ خرید هر کمپین، «مشاهده بازده» را بزنید.</p>
+      <p className="text-sm text-muted">برای دیدن قیف تبدیل و نرخ خرید هر کمپین، «مشاهده بازده» را بزنید.</p>
       {data.map((c) => (
         <div key={c.id} className="card flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <span className="font-bold">{c.name}</span>
-            <span className="text-xs text-slate-400">ارسال: {fa(c.sent_count)} / {fa(c.total_contacts)}</span>
+            <span className="text-xs text-muted">ارسال: {fa(c.sent_count)} / {fa(c.total_contacts)}</span>
           </div>
           <button className="btn-secondary text-xs" onClick={() => onOpenRoi(c)}>💰 مشاهده بازده (ROI)</button>
         </div>
@@ -215,13 +215,13 @@ function AnalyticsModal({ data, onClose }) {
   const title = data?.campaign?.name || data?.campaign || "آمار گروه پیام";
 
   const cells = [
-    { label: "کل", value: t.total, cls: "text-slate-200" },
-    { label: "ارسال‌شده", value: t.sent, cls: "text-emerald-300" },
-    { label: "تحویل", value: t.delivered, cls: "text-sky-300" },
-    { label: "خوانده", value: t.read, cls: "text-sky-300" },
-    { label: "یلوکارت", value: t.yellow_card, cls: (t.yellow_card || 0) > 0 ? "text-red-300" : "text-amber-300" },
-    { label: "ناموفق", value: t.failed, cls: "text-red-300" },
-    { label: "در انتظار", value: t.pending, cls: "text-slate-300" },
+    { label: "کل", value: t.total, cls: "text-ink" },
+    { label: "ارسال‌شده", value: t.sent, cls: "text-brand" },
+    { label: "تحویل", value: t.delivered, cls: "text-sky-700" },
+    { label: "خوانده", value: t.read, cls: "text-sky-700" },
+    { label: "یلوکارت", value: t.yellow_card, cls: (t.yellow_card || 0) > 0 ? "text-red-700" : "text-amber-700" },
+    { label: "ناموفق", value: t.failed, cls: "text-red-700" },
+    { label: "در انتظار", value: t.pending, cls: "text-slate-600" },
   ];
 
   return (
@@ -229,16 +229,16 @@ function AnalyticsModal({ data, onClose }) {
       <div className="space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {cells.map((cell) => (
-            <div key={cell.label} className="rounded-lg bg-slate-900 border border-slate-700 p-3 text-center">
+            <div key={cell.label} className="rounded-lg bg-canvas border border-line p-3 text-center">
               <div className={`text-2xl font-bold ${cell.cls}`}>{fa(cell.value)}</div>
-              <div className="text-xs text-slate-400 mt-1">{cell.label}</div>
+              <div className="text-xs text-muted mt-1">{cell.label}</div>
             </div>
           ))}
         </div>
 
-        <div className="text-sm text-slate-300">
+        <div className="text-sm text-ink">
           نرخ ارسال {fa(r.sent_pct)}٪ · خوانده {fa(r.read_pct)}٪ ·{" "}
-          <span className={(r.yellow_card_pct || 0) > 50 ? "text-red-400 font-bold" : ""}>
+          <span className={(r.yellow_card_pct || 0) > 50 ? "text-red-700 font-bold" : ""}>
             یلوکارت {fa(r.yellow_card_pct)}٪
           </span>{" "}
           · ناموفق {fa(r.failed_pct)}٪
@@ -248,7 +248,7 @@ function AnalyticsModal({ data, onClose }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-right">
               <thead>
-                <tr className="text-slate-400 border-b border-slate-700">
+                <tr className="text-muted border-b border-line">
                   <th className="py-2 px-2 font-medium">حساب</th>
                   <th className="py-2 px-2 font-medium">ارسال</th>
                   <th className="py-2 px-2 font-medium">خوانده</th>
@@ -257,11 +257,11 @@ function AnalyticsModal({ data, onClose }) {
               </thead>
               <tbody>
                 {perAccount.map((a) => (
-                  <tr key={a.account_id} className="border-b border-slate-800">
+                  <tr key={a.account_id} className="border-b border-line">
                     <td className="py-2 px-2">{a.name}</td>
-                    <td className="py-2 px-2 text-emerald-300">{fa(a.sent)}</td>
-                    <td className="py-2 px-2 text-sky-300">{fa(a.read)}</td>
-                    <td className={`py-2 px-2 ${(a.yellow_card || 0) > 0 ? "text-red-300" : "text-amber-300"}`}>{fa(a.yellow_card)}</td>
+                    <td className="py-2 px-2 text-brand">{fa(a.sent)}</td>
+                    <td className="py-2 px-2 text-sky-700">{fa(a.read)}</td>
+                    <td className={`py-2 px-2 ${(a.yellow_card || 0) > 0 ? "text-red-700" : "text-amber-700"}`}>{fa(a.yellow_card)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -270,30 +270,30 @@ function AnalyticsModal({ data, onClose }) {
         )}
 
         {data?._ab?.variants && Object.keys(data._ab.variants).length > 0 && (
-          <div className="rounded-lg border border-slate-700 p-3 space-y-2">
+          <div className="rounded-lg border border-line p-3 space-y-2">
             <h4 className="font-bold text-sm">نتایج تست A/B</h4>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {["A", "B"].map((v) => {
                 const stat = data._ab.variants[v];
-                if (!stat) return <div key={v} className="text-xs text-slate-500">نسخه {v}: بدون داده</div>;
+                if (!stat) return <div key={v} className="text-xs text-muted">نسخه {v}: بدون داده</div>;
                 const win = data._ab.winner === v;
                 return (
-                  <div key={v} className={`rounded-lg p-3 border ${win ? "border-emerald-500/50 bg-emerald-500/10" : "border-slate-700 bg-slate-900"}`}>
+                  <div key={v} className={`rounded-lg p-3 border ${win ? "border-brand/30 bg-brand-light" : "border-line bg-canvas"}`}>
                     <div className="flex items-center gap-2 font-bold">
                       نسخه {v} {win && <span title="برنده">🏆</span>}
                     </div>
-                    <div className="text-xs text-slate-300 mt-1 space-y-0.5">
+                    <div className="text-xs text-muted mt-1 space-y-0.5">
                       <div>تعداد: {fa(stat.total)}</div>
-                      <div className="text-emerald-300">تحویل: {fa(stat.delivered_pct)}٪ ({fa(stat.delivered)})</div>
-                      <div className="text-sky-300">خوانده: {fa(stat.read_pct)}٪ ({fa(stat.read)})</div>
-                      <div className="text-red-300">ناموفق: {fa(stat.failed)}</div>
+                      <div className="text-brand">تحویل: {fa(stat.delivered_pct)}٪ ({fa(stat.delivered)})</div>
+                      <div className="text-sky-700">خوانده: {fa(stat.read_pct)}٪ ({fa(stat.read)})</div>
+                      <div className="text-red-700">ناموفق: {fa(stat.failed)}</div>
                     </div>
                   </div>
                 );
               })}
             </div>
             {data._ab.winner && (
-              <p className="text-xs text-emerald-300">برنده بر اساس نرخ خوانده‌شدن: نسخه {data._ab.winner} 🏆</p>
+              <p className="text-xs text-brand">برنده بر اساس نرخ خوانده‌شدن: نسخه {data._ab.winner} 🏆</p>
             )}
           </div>
         )}
@@ -304,9 +304,9 @@ function AnalyticsModal({ data, onClose }) {
 
 // V13.7 — campaign ROI: conversion funnel + per-contact outcome tagging.
 const OUTCOMES = [
-  { value: "interested", label: "علاقه‌مند", cls: "bg-sky-600" },
-  { value: "purchased", label: "خرید کرد", cls: "bg-emerald-600" },
-  { value: "not_interested", label: "علاقه‌مند نیست", cls: "bg-slate-600" },
+  { value: "interested", label: "علاقه‌مند", cls: "bg-sky-600 text-white" },
+  { value: "purchased", label: "خرید کرد", cls: "bg-brand text-white" },
+  { value: "not_interested", label: "علاقه‌مند نیست", cls: "bg-slate-500 text-white" },
 ];
 
 function RoiModal({ roi, onClose, onChanged }) {
@@ -331,21 +331,21 @@ function RoiModal({ roi, onClose, onChanged }) {
     <Modal title={`گزارش بازده (ROI): ${roi.name || ""}`} onClose={onClose} wide>
       <div className="space-y-4">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="rounded-lg bg-slate-900 border border-slate-700 p-3 text-center">
-            <div className="text-2xl font-bold text-sky-300">{fa(roi.reply_rate)}٪</div>
-            <div className="text-xs text-slate-400 mt-1">نرخ پاسخ</div>
+          <div className="rounded-lg bg-canvas border border-line p-3 text-center">
+            <div className="text-2xl font-bold text-sky-700">{fa(roi.reply_rate)}٪</div>
+            <div className="text-xs text-muted mt-1">نرخ پاسخ</div>
           </div>
-          <div className="rounded-lg bg-slate-900 border border-slate-700 p-3 text-center">
-            <div className="text-2xl font-bold text-emerald-300">{fa(roi.purchased)}</div>
-            <div className="text-xs text-slate-400 mt-1">خرید</div>
+          <div className="rounded-lg bg-canvas border border-line p-3 text-center">
+            <div className="text-2xl font-bold text-brand">{fa(roi.purchased)}</div>
+            <div className="text-xs text-muted mt-1">خرید</div>
           </div>
-          <div className="rounded-lg bg-slate-900 border border-slate-700 p-3 text-center">
-            <div className="text-2xl font-bold text-slate-200">{fa(roi.interested)}</div>
-            <div className="text-xs text-slate-400 mt-1">علاقه‌مند</div>
+          <div className="rounded-lg bg-canvas border border-line p-3 text-center">
+            <div className="text-2xl font-bold text-ink">{fa(roi.interested)}</div>
+            <div className="text-xs text-muted mt-1">علاقه‌مند</div>
           </div>
-          <div className="rounded-lg bg-slate-900 border border-slate-700 p-3 text-center">
-            <div className="text-2xl font-bold text-slate-200">{fa(fn.replied)}</div>
-            <div className="text-xs text-slate-400 mt-1">پاسخ‌ها</div>
+          <div className="rounded-lg bg-canvas border border-line p-3 text-center">
+            <div className="text-2xl font-bold text-ink">{fa(fn.replied)}</div>
+            <div className="text-xs text-muted mt-1">پاسخ‌ها</div>
           </div>
         </div>
 
@@ -353,35 +353,35 @@ function RoiModal({ roi, onClose, onChanged }) {
         <div className="space-y-1">
           {steps.map((s) => (
             <div key={s.label} className="flex items-center gap-2">
-              <span className="text-xs text-slate-400 w-14 shrink-0">{s.label}</span>
-              <div className="flex-1 h-6 bg-slate-800 rounded overflow-hidden">
-                <div className="h-full bg-emerald-600/70 flex items-center px-2 text-xs" style={{ width: `${((s.value || 0) / top) * 100}%` }}>
+              <span className="text-xs text-muted w-14 shrink-0">{s.label}</span>
+              <div className="flex-1 h-6 bg-slate-100 rounded overflow-hidden">
+                <div className="h-full bg-brand text-white flex items-center px-2 text-xs" style={{ width: `${((s.value || 0) / top) * 100}%` }}>
                   {fa(s.value)}
                 </div>
               </div>
             </div>
           ))}
-          <p className="text-xs text-slate-500">قیف تبدیل: ارسال → تحویل → خوانده → پاسخ → خرید</p>
+          <p className="text-xs text-muted">قیف تبدیل: ارسال → تحویل → خوانده → پاسخ → خرید</p>
         </div>
 
         {/* Replied contacts tagging */}
         <div>
           <h4 className="font-bold text-sm mb-2">مخاطبینی که پاسخ داده‌اند</h4>
           {(!roi.replied_contacts || roi.replied_contacts.length === 0) && (
-            <p className="text-sm text-slate-500">هنوز پاسخی ثبت نشده.</p>
+            <p className="text-sm text-muted">هنوز پاسخی ثبت نشده.</p>
           )}
           <div className="space-y-2 max-h-72 overflow-y-auto">
             {(roi.replied_contacts || []).map((rc) => (
-              <div key={rc.cc_id} className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+              <div key={rc.cc_id} className="flex items-center justify-between gap-2 border-b border-line pb-2">
                 <div className="min-w-0">
                   <div className="text-sm truncate">{rc.name || rc.phone}</div>
-                  <div className="font-mono text-xs text-slate-500">{rc.phone}</div>
+                  <div className="font-mono text-xs text-muted">{rc.phone}</div>
                 </div>
                 <div className="flex gap-1 flex-wrap justify-end">
                   {OUTCOMES.map((o) => (
                     <button
                       key={o.value}
-                      className={`text-xs px-2 py-1 rounded text-white ${rc.outcome === o.value ? o.cls : "bg-slate-700 hover:bg-slate-600"}`}
+                      className={`text-xs px-2 py-1 rounded ${rc.outcome === o.value ? o.cls : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
                       onClick={() => tag(rc.cc_id, o.value)}
                     >
                       {o.label}
@@ -426,52 +426,52 @@ function LiveLog({ campaignId }) {
   }, [campaignId]);
 
   return (
-    <div className="mt-3 rounded-lg bg-slate-900 border border-slate-700 p-3 text-sm space-y-2">
+    <div className="mt-3 rounded-lg bg-canvas border border-line p-3 text-sm space-y-2">
       <div className="flex items-center justify-between">
-        <span className="font-bold text-slate-300">گزارش زنده</span>
-        <span className="flex items-center gap-2 text-xs text-slate-500">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        <span className="font-bold text-ink">گزارش زنده</span>
+        <span className="flex items-center gap-2 text-xs text-muted">
+          <span className="inline-block w-2 h-2 rounded-full bg-brand animate-pulse" />
           {tick ? `به‌روزرسانی: ${tick.toLocaleTimeString("fa-IR")}` : "در حال اتصال..."}
         </span>
       </div>
 
-      {err && <div className="text-red-400 text-xs">خطا در دریافت گزارش: {err}</div>}
+      {err && <div className="text-red-700 text-xs">خطا در دریافت گزارش: {err}</div>}
 
       {prog?.pause_reason && (
-        <div className="rounded bg-amber-500/10 border border-amber-500/40 text-amber-300 p-2 text-xs">
+        <div className="rounded bg-amber-50 border border-amber-200 text-amber-700 p-2 text-xs">
           ⏸️ {prog.pause_reason}
         </div>
       )}
 
       {prog && (
         <div className="flex flex-wrap gap-2 text-xs">
-          <span className="badge bg-slate-700 text-slate-300 border-slate-600">وضعیت: {prog.status}</span>
-          <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40">در انتظار: {prog.pending}</span>
-          <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">ارسال‌شده: {prog.sent}</span>
-          <span className="badge bg-red-500/20 text-red-300 border-red-500/40">ناموفق: {prog.failed}</span>
-          <span className="badge bg-sky-500/20 text-sky-300 border-sky-500/40">پیشرفت: {prog.progress_pct}%</span>
+          <span className="badge bg-slate-100 text-slate-600 border-slate-300">وضعیت: {prog.status}</span>
+          <span className="badge bg-amber-50 text-amber-700 border-amber-200">در انتظار: {prog.pending}</span>
+          <span className="badge bg-brand-light text-brand border-brand/30">ارسال‌شده: {prog.sent}</span>
+          <span className="badge bg-red-50 text-red-700 border-red-200">ناموفق: {prog.failed}</span>
+          <span className="badge bg-sky-50 text-sky-700 border-sky-200">پیشرفت: {prog.progress_pct}%</span>
         </div>
       )}
 
       {prog?.drip?.enabled && (
-        <div className="rounded bg-sky-500/10 border border-sky-500/30 text-sky-200 p-2 text-xs">
+        <div className="rounded bg-sky-50 border border-sky-200 text-sky-700 p-2 text-xs">
           💧 ارسال تدریجی — امروز: {fa(prog.drip.sent_today)} از {fa(prog.drip.per_day)} · باقی‌ماندهٔ کل: {fa(prog.pending)}
           {prog.drip.est_days_remaining ? ` · تخمین ${fa(prog.drip.est_days_remaining)} روز دیگر` : ""}
         </div>
       )}
 
       {failed.length === 0 ? (
-        <p className="text-xs text-slate-500">هیچ خطای ارسالی ثبت نشده است.</p>
+        <p className="text-xs text-muted">هیچ خطای ارسالی ثبت نشده است.</p>
       ) : (
         <div className="space-y-1 max-h-52 overflow-y-auto">
-          <p className="text-xs text-red-300 font-bold">پیام‌های خطا ({failed.length}):</p>
+          <p className="text-xs text-red-700 font-bold">پیام‌های خطا ({failed.length}):</p>
           {failed.map((f) => (
-            <div key={f.id} className="rounded bg-red-500/10 border border-red-500/30 p-2 text-xs">
-              <div className="flex justify-between text-slate-400">
+            <div key={f.id} className="rounded bg-red-50 border border-red-200 p-2 text-xs">
+              <div className="flex justify-between text-muted">
                 <span className="font-mono">{f.phone}</span>
                 <span>تلاش: {f.retry_count}</span>
               </div>
-              <div className="text-red-300 mt-1 break-words whitespace-pre-wrap font-mono">
+              <div className="text-red-700 mt-1 break-words whitespace-pre-wrap font-mono">
                 {f.error_message || "بدون پیام خطا"}
               </div>
             </div>
@@ -815,7 +815,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
   return (
     <Modal title={editId ? "ویرایش کمپین" : "گروه پیام جدید"} onClose={onClose} wide>
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="label">نام گروه پیام</label>
             <input className="input" value={f.name} onChange={set("name")} />
@@ -875,7 +875,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
           <input type="checkbox" checked={f.use_gpt} onChange={set("use_gpt")} />
           نوشتن پیام با هوش مصنوعی
         </label>
-        <p className="text-xs text-slate-500 -mt-1">سیستم با هوش مصنوعی یک پیام منحصربه‌فرد برای هر مخاطب می‌نویسد</p>
+        <p className="text-xs text-muted -mt-1">سیستم با هوش مصنوعی یک پیام منحصربه‌فرد برای هر مخاطب می‌نویسد</p>
 
         {f.use_gpt ? (
           <div>
@@ -898,7 +898,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
               <button type="button" className="btn-secondary text-xs" title="فهرست" onClick={bulletTemplate}>• لیست</button>
             </div>
             <textarea ref={templateRef} className="input h-20" value={f.message_template} onChange={set("message_template")} />
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-muted mt-1">
               راهنما: <span className="font-bold">*پررنگ*</span> · <span className="italic">_کج_</span> ·{" "}
               <span className="line-through">~خط‌خورده~</span> · <span className="font-mono">```تک‌فاصله```</span>
             </p>
@@ -906,12 +906,12 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         )}
 
         {/* V13.1 — A/B testing */}
-        <div className="border-t border-slate-700 pt-3">
+        <div className="border-t border-line pt-3">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={f.ab_test_enabled} onChange={set("ab_test_enabled")} />
             تست A/B (دو نسخه پیام، تقسیم ۵۰/۵۰)
           </label>
-          <p className="text-xs text-slate-500 -mt-0.5">نیمی از مخاطبین نسخه A و نیمی نسخه B را دریافت می‌کنند؛ نتایج در «آمار» مقایسه می‌شود.</p>
+          <p className="text-xs text-muted -mt-0.5">نیمی از مخاطبین نسخه A و نیمی نسخه B را دریافت می‌کنند؛ نتایج در «آمار» مقایسه می‌شود.</p>
           {f.ab_test_enabled && (
             <div className="mt-2">
               {f.use_gpt ? (
@@ -940,7 +940,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         </div>
 
         {/* Phase 2 — opening line control */}
-        <div className="border-t border-slate-700 pt-3">
+        <div className="border-t border-line pt-3">
           <label className="label">عبارت آغازین</label>
           <select className="input" value={f.opening_mode} onChange={set("opening_mode")}>
             <option value="ai">هوش مصنوعی بنویسد</option>
@@ -964,7 +964,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
                 onChange={set("opening_variants")}
                 placeholder={"هر خط یک عبارت آغازین:\nسلام دوستان 🌟\nوقت بخیر همراهان عزیز\nدرود بر شما"}
               />
-              <p className="text-xs text-slate-500 mt-1">در هر ارسال یکی به‌صورت تصادفی انتخاب می‌شود (تنوع بین گروه‌ها).</p>
+              <p className="text-xs text-muted mt-1">در هر ارسال یکی به‌صورت تصادفی انتخاب می‌شود (تنوع بین گروه‌ها).</p>
             </>
           )}
         </div>
@@ -973,7 +973,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
           <input type="checkbox" checked={f.include_products} onChange={set("include_products")} />
           افزودن محصولات روز افراکالا
         </label>
-        <p className="text-xs text-slate-500 -mt-1">قیمت لحظه‌ای محصولات افراکالا در پیام درج می‌شود</p>
+        <p className="text-xs text-muted -mt-1">قیمت لحظه‌ای محصولات افراکالا در پیام درج می‌شود</p>
 
         {f.include_products && (
           <>
@@ -988,7 +988,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
                 value={f.product_count}
                 onChange={set("product_count")}
               />
-              <p className="text-xs text-slate-500 mt-1">در حالت تنوع بین گروه‌ها، این عدد باید بزرگ‌تر از «تعداد در هر گروه» باشد.</p>
+              <p className="text-xs text-muted mt-1">در حالت تنوع بین گروه‌ها، این عدد باید بزرگ‌تر از «تعداد در هر گروه» باشد.</p>
             </div>
 
             {/* V15 Item 8 — product detail level */}
@@ -1011,7 +1011,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
                     <option value="per_group_random">تصادفی برای هر گروه</option>
                     <option value="rotate">چرخشی</option>
                   </select>
-                  <p className="text-xs text-slate-500 mt-1">تنوع بین گروه‌ها باعث می‌شود پیام‌ها شبیه هم نباشند (کاهش ریسک شناسایی توسط متا).</p>
+                  <p className="text-xs text-muted mt-1">تنوع بین گروه‌ها باعث می‌شود پیام‌ها شبیه هم نباشند (کاهش ریسک شناسایی توسط متا).</p>
                 </div>
                 {f.product_variation_mode !== "same" && (
                   <div>
@@ -1035,7 +1035,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
                       onChange={set("product_weights")}
                       placeholder={"نام محصول=وزن (هر خط یکی):\nساید ال جی X24=8\nیخچال دوو=3"}
                     />
-                    <p className="text-xs text-slate-500 mt-1">وزن (اهمیت): هرچه بیشتر، در گروه‌های بیشتری و با تکرار بیشتری تبلیغ می‌شود. پیش‌فرض ۱.</p>
+                    <p className="text-xs text-muted mt-1">وزن (اهمیت): هرچه بیشتر، در گروه‌های بیشتری و با تکرار بیشتری تبلیغ می‌شود. پیش‌فرض ۱.</p>
                   </div>
                 )}
               </>
@@ -1052,7 +1052,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
               {f.product_label_filter && (() => {
                 const sel = labels.find((l) => String(l.id) === String(f.product_label_filter));
                 return sel?.color ? (
-                  <span className="inline-flex items-center gap-2 mt-1 text-xs text-slate-400">
+                  <span className="inline-flex items-center gap-2 mt-1 text-xs text-muted">
                     <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: sel.color }} />
                     {sel.title}
                   </span>
@@ -1067,7 +1067,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         )}
 
         {/* Phase 5 — optional opt-out line */}
-        <div className="border-t border-slate-700 pt-3">
+        <div className="border-t border-line pt-3">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={f.include_opt_out !== false} onChange={set("include_opt_out")} />
             افزودن عبارت لغو اشتراک
@@ -1080,31 +1080,31 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
               placeholder="برای لغو عدد ۱۱ ارسال کنید"
             />
           )}
-          <p className="text-xs text-slate-500 mt-1">اگر خاموش باشد، هیچ عبارت لغوی به انتهای پیام اضافه نمی‌شود.</p>
+          <p className="text-xs text-muted mt-1">اگر خاموش باشد، هیچ عبارت لغوی به انتهای پیام اضافه نمی‌شود.</p>
         </div>
 
         {/* V13.2 — smart account rotation */}
-        <div className="border-t border-slate-700 pt-3">
+        <div className="border-t border-line pt-3">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={f.smart_rotation} onChange={set("smart_rotation")} />
             چرخش هوشمند حساب‌ها (اولویت با حساب سالم‌تر)
           </label>
-          <p className="text-xs text-slate-500 -mt-0.5">به‌جای چرخش ساده، حساب‌های سالم‌تر (یلوکارت کمتر، ظرفیت روزانه بیشتر) پیام بیشتری می‌فرستند.</p>
+          <p className="text-xs text-muted -mt-0.5">به‌جای چرخش ساده، حساب‌های سالم‌تر (یلوکارت کمتر، ظرفیت روزانه بیشتر) پیام بیشتری می‌فرستند.</p>
         </div>
 
         {/* V13.8 — drip sending */}
-        <div className="border-t border-slate-700 pt-3">
+        <div className="border-t border-line pt-3">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={f.drip_enabled} onChange={set("drip_enabled")} />
             ارسال تدریجی (drip) — پخش در چند روز
           </label>
-          <p className="text-xs text-slate-500 -mt-0.5">هر روز حداکثر «تعداد در روز» پیام ارسال می‌شود و فردا به‌طور خودکار ادامه می‌یابد (بهتر برای گرم‌نگه‌داشتن حساب).</p>
+          <p className="text-xs text-muted -mt-0.5">هر روز حداکثر «تعداد در روز» پیام ارسال می‌شود و فردا به‌طور خودکار ادامه می‌یابد (بهتر برای گرم‌نگه‌داشتن حساب).</p>
           {f.drip_enabled && (
             <div className="mt-2">
               <label className="label">تعداد در روز</label>
               <input type="number" className="input" min={1} max={5000} value={f.drip_per_day} onChange={set("drip_per_day")} />
               {feasContactCount > 0 && Number(f.drip_per_day) > 0 && (
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-xs text-muted mt-1">
                   با {fa(f.drip_per_day)} در روز، کل کمپین (~{fa(feasContactCount)} مخاطب) در حدود{" "}
                   {fa(Math.ceil(feasContactCount / Number(f.drip_per_day)))} روز تکمیل می‌شود.
                 </p>
@@ -1114,13 +1114,13 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         </div>
 
         {/* V16 PART 3 — append advertising links */}
-        <div className="border-t border-slate-700 pt-3">
+        <div className="border-t border-line pt-3">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={f.append_links} onChange={set("append_links")} />
             افزودن لینک به انتهای پیام
           </label>
           {f.append_links && (
-            <div className="grid grid-cols-2 gap-2 mt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
               <div>
                 <label className="label">تعداد لینک</label>
                 <input type="number" className="input" min={1} max={10} value={f.links_count} onChange={set("links_count")} />
@@ -1132,21 +1132,21 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
                   <option value="weighted">رندوم وزنی</option>
                 </select>
               </div>
-              <p className="text-xs text-slate-500 col-span-2">لینک‌ها را در صفحه «لینک‌های تبلیغاتی» مدیریت کنید. فقط لینک‌های فعال استفاده می‌شوند.</p>
+              <p className="text-xs text-muted col-span-2">لینک‌ها را در صفحه «لینک‌های تبلیغاتی» مدیریت کنید. فقط لینک‌های فعال استفاده می‌شوند.</p>
             </div>
           )}
         </div>
 
         {/* V14 F7 — interactive buttons (text campaigns only) */}
         {f.campaign_type === "text" && (
-          <div className="border-t border-slate-700 pt-3">
+          <div className="border-t border-line pt-3">
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={f.use_interactive_buttons} onChange={set("use_interactive_buttons")} />
               ارسال با دکمه‌های تعاملی
             </label>
             {f.use_interactive_buttons && (
               <div className="mt-2 space-y-2">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="label">سربرگ (header)</label>
                     <input className="input" value={f.button_header} onChange={set("button_header")} />
@@ -1164,7 +1164,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
                   });
                   const over = (b.buttonText || "").length > 25;
                   return (
-                    <div key={i} className="flex flex-wrap gap-2 items-end bg-slate-900 rounded p-2">
+                    <div key={i} className="flex flex-wrap gap-2 items-end bg-canvas border border-line rounded p-2">
                       <div>
                         <label className="label">نوع</label>
                         <select className="input w-auto" value={b.type || "reply"} onChange={(e) => upd({ type: e.target.value })}>
@@ -1175,8 +1175,8 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
                         </select>
                       </div>
                       <div className="flex-1 min-w-[8rem]">
-                        <label className="label">متن دکمه <span className={over ? "text-red-400" : "text-slate-500"}>({fa((b.buttonText || "").length)}/۲۵)</span></label>
-                        <input className={`input ${over ? "border-red-500" : ""}`} value={b.buttonText || ""} onChange={(e) => upd({ buttonText: e.target.value })} />
+                        <label className="label">متن دکمه <span className={over ? "text-red-700" : "text-muted"}>({fa((b.buttonText || "").length)}/۲۵)</span></label>
+                        <input className={`input ${over ? "border-red-400" : ""}`} value={b.buttonText || ""} onChange={(e) => upd({ buttonText: e.target.value })} />
                       </div>
                       {b.type === "copy" && <div className="flex-1 min-w-[8rem]"><label className="label">کد کپی</label><input className="input" value={b.copyCode || ""} onChange={(e) => upd({ copyCode: e.target.value })} /></div>}
                       {b.type === "call" && <div className="flex-1 min-w-[8rem]"><label className="label">شماره تماس</label><input className="input" value={b.phoneNumber || ""} onChange={(e) => upd({ phoneNumber: e.target.value })} /></div>}
@@ -1192,7 +1192,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
                   </button>
                 )}
                 {feasContactCount > 0 && (
-                  <p className="text-xs text-amber-300">
+                  <p className="text-xs text-amber-700">
                     ⚠️ ارسال با دکمه حداکثر ۱ پیام در ثانیه است — این کمپین حدود {fa(Math.ceil(feasContactCount / 60))} دقیقه طول می‌کشد.
                   </p>
                 )}
@@ -1245,7 +1245,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
           </select>
         </div>
 
-        <div className="rounded-lg border border-slate-700 p-3 space-y-2">
+        <div className="rounded-lg border border-line p-3 space-y-2">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={f.append_seller_name} onChange={set("append_seller_name")} />
             نام فروشنده اضافه شود
@@ -1262,7 +1262,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
             شماره فروشنده اضافه شود
           </label>
           {f.append_seller_phone && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="label">موبایل</label>
                 <input className="input" value={f.seller_phone} onChange={set("seller_phone")} />
@@ -1280,9 +1280,9 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
           </label>
         </div>
 
-        <div className="border-t border-slate-700 pt-3 mt-3">
+        <div className="border-t border-line pt-3 mt-3">
           <p className="font-bold text-sm mb-2">⏰ زمان‌بندی ارسال (اختیاری)</p>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
               <label className="label">تاریخ و ساعت شروع</label>
               <ShamsiDateTimePicker
@@ -1300,16 +1300,16 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
               />
             </div>
           </div>
-          <p className="text-xs text-slate-500">از تقویم شمسی انتخاب کنید. خالی = بدون زمان‌بندی (بلافاصله).</p>
+          <p className="text-xs text-muted">از تقویم شمسی انتخاب کنید. خالی = بدون زمان‌بندی (بلافاصله).</p>
         </div>
 
-        <div className="border-t border-slate-700 pt-3 mt-3">
+        <div className="border-t border-line pt-3 mt-3">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={f.parallel_accounts} onChange={set("parallel_accounts")} />
             ارسال موازی با چند حساب
           </label>
           {f.parallel_accounts ? (
-            <p className="text-xs text-sky-300">💡 مخاطبین به‌صورت مساوی بین حساب‌های فعال تقسیم می‌شوند</p>
+            <p className="text-xs text-sky-700">💡 مخاطبین به‌صورت مساوی بین حساب‌های فعال تقسیم می‌شوند</p>
           ) : (
             /* V15 Item 11 — choose which account sends when parallel is off */
             <div className="mt-2">
@@ -1324,7 +1324,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
           )}
         </div>
 
-        <div className="border-t border-slate-700 pt-3 mt-3">
+        <div className="border-t border-line pt-3 mt-3">
           <p className="font-bold text-sm mb-2">امکان‌سنجی ارسال</p>
           <div className="flex gap-2 items-end">
             <div className="flex-1">
@@ -1341,20 +1341,20 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
               🔍 بررسی امکان‌سنجی
             </button>
           </div>
-          {feasLoading && <p className="text-xs text-slate-400 mt-2">در حال بررسی...</p>}
+          {feasLoading && <p className="text-xs text-muted mt-2">در حال بررسی...</p>}
           {!feasLoading && feasResult && (
             <div
               className={`card mt-2 border ${
                 feasResult.color === "green"
-                  ? "border-emerald-500 bg-emerald-500/10"
+                  ? "border-brand/30 bg-brand-light"
                   : feasResult.color === "amber"
-                  ? "border-amber-500 bg-amber-500/10"
-                  : "border-red-500 bg-red-500/10"
+                  ? "border-amber-200 bg-amber-50"
+                  : "border-red-200 bg-red-50"
               }`}
             >
               <p className="font-bold text-sm">{feasResult.status}</p>
               {feasResult.summary && (
-                <div className="grid grid-cols-2 gap-1 text-xs text-slate-300 mt-2">
+                <div className="grid grid-cols-2 gap-1 text-xs text-muted mt-2">
                   <span>مخاطبین: {feasResult.summary.contact_count}</span>
                   <span>حساب‌های فعال: {feasResult.summary.active_accounts}</span>
                   <span>ظرفیت روزانه کل: {feasResult.summary.total_daily_capacity}</span>
@@ -1362,17 +1362,17 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
                 </div>
               )}
               {feasResult.warnings?.map((w, i) => (
-                <p key={`w${i}`} className="text-xs text-amber-300 mt-1">⚠️ {w}</p>
+                <p key={`w${i}`} className="text-xs text-amber-700 mt-1">⚠️ {w}</p>
               ))}
               {feasResult.recommendations?.map((r, i) => (
-                <p key={`r${i}`} className="text-xs text-sky-300 mt-1">💡 {r}</p>
+                <p key={`r${i}`} className="text-xs text-sky-700 mt-1">💡 {r}</p>
               ))}
             </div>
           )}
         </div>
 
         {/* V15 Item 5 — preview at the BOTTOM, right above the send button */}
-        <div className="border-t border-slate-700 pt-3">
+        <div className="border-t border-line pt-3">
           <div className="flex items-center gap-2">
             <button type="button" className="btn-secondary text-sm" disabled={previewing} onClick={doPreview}>
               {previewing ? "در حال ساخت..." : "👁 پیش‌نمایش پیام"}
@@ -1390,17 +1390,17 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
             </div>
           )}
           {previewWarning && (
-            <div className="mt-2 card bg-amber-500/10 border-amber-500/40 text-amber-200 text-xs">
+            <div className="mt-2 card bg-amber-50 border-amber-200 text-amber-700 text-xs">
               ⚠️ {previewWarning}
             </div>
           )}
-          <p className="text-xs text-slate-500 mt-1">پیش‌نمایش دقیقاً از همان مسیر ساخت پیام واقعی تولید می‌شود (نمونه مخاطب: اولین مخاطب یا «دوست»).</p>
+          <p className="text-xs text-muted mt-1">پیش‌نمایش دقیقاً از همان مسیر ساخت پیام واقعی تولید می‌شود (نمونه مخاطب: اولین مخاطب یا «دوست»).</p>
         </div>
 
         <button className="btn-primary w-full" disabled={saving} onClick={submit}>
           {saving ? (editId ? "در حال ذخیره..." : "در حال ساخت...") : (editId ? "ذخیره تغییرات" : "ساخت گروه پیام")}
         </button>
-        {!editId && <p className="text-xs text-slate-500">پس از ساخت، مخاطبین را از صفحه مخاطبین اضافه کنید و سپس گروه پیام را شروع کنید.</p>}
+        {!editId && <p className="text-xs text-muted">پس از ساخت، مخاطبین را از صفحه مخاطبین اضافه کنید و سپس گروه پیام را شروع کنید.</p>}
       </div>
     </Modal>
   );
@@ -1436,7 +1436,7 @@ function TestModal({ campaign, onClose }) {
           <label className="label">پیام دلخواه (اختیاری)</label>
           <textarea className="input h-20" value={message} onChange={(e) => setMessage(e.target.value)} />
         </div>
-        <p className="text-xs text-slate-500">پیام آزمایشی با همین تنظیمات GPT و محصولات ارسال می‌شود</p>
+        <p className="text-xs text-muted">پیام آزمایشی با همین تنظیمات GPT و محصولات ارسال می‌شود</p>
         <button className="btn-primary w-full" disabled={sending} onClick={send}>
           {sending ? "در حال ارسال..." : "ارسال تست"}
         </button>
@@ -1479,7 +1479,7 @@ function RecallModal({ campaign, onClose }) {
   return (
     <Modal title={`فراخوانی پیام‌های «${campaign.name}»`} onClose={onClose}>
       <div className="space-y-3 text-sm">
-        <p className="text-red-300">
+        <p className="text-red-700">
           ⚠️ این کار تمام پیام‌های این کمپین را برای همه گیرندگان حذف می‌کند. پیام‌هایی که از مهلت حذف واتساپ گذشته باشند حذف نخواهند شد. این عمل برگشت‌ناپذیر است.
         </p>
         {!running ? (
@@ -1490,13 +1490,13 @@ function RecallModal({ campaign, onClose }) {
           </>
         ) : (
           <div className="space-y-2">
-            <p className="text-slate-300">
+            <p className="text-ink">
               حذف شد: {fa(prog?.recalled ?? 0)} از {fa(prog?.total ?? 0)}
             </p>
-            <div className="w-full bg-slate-700 rounded-full h-2">
+            <div className="w-full bg-slate-100 rounded-full h-2">
               <div className="bg-red-500 h-2 rounded-full" style={{ width: `${prog?.total ? Math.round((prog.recalled / prog.total) * 100) : 0}%` }} />
             </div>
-            {prog?.done && <p className="text-emerald-300">✅ فراخوانی کامل شد.</p>}
+            {prog?.done && <p className="text-brand">✅ فراخوانی کامل شد.</p>}
             <button className="btn-secondary w-full" onClick={onClose}>بستن</button>
           </div>
         )}

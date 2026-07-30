@@ -31,7 +31,7 @@ export default function ActiveContacts() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-2xl font-bold">مخاطبین فعال واتساپ</h2>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-muted mt-1">
             شماره‌هایی که در استوری‌ها، گروه‌ها، کانال‌ها یا لیست‌های انتشار فعال دیده شده‌اند
             (بدون تکرار){data?.count != null ? ` · ${Number(data.count).toLocaleString("fa-IR")} مورد` : ""}
           </p>
@@ -55,11 +55,11 @@ export default function ActiveContacts() {
 
       <div className="card overflow-x-auto">
         {items.length === 0 ? (
-          <p className="text-slate-500 text-sm">هنوز مخاطب فعالی ثبت نشده است.</p>
+          <p className="text-muted text-sm">هنوز مخاطب فعالی ثبت نشده است.</p>
         ) : (
           <table className="w-full text-sm text-right">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="py-2 px-2">#</th>
                 <th className="py-2 px-2">شماره</th>
                 <th className="py-2 px-2">نام</th>
@@ -71,18 +71,18 @@ export default function ActiveContacts() {
             </thead>
             <tbody>
               {items.map((r, i) => (
-                <tr key={r.id} className="border-b border-slate-800">
-                  <td className="py-2 px-2 text-slate-500">{Number(i + 1).toLocaleString("fa-IR")}</td>
+                <tr key={r.id} className="border-b border-line">
+                  <td className="py-2 px-2 text-muted">{Number(i + 1).toLocaleString("fa-IR")}</td>
                   <td className="py-2 px-2 font-mono">{r.phone}</td>
-                  <td className="py-2 px-2 text-slate-300">{r.name || "—"}</td>
+                  <td className="py-2 px-2 text-ink">{r.name || "—"}</td>
                   <td className="py-2 px-2">
-                    <span className="badge text-xs bg-slate-500/20 text-slate-300 border-slate-500/40">
+                    <span className="badge text-xs bg-slate-100 text-slate-600 border-slate-300">
                       {r.source_label}
                     </span>
                   </td>
-                  <td className="py-2 px-2 text-slate-400 text-xs whitespace-nowrap">{r.first_seen_shamsi || "—"}</td>
-                  <td className="py-2 px-2 text-slate-400 text-xs whitespace-nowrap">{r.last_seen_shamsi || "—"}</td>
-                  <td className="py-2 px-2 text-slate-300">{Number(r.sighting_count || 0).toLocaleString("fa-IR")}</td>
+                  <td className="py-2 px-2 text-muted text-xs whitespace-nowrap">{r.first_seen_shamsi || "—"}</td>
+                  <td className="py-2 px-2 text-muted text-xs whitespace-nowrap">{r.last_seen_shamsi || "—"}</td>
+                  <td className="py-2 px-2 text-ink">{Number(r.sighting_count || 0).toLocaleString("fa-IR")}</td>
                 </tr>
               ))}
             </tbody>

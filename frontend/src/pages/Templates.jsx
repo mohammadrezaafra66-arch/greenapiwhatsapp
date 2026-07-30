@@ -15,7 +15,7 @@ export default function Templates() {
       </div>
 
       {loading && <Spinner />}
-      {error && <div className="card text-red-400">{error}</div>}
+      {error && <div className="card bg-red-50 text-red-700 border-red-200">{error}</div>}
       {data && data.length === 0 && <Empty label="قالبی وجود ندارد." />}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -23,14 +23,14 @@ export default function Templates() {
           <div key={t.id} className="card space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-bold">{t.name}</span>
-              <span className="badge bg-slate-700 text-slate-300 border-slate-600">{t.category || "عمومی"}</span>
+              <span className="badge bg-slate-100 text-slate-600 border-slate-300">{t.category || "عمومی"}</span>
             </div>
-            <p className="text-sm text-slate-300 whitespace-pre-wrap">{t.content}</p>
-            <div className="flex items-center justify-between text-xs text-slate-500">
+            <p className="text-sm text-ink whitespace-pre-wrap">{t.content}</p>
+            <div className="flex items-center justify-between text-xs text-muted">
               <span>استفاده: {t.use_count} بار</span>
               <div className="flex gap-2">
-                <button className="text-sky-400 hover:underline" onClick={async () => { const r = await Api.use(t.id); navigator.clipboard?.writeText(r.content); toast.success("کپی شد"); reload(); }}>کپی</button>
-                <button className="text-red-400 hover:underline" onClick={async () => { if (await confirmDialog("حذف؟")) { await Api.remove(t.id); reload(); } }}>حذف</button>
+                <button className="btn-secondary btn-sm" onClick={async () => { const r = await Api.use(t.id); navigator.clipboard?.writeText(r.content); toast.success("کپی شد"); reload(); }}>کپی</button>
+                <button className="btn-danger btn-sm" onClick={async () => { if (await confirmDialog("حذف؟")) { await Api.remove(t.id); reload(); } }}>حذف</button>
               </div>
             </div>
           </div>

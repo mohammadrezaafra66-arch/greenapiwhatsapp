@@ -32,22 +32,22 @@ const MSG_TYPE_FA = {
 function renderSpecial(m) {
   if (m.message_type === "call") {
     return (
-      <p className="text-sm text-amber-300 mt-1">
+      <p className="text-sm text-amber-700 mt-1">
         📞 تماس {m.call_status === "missed" ? "از دست رفته" : m.call_status || ""}
       </p>
     );
   }
   if (m.message_type === "button_reply") {
     return (
-      <p className="text-sm text-sky-300 mt-1">
+      <p className="text-sm text-sky-700 mt-1">
         🔘 دکمه انتخاب‌شده: <b>{m.button_reply_title || m.text || "—"}</b>
       </p>
     );
   }
   if (m.message_type === "reaction") {
     return (
-      <p className="text-sm text-pink-300 mt-1">
-        {m.text || "😀"} <span className="text-xs text-slate-500">ری‌اکشن روی پیام شما</span>
+      <p className="text-sm text-pink-600 mt-1">
+        {m.text || "😀"} <span className="text-xs text-muted">ری‌اکشن روی پیام شما</span>
       </p>
     );
   }
@@ -59,7 +59,7 @@ function renderSpecial(m) {
       votes = [];
     }
     return (
-      <div className="text-sm text-purple-300 mt-1">
+      <div className="text-sm text-purple-700 mt-1">
         📊 آرای نظرسنجی:
         <ul className="list-disc pr-5 text-xs mt-1">
           {votes.length === 0 && <li>—</li>}
@@ -115,7 +115,7 @@ export default function Inbox() {
               <option key={a.instance_id} value={a.instance_id}>{a.name || a.instance_id}</option>
             ))}
           </select>
-          <button className="btn-secondary text-sm" onClick={async () => {
+          <button className="btn-secondary btn-sm" onClick={async () => {
             const chats = [...new Set((data || []).filter((m) => !m.is_group && m.sender_phone).map((m) => m.sender_phone))];
             if (chats.length === 0) return toast.info("چتی برای علامت‌گذاری نیست");
             try {
@@ -123,11 +123,11 @@ export default function Inbox() {
               toast.success(`${r.marked} چت در واتساپ خوانده‌شده شد`);
             } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
           }}>✓ همه را خوانده‌شده کن</button>
-          <label className="flex items-center gap-2 text-sm text-slate-300">
+          <label className="flex items-center gap-2 text-sm text-muted">
             <input type="checkbox" checked={filter.unread} onChange={(e) => setFilter({ ...filter, unread: e.target.checked })} />
             فقط خوانده‌نشده
           </label>
-          <button className={`text-sm px-2 py-1 rounded ${filter.archived ? "bg-brand/20 text-brand" : "text-slate-300 hover:bg-slate-800"}`}
+          <button className={`text-sm px-2 py-1 rounded ${filter.archived ? "bg-brand-light text-brand" : "text-muted hover:bg-canvas"}`}
             onClick={() => setFilter({ ...filter, archived: !filter.archived })}>
             {filter.archived ? "→ صندوق اصلی" : "آرشیوشده‌ها"}
           </button>
@@ -144,9 +144,9 @@ export default function Inbox() {
 
       {stats && (
         <div className="flex flex-wrap gap-2 text-xs">
-          <span className="badge bg-purple-500/20 text-purple-300 border-purple-500/40">خوانده‌نشده: {stats.unread}</span>
+          <span className="badge bg-purple-50 text-purple-700 border-purple-200">خوانده‌نشده: {stats.unread}</span>
           {Object.entries(stats.by_category || {}).map(([k, v]) => (
-            <span key={k} className="badge bg-slate-700 text-slate-300 border-slate-600">{CAT_FA[k] || k}: {v}</span>
+            <span key={k} className="badge bg-slate-100 text-slate-600 border-slate-300">{CAT_FA[k] || k}: {v}</span>
           ))}
         </div>
       )}
@@ -159,29 +159,29 @@ export default function Inbox() {
           <div key={m.id} className={`card flex justify-between items-start gap-3 ${!m.is_read ? "border-brand/40" : ""}`}>
             <div className="flex-1">
               <p className="text-sm">
-                <button className="font-bold text-emerald-300 hover:underline" title="مشاهده اطلاعات مخاطب"
+                <button className="font-bold text-brand hover:underline" title="مشاهده اطلاعات مخاطب"
                   onClick={() => !m.is_group && setInfoPhone(m.sender_phone)}>
                   {m.sender_name || m.sender_phone}
                 </button>
-                {m.is_group && <span className="text-xs text-purple-300"> (گروه)</span>}
-                {MSG_TYPE_FA[m.message_type] && <span className="badge mr-2 bg-indigo-500/20 text-indigo-300 border-indigo-500/40">{MSG_TYPE_FA[m.message_type]}</span>}
-                {m.category && <span className="badge mr-2 bg-slate-700 text-slate-300 border-slate-600">{CAT_FA[m.category] || m.category}</span>}
-                {m.auto_replied && <span className="badge mr-1 bg-sky-500/20 text-sky-300 border-sky-500/40">پاسخ خودکار</span>}
+                {m.is_group && <span className="text-xs text-purple-700"> (گروه)</span>}
+                {MSG_TYPE_FA[m.message_type] && <span className="badge mr-2 bg-indigo-50 text-indigo-700 border-indigo-200">{MSG_TYPE_FA[m.message_type]}</span>}
+                {m.category && <span className="badge mr-2 bg-slate-100 text-slate-600 border-slate-300">{CAT_FA[m.category] || m.category}</span>}
+                {m.auto_replied && <span className="badge mr-1 bg-sky-50 text-sky-700 border-sky-200">پاسخ خودکار</span>}
               </p>
               {renderSpecial(m)}
-              {!MSG_TYPE_FA[m.message_type] && <p className="text-slate-300 text-sm mt-1">{m.text || "—"}</p>}
-              <p className="text-xs text-slate-500 mt-1 font-mono">{m.sender_phone}</p>
+              {!MSG_TYPE_FA[m.message_type] && <p className="text-ink text-sm mt-1">{m.text || "—"}</p>}
+              <p className="text-xs text-muted mt-1 font-mono">{m.sender_phone}</p>
             </div>
             <div className="flex flex-col gap-1">
-              {!m.is_read && <button className="btn-secondary text-xs py-1" onClick={async () => { await Api.markRead(m.id); load(); }}>خواندم</button>}
-              <button className="btn-primary text-xs py-1" onClick={() => setReply(m)}>پاسخ</button>
-              {!m.is_group && <button className="btn-secondary text-xs py-1" onClick={() => setRichSend({ msg: m, mode: "contact" })}>کارت تماس</button>}
-              {!m.is_group && <button className="btn-secondary text-xs py-1" onClick={() => setRichSend({ msg: m, mode: "location" })}>موقعیت</button>}
-              {!m.is_group && <button className="btn-secondary text-xs py-1" title="علامت‌گذاری خوانده‌شده در واتساپ" onClick={async () => {
+              {!m.is_read && <button className="btn-secondary btn-sm" onClick={async () => { await Api.markRead(m.id); load(); }}>خواندم</button>}
+              <button className="btn-primary btn-sm" onClick={() => setReply(m)}>پاسخ</button>
+              {!m.is_group && <button className="btn-secondary btn-sm" onClick={() => setRichSend({ msg: m, mode: "contact" })}>کارت تماس</button>}
+              {!m.is_group && <button className="btn-secondary btn-sm" onClick={() => setRichSend({ msg: m, mode: "location" })}>موقعیت</button>}
+              {!m.is_group && <button className="btn-secondary btn-sm" title="علامت‌گذاری خوانده‌شده در واتساپ" onClick={async () => {
                 try { await MessagesApi.read({ chat_id: m.sender_phone }); toast.success("در واتساپ خوانده‌شده شد"); }
                 catch (e) { toast.error(e?.response?.data?.detail || e.message); }
               }}>✓ واتساپ</button>}
-              <button className="btn-secondary text-xs py-1" onClick={async () => {
+              <button className="btn-secondary btn-sm" onClick={async () => {
                 try {
                   await MessagesApi.archive({ chat_id: m.sender_phone, archived: !m.archived });
                   toast.success(m.archived ? "از آرشیو خارج شد" : "آرشیو شد");
@@ -233,28 +233,28 @@ function ContactInfoDrawer({ phone, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
-      <div className="w-full max-w-sm h-full bg-slate-900 border-r border-slate-700 overflow-y-auto p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-sm h-full bg-surface border-r border-line overflow-y-auto p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h3 className="font-bold">اطلاعات مخاطب</h3>
-          <button onClick={onClose} className="text-slate-400 text-xl leading-none">×</button>
+          <button onClick={onClose} className="text-muted text-xl leading-none">×</button>
         </div>
-        {loading ? <Spinner /> : err ? <p className="text-red-400 text-sm">{err}</p> : (
+        {loading ? <Spinner /> : err ? <p className="text-red-600 text-sm">{err}</p> : (
           <>
             <div className="flex items-center gap-3">
-              {info.avatar ? <img src={info.avatar} alt="" className="w-16 h-16 rounded-full object-cover" /> : <div className="w-16 h-16 rounded-full bg-slate-700" />}
+              {info.avatar ? <img src={info.avatar} alt="" className="w-16 h-16 rounded-full object-cover" /> : <div className="w-16 h-16 rounded-full bg-slate-100" />}
               <div>
                 <p className="font-bold">{info.name || info.contactName || phone}</p>
-                <p className="text-xs text-slate-400 font-mono">{phone}</p>
-                {isBusiness && <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40 mt-1">حساب تجاری</span>}
+                <p className="text-xs text-muted font-mono">{phone}</p>
+                {isBusiness && <span className="badge bg-amber-50 text-amber-700 border-amber-200 mt-1">حساب تجاری</span>}
               </div>
             </div>
-            {info.contactName && <p className="text-sm"><span className="text-slate-500">نام در دفترچه: </span>{info.contactName}</p>}
-            {info.category && <p className="text-sm"><span className="text-slate-500">دسته: </span>{info.category}</p>}
-            {info.email && <p className="text-sm"><span className="text-slate-500">ایمیل: </span>{info.email}</p>}
-            {info.description && <p className="text-sm text-slate-300">{info.description}</p>}
+            {info.contactName && <p className="text-sm"><span className="text-muted">نام در دفترچه: </span>{info.contactName}</p>}
+            {info.category && <p className="text-sm"><span className="text-muted">دسته: </span>{info.category}</p>}
+            {info.email && <p className="text-sm"><span className="text-muted">ایمیل: </span>{info.email}</p>}
+            {info.description && <p className="text-sm text-ink">{info.description}</p>}
             {isBusiness && products.length > 0 && (
               <div>
-                <p className="text-sm text-amber-300 mb-1">⚠️ این مخاطب کاتالوگ محصول دارد (رقیب/فروشنده احتمالی):</p>
+                <p className="text-sm text-amber-700 mb-1">⚠️ این مخاطب کاتالوگ محصول دارد (رقیب/فروشنده احتمالی):</p>
                 <div className="grid grid-cols-3 gap-2">
                   {products.slice(0, 9).map((p, i) => {
                     const img = p?.imageUrls?.requested || p?.imageUrls?.original;
@@ -263,7 +263,7 @@ function ContactInfoDrawer({ phone, onClose }) {
                 </div>
               </div>
             )}
-            <button className="btn-secondary text-xs w-full" onClick={() => load(true)}>🔄 به‌روزرسانی اطلاعات</button>
+            <button className="btn-secondary btn-sm w-full" onClick={() => load(true)}>🔄 به‌روزرسانی اطلاعات</button>
           </>
         )}
       </div>
@@ -340,7 +340,7 @@ function ReplyModal({ msg, onClose, onDone }) {
   return (
     <Modal title={`پاسخ به ${msg.sender_name || msg.sender_phone}`} onClose={onClose}>
       <div className="space-y-3">
-        <div className="card bg-slate-900 text-sm text-slate-300">{msg.text}</div>
+        <div className="card bg-canvas text-sm text-muted">{msg.text}</div>
         <textarea className="input h-24" value={text} onChange={(e) => setText(e.target.value)} placeholder="متن پاسخ..." />
         <button className="btn-primary w-full" disabled={sending} onClick={send}>{sending ? "در حال ارسال..." : "ارسال پاسخ"}</button>
       </div>

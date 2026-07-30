@@ -69,7 +69,7 @@ export default function OwnNumbers() {
     <div className="space-y-4 max-w-2xl">
       <div>
         <h2 className="text-2xl font-bold">شماره‌های خودی (حذف از رصد محصولات)</h2>
-        <p className="text-sm text-slate-400 mt-1">
+        <p className="text-sm text-muted mt-1">
           محتوای این شماره‌ها هرگز به‌عنوان «مشاهدهٔ محصول» در گزارش پرتکرار محصولات شمرده نمی‌شود،
           هرگز توکن هوش مصنوعی مصرف نمی‌کند و هرگز در فهرست «مخاطبین فعال واتساپ» ثبت نمی‌شود.
           شماره‌های اینستنس‌های متصل به‌صورت خودکار اینجا افزوده می‌شوند؛ می‌توانید شماره‌های دیگر
@@ -98,21 +98,21 @@ export default function OwnNumbers() {
 
       <div className="card">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-muted">
             فهرست شماره‌های خودی{data?.count != null ? ` · ${Number(data.count).toLocaleString("fa-IR")} مورد` : ""}
           </p>
-          <button className="btn-secondary text-xs" disabled={loading} onClick={load}>
+          <button className="btn-secondary btn-sm" disabled={loading} onClick={load}>
             {loading ? "..." : "🔄 تازه‌سازی"}
           </button>
         </div>
 
         {items.length === 0 ? (
-          <p className="text-slate-500 text-sm">هنوز شماره‌ای در فهرست نیست.</p>
+          <p className="text-muted text-sm">هنوز شماره‌ای در فهرست نیست.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="table-wrap">
             <table className="w-full text-sm text-right">
               <thead>
-                <tr className="text-slate-400 border-b border-slate-700">
+                <tr className="text-muted border-b border-line">
                   <th className="py-2 px-2">#</th>
                   <th className="py-2 px-2">شماره</th>
                   <th className="py-2 px-2">توضیح</th>
@@ -122,17 +122,17 @@ export default function OwnNumbers() {
               </thead>
               <tbody>
                 {items.map((r, i) => (
-                  <tr key={r.id} className="border-b border-slate-800">
-                    <td className="py-2 px-2 text-slate-500">{Number(i + 1).toLocaleString("fa-IR")}</td>
+                  <tr key={r.id} className="border-b border-line">
+                    <td className="py-2 px-2 text-muted">{Number(i + 1).toLocaleString("fa-IR")}</td>
                     <td className="py-2 px-2 font-mono">{r.phone_raw || r.phone_core}</td>
-                    <td className="py-2 px-2 text-slate-300">{r.label || "—"}</td>
+                    <td className="py-2 px-2 text-ink">{r.label || "—"}</td>
                     <td className="py-2 px-2">
-                      <span className={`badge text-xs ${r.source === "account" ? "bg-sky-500/20 text-sky-300 border-sky-500/40" : "bg-slate-500/20 text-slate-300 border-slate-500/40"}`}>
+                      <span className={`badge text-xs ${r.source === "account" ? "bg-sky-50 text-sky-700 border-sky-200" : "bg-slate-100 text-slate-600 border-slate-300"}`}>
                         {r.source === "account" ? "اینستنس" : "دستی"}
                       </span>
                     </td>
                     <td className="py-2 px-2">
-                      <button className="btn-secondary text-xs" onClick={() => remove(r.id)}>حذف</button>
+                      <button className="btn-danger btn-sm" onClick={() => remove(r.id)}>حذف</button>
                     </td>
                   </tr>
                 ))}

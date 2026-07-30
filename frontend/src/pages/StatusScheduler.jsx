@@ -108,7 +108,7 @@ export default function StatusScheduler() {
         <button className="btn-primary" onClick={() => setEdit({})}>+ برنامه جدید</button>
       </div>
 
-      <div className="card text-sm text-slate-300 bg-sky-500/10 border-sky-500/30">
+      <div className="card text-sm bg-sky-50 text-sky-700 border-sky-200">
         استوری‌ها به‌صورت خودکار در روزها/ساعت‌های تعیین‌شده روی حساب انتخابی منتشر می‌شوند.
       </div>
 
@@ -127,7 +127,7 @@ export default function StatusScheduler() {
       </div>
 
       {loading && <Spinner />}
-      {error && <div className="card text-red-400">{error}</div>}
+      {error && <div className="card bg-red-50 text-red-700 border-red-200">{error}</div>}
 
       {!loading && accountId && list.length === 0 && <Empty label="برنامه‌ای تنظیم نشده است." />}
 
@@ -137,23 +137,23 @@ export default function StatusScheduler() {
             <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-bold">{s.name || labelOf(STATUS_TYPES, s.status_type)}</span>
-                <span className="badge bg-slate-700 text-slate-300 border-slate-600">
+                <span className="badge bg-slate-100 text-slate-600 border-slate-300">
                   {labelOf(STATUS_TYPES, s.status_type)}
                 </span>
-                <span className={`badge ${s.is_active ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-slate-500/20 text-slate-300 border-slate-500/40"}`}>
+                <span className={`badge ${s.is_active ? "bg-brand-light text-brand border-brand/30" : "bg-slate-100 text-slate-600 border-slate-300"}`}>
                   {s.is_active ? "فعال" : "غیرفعال"}
                 </span>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button className="btn-secondary" onClick={() => setEdit(s)}>ویرایش</button>
-                <button className="btn-secondary" onClick={() => toggle(s)}>
+                <button className="btn-secondary btn-sm" onClick={() => setEdit(s)}>ویرایش</button>
+                <button className="btn-secondary btn-sm" onClick={() => toggle(s)}>
                   {s.is_active ? "غیرفعال" : "فعال"}
                 </button>
-                <button className="btn-danger" onClick={() => remove(s)}>حذف</button>
+                <button className="btn-danger btn-sm" onClick={() => remove(s)}>حذف</button>
               </div>
             </div>
-            <div className="text-sm text-slate-400">{timingSummary(s)}</div>
-            <div className="text-xs text-slate-500 mt-1">
+            <div className="text-sm text-muted">{timingSummary(s)}</div>
+            <div className="text-xs text-muted mt-1">
               اجرای بعدی: {s.next_run_shamsi || "—"}
               {s.last_run_shamsi ? ` · اجرای قبلی: ${s.last_run_shamsi}` : ""}
             </div>
@@ -306,7 +306,7 @@ function ScheduleModal({ schedule, accounts, defaultAccountId, onClose, onDone }
   return (
     <Modal title={isEdit ? "ویرایش برنامه استوری" : "برنامه استوری جدید"} onClose={onClose} wide>
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="label">حساب</label>
             <select className="input" value={f.account_id} onChange={set("account_id")}>
@@ -339,7 +339,7 @@ function ScheduleModal({ schedule, accounts, defaultAccountId, onClose, onDone }
         )}
 
         {f.status_type === "special_offer" && (
-          <div className="rounded-lg border border-slate-700 p-3 space-y-3">
+          <div className="rounded-lg border border-line p-3 space-y-3">
             <p className="font-bold text-sm">پیشنهاد ویژه</p>
             <div>
               <label className="label">انتخاب محصول</label>
@@ -359,7 +359,7 @@ function ScheduleModal({ schedule, accounts, defaultAccountId, onClose, onDone }
                 ) : products.length === 0 ? (
                   <Empty label="محصولی یافت نشد." />
                 ) : (
-                  <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-700 p-2 space-y-1">
+                  <div className="max-h-48 overflow-y-auto rounded-lg border border-line p-2 space-y-1">
                     {products.map((name) => (
                       <label key={name} className="flex items-center gap-2 text-sm py-0.5">
                         <input
@@ -367,7 +367,7 @@ function ScheduleModal({ schedule, accounts, defaultAccountId, onClose, onDone }
                           checked={(f.product_pool || []).includes(name)}
                           onChange={() => toggleProduct(name)}
                         />
-                        <span className="text-slate-300">{name}</span>
+                        <span className="text-ink">{name}</span>
                       </label>
                     ))}
                   </div>
@@ -407,7 +407,7 @@ function ScheduleModal({ schedule, accounts, defaultAccountId, onClose, onDone }
         </div>
 
         {isImage && (
-          <div className="rounded-lg border border-slate-700 p-3 space-y-2">
+          <div className="rounded-lg border border-line p-3 space-y-2">
             <div>
               <label className="label">آدرس تصویر</label>
               <input className="input" dir="ltr" value={f.image_url} onChange={set("image_url")} />
@@ -419,7 +419,7 @@ function ScheduleModal({ schedule, accounts, defaultAccountId, onClose, onDone }
           </div>
         )}
 
-        <div className="border-t border-slate-700 pt-3 mt-3 space-y-3">
+        <div className="border-t border-line pt-3 mt-3 space-y-3">
           <p className="font-bold text-sm">زمان‌بندی</p>
 
           <div>
@@ -456,12 +456,12 @@ function ScheduleModal({ schedule, accounts, defaultAccountId, onClose, onDone }
                 {f.times.map((t) => (
                   <span
                     key={t}
-                    className="badge bg-slate-700 text-slate-300 border-slate-600 flex items-center gap-1"
+                    className="badge bg-slate-100 text-slate-600 border-slate-300 flex items-center gap-1"
                   >
                     {t}
                     <button
                       type="button"
-                      className="text-red-400 hover:text-red-300"
+                      className="text-red-600 hover:text-red-700"
                       onClick={() => removeTime(t)}
                     >
                       ×
@@ -491,12 +491,12 @@ function ScheduleModal({ schedule, accounts, defaultAccountId, onClose, onDone }
                 {f.specific_dates.map((d) => (
                   <span
                     key={d}
-                    className="badge bg-slate-700 text-slate-300 border-slate-600 flex items-center gap-1"
+                    className="badge bg-slate-100 text-slate-600 border-slate-300 flex items-center gap-1"
                   >
                     {d}
                     <button
                       type="button"
-                      className="text-red-400 hover:text-red-300"
+                      className="text-red-600 hover:text-red-700"
                       onClick={() => removeDate(d)}
                     >
                       ×

@@ -83,12 +83,13 @@ function fakeStorage() {
 
 test("top-products filters persist and reload from storage", () => {
   const storage = fakeStorage();
-  saveTopProductsFilters({ days: 90, limit: 500, source: "group", search: "کولر" }, storage);
+  saveTopProductsFilters({ days: 90, limit: 500, source: "group", search: "کولر", aiMerge: true }, storage);
   assert.deepEqual(loadTopProductsFilters(storage), {
     days: 90,
     limit: 500,
     source: "group",
     search: "کولر",
+    aiMerge: true,
   });
   assert.ok(storage.getItem(TOP_PRODUCTS_FILTERS_STORAGE_KEY));
 });
@@ -105,5 +106,6 @@ test("a persisted range beyond the 90-day options falls back to the default", ()
     limit: TOP_PRODUCTS_DEFAULT_LIMIT,
     source: "",
     search: "",
+    aiMerge: false,
   });
 });

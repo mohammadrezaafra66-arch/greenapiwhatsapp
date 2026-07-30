@@ -13,9 +13,9 @@ const PROVIDERS = [
 
 const PROVIDER_LABEL = { openai: "OpenAI (GPT)", deepseek: "DeepSeek", gemini: "Gemini" };
 const PROVIDER_BADGE = {
-  openai: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-  deepseek: "bg-sky-500/20 text-sky-300 border-sky-500/40",
-  gemini: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+  openai: "bg-brand-light text-brand border-brand/30",
+  deepseek: "bg-sky-50 text-sky-700 border-sky-200",
+  gemini: "bg-amber-50 text-amber-700 border-amber-200",
 };
 
 const STATUS_LABEL = {
@@ -26,11 +26,11 @@ const STATUS_LABEL = {
   unknown: "بررسی نشده ❓",
 };
 const STATUS_BADGE = {
-  working: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-  rate_limited: "bg-amber-500/20 text-amber-300 border-amber-500/40",
-  failed: "bg-red-500/20 text-red-300 border-red-500/40",
-  invalid: "bg-red-600/20 text-red-300 border-red-600/40",
-  unknown: "bg-slate-500/20 text-slate-300 border-slate-500/40",
+  working: "bg-brand-light text-brand border-brand/30",
+  rate_limited: "bg-amber-50 text-amber-700 border-amber-200",
+  failed: "bg-red-50 text-red-700 border-red-200",
+  invalid: "bg-red-50 text-red-700 border-red-200",
+  unknown: "bg-slate-100 text-slate-600 border-slate-300",
 };
 
 export default function AiKeys() {
@@ -189,7 +189,7 @@ export default function AiKeys() {
         </button>
       </div>
 
-      <div className="card bg-sky-500/10 border-sky-500/30 text-sky-200 text-sm">
+      <div className="card bg-sky-50 border-sky-200 text-sky-700 text-sm">
         سیستم به صورت خودکار از بین کلیدهای فعال و سالم به صورت رندوم استفاده می‌کند. کلیدهایی که به سقف
         رسیده‌اند موقتاً کنار گذاشته می‌شوند و بعد از مدتی دوباره امتحان می‌شوند.
       </div>
@@ -202,10 +202,10 @@ export default function AiKeys() {
             return (
               <div key={p.value} className="card space-y-2">
                 <span className={`badge ${PROVIDER_BADGE[p.value]}`}>{p.label}</span>
-                <div className="flex gap-4 text-sm text-slate-300">
+                <div className="flex gap-4 text-sm text-muted">
                   <span>کل: {fa(s.total)}</span>
                   <span>فعال: {fa(s.active)}</span>
-                  <span className="text-emerald-300">سالم: {fa(s.working)}</span>
+                  <span className="text-brand">سالم: {fa(s.working)}</span>
                 </div>
               </div>
             );
@@ -246,7 +246,7 @@ export default function AiKeys() {
             </button>
           </div>
         </div>
-        <button className="btn-primary" disabled={adding} onClick={addSingle}>
+        <button className="btn-primary w-full sm:w-auto" disabled={adding} onClick={addSingle}>
           {adding ? "..." : "افزودن"}
         </button>
       </div>
@@ -283,13 +283,13 @@ export default function AiKeys() {
       <div className="card space-y-3">
         <h3 className="font-bold text-sm">کلیدها</h3>
         {loading && <Spinner />}
-        {error && <div className="text-red-400 text-sm">{error}</div>}
+        {error && <div className="text-red-600 text-sm">{error}</div>}
         {keys && keys.length === 0 && !loading && <Empty label="کلیدی ثبت نشده است." />}
         {keys && keys.length > 0 && (
-          <div className="overflow-x-auto">
+          <div className="table-wrap">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-slate-400 text-right border-b border-slate-700">
+                <tr className="text-muted text-right border-b border-line">
                   <th className="py-2 px-2 font-medium">ارائه‌دهنده</th>
                   <th className="py-2 px-2 font-medium">کلید</th>
                   <th className="py-2 px-2 font-medium">برچسب</th>
@@ -301,7 +301,7 @@ export default function AiKeys() {
               </thead>
               <tbody>
                 {keys.map((k) => (
-                  <tr key={k.id} className={`border-b border-slate-800 ${k.is_active ? "" : "opacity-50"}`}>
+                  <tr key={k.id} className={`border-b border-line ${k.is_active ? "" : "opacity-50"}`}>
                     <td className="py-2 px-2">
                       <span className={`badge ${PROVIDER_BADGE[k.provider] || PROVIDER_BADGE.openai}`}>
                         {PROVIDER_LABEL[k.provider] || k.provider}
@@ -315,24 +315,24 @@ export default function AiKeys() {
                       </span>
                     </td>
                     <td className="py-2 px-2 whitespace-nowrap">
-                      <span className="text-emerald-300">{fa(k.success_count)}</span>
+                      <span className="text-brand">{fa(k.success_count)}</span>
                       {" / "}
-                      <span className="text-red-300">{fa(k.fail_count)}</span>
+                      <span className="text-red-600">{fa(k.fail_count)}</span>
                     </td>
-                    <td className="py-2 px-2 text-xs text-slate-400 whitespace-nowrap">
+                    <td className="py-2 px-2 text-xs text-muted whitespace-nowrap">
                       {k.last_checked_at ? k.last_checked_at.slice(0, 16).replace("T", " ") : "—"}
                     </td>
                     <td className="py-2 px-2">
                       <div className="flex flex-wrap gap-1">
-                        <button className="btn-secondary text-xs" disabled={testingId === k.id} onClick={() => testOne(k.id)}>
+                        <button className="btn-secondary btn-sm" disabled={testingId === k.id} onClick={() => testOne(k.id)}>
                           {testingId === k.id ? "..." : "تست"}
                         </button>
-                        <button className="btn-secondary text-xs" onClick={() => editLabel(k)}>برچسب</button>
-                        <button className="btn-secondary text-xs" onClick={() => editKey(k)}>ویرایش کلید</button>
-                        <button className="btn-secondary text-xs" onClick={() => toggle(k)}>
+                        <button className="btn-secondary btn-sm" onClick={() => editLabel(k)}>برچسب</button>
+                        <button className="btn-secondary btn-sm" onClick={() => editKey(k)}>ویرایش کلید</button>
+                        <button className="btn-secondary btn-sm" onClick={() => toggle(k)}>
                           {k.is_active ? "غیرفعال" : "فعال"}
                         </button>
-                        <button className="btn-danger text-xs" onClick={() => remove(k.id)}>حذف</button>
+                        <button className="btn-danger btn-sm" onClick={() => remove(k.id)}>حذف</button>
                       </div>
                     </td>
                   </tr>

@@ -19,10 +19,10 @@ export function warmthBadge({ level, score } = {}) {
   lvl = lvl || "کم";
   const cls =
     lvl === "بالا"
-      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+      ? "bg-brand-light text-brand border-brand/30"
       : lvl === "متوسط"
-      ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-      : "bg-slate-600/30 text-slate-400 border-slate-600";
+      ? "bg-amber-50 text-amber-700 border-amber-200"
+      : "bg-slate-100 text-slate-600 border-slate-300";
   const label = score != null ? `${lvl} (${score})` : lvl;
   return { label, cls, level: lvl };
 }
@@ -98,6 +98,40 @@ export function filterLogEvents(events, { senderInstanceId, coldInstanceId, help
   if (helperId) out = out.filter((e) => e.helper_id === helperId);
   if (eventType) out = out.filter((e) => e.event_type === eventType);
   return out;
+}
+
+// Build the sender dropdown for the event log. The authoritative sender list comes first so a
+// freshly enabled sender appears even before it has produced its first log/task row.
+export function logSenderOptions({ senders = [], events = [], tasks = [] } = {}) {
+  const byId = new Map();
+  let order = 0;
+  const put = (id, name, teamEnabled = null) => {
+    if (!id) return;
+    const prev = byId.get(id);
+    const keepAuthoritativeName = prev && prev.team_enabled != null && teamEnabled == null;
+    byId.set(id, {
+      id,
+      name: keepAuthoritativeName ? prev.name : (name || prev?.name || id),
+      team_enabled: teamEnabled == null ? prev?.team_enabled : teamEnabled,
+      order: prev?.order ?? order++,
+    });
+  };
+  for (const s of Array.isArray(senders) ? senders : []) {
+    put(s.instance_id, s.name || s.instance_id, s.team_enabled === true);
+  }
+  for (const e of Array.isArray(events) ? events : []) {
+    put(e.sender_instance_id || e.from_instance_id, e.from_name || e.sender_instance_id || e.from_instance_id);
+  }
+  for (const t of Array.isArray(tasks) ? tasks : []) {
+    put(t.sender_instance_id, t.sender_name || t.sender_instance_id);
+  }
+  return Array.from(byId.values()).sort((a, b) => {
+    const rank = (v) => v === true ? 0 : v === false ? 2 : 1;
+    const ar = rank(a.team_enabled);
+    const br = rank(b.team_enabled);
+    if (ar !== br) return ar - br;
+    return a.order - b.order;
+  });
 }
 
 // ── V35 — «درخواست‌های بی‌پاسخ» (unresponded requests) task filter ───────────────

@@ -7,12 +7,12 @@ import {
   filterUnrespondedTasks, taskStatusFa, UNRESPONDED_STATUSES, TASK_STATUS_FA,
   needsOverridePrompt, overrideConfirmValid, eligibilityWarningText,
   senderHasOverride, OVERRIDE_BADGE_FA, OVERRIDE_CONFIRM_LABEL_FA,
-  senderInMeshRecovery, RECOVERY_BADGE_FA,
+  senderInMeshRecovery, RECOVERY_BADGE_FA, logSenderOptions,
 } from "./teamCollab.js";
 
 test("warmthBadge maps level string to class", () => {
   assert.equal(warmthBadge({ level: "بالا" }).level, "بالا");
-  assert.match(warmthBadge({ level: "بالا" }).cls, /emerald/);
+  assert.match(warmthBadge({ level: "بالا" }).cls, /brand/);
   assert.match(warmthBadge({ level: "متوسط" }).cls, /amber/);
   assert.match(warmthBadge({ level: "کم" }).cls, /slate/);
 });
@@ -97,6 +97,29 @@ test("filterLogEvents filters by each dimension", () => {
   assert.equal(filterLogEvents(LOG, { eventType: "ask" }).length, 3);
   assert.equal(filterLogEvents(LOG, { senderInstanceId: "S1", eventType: "ask" }).length, 2);
   assert.equal(filterLogEvents(LOG, {}).length, 5);
+});
+
+test("logSenderOptions includes freshly enabled senders before they have log rows", () => {
+  const rows = logSenderOptions({
+    senders: [
+      { instance_id: "S3", name: "فرستنده تازه", team_enabled: true },
+      { instance_id: "S4", name: "فرستنده خاموش", team_enabled: false },
+    ],
+    events: [{ sender_instance_id: "S1", from_name: "قدیمی لاگ" }],
+    tasks: [{ sender_instance_id: "S2", sender_name: "قدیمی تسک" }],
+  });
+  assert.deepEqual(rows.map((r) => r.id), ["S3", "S1", "S2", "S4"]);
+  assert.equal(rows.find((r) => r.id === "S3").name, "فرستنده تازه");
+  assert.equal(rows.find((r) => r.id === "S4").team_enabled, false);
+});
+
+test("logSenderOptions prefers account sender names over historical fallback names", () => {
+  const rows = logSenderOptions({
+    senders: [{ instance_id: "S1", name: "نام جدید", team_enabled: true }],
+    events: [{ sender_instance_id: "S1", from_name: "نام قدیمی" }],
+  });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].name, "نام جدید");
 });
 
 test("threadStatusSummary formats counts", () => {

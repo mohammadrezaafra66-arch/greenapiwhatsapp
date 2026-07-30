@@ -12,9 +12,9 @@ const TYPE_LABELS = {
 };
 
 const TYPE_BADGE = {
-  group: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-  community: "bg-sky-500/20 text-sky-300 border-sky-500/40",
-  broadcast: "bg-purple-500/20 text-purple-300 border-purple-500/40",
+  group: "bg-brand-light text-brand border-brand/30",
+  community: "bg-sky-50 text-sky-700 border-sky-200",
+  broadcast: "bg-slate-100 text-slate-600 border-slate-300",
 };
 
 const STATUS_LABELS = {
@@ -25,10 +25,10 @@ const STATUS_LABELS = {
 };
 
 const STATUS_BADGE = {
-  joined: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-  pending: "bg-slate-500/20 text-slate-300 border-slate-500/40",
-  unsupported: "bg-amber-500/20 text-amber-300 border-amber-500/40",
-  error: "bg-red-500/20 text-red-300 border-red-500/40",
+  joined: "bg-brand-light text-brand border-brand/30",
+  pending: "bg-slate-100 text-slate-600 border-slate-300",
+  unsupported: "bg-amber-50 text-amber-700 border-amber-200",
+  error: "bg-red-50 text-red-700 border-red-200",
 };
 
 const looksLikeUrl = (s) => /^https?:\/\//i.test(s) || /^[\w.-]+\.[a-z]{2,}/i.test(s);
@@ -159,8 +159,8 @@ export default function JoinLinks() {
     <div className="space-y-4">
       <h2 className="text-2xl font-bold">لینک‌های گروه و کانال</h2>
 
-      <div className="card bg-amber-500/10 border-amber-500/30 text-amber-200 text-sm">
-        ⚠️ واتساپ/Green API معمولاً پیوستن خودکار به گروه از طریق لینک را محدود می‌کند. لینک‌ها اینجا
+      <div className="card bg-amber-50 border-amber-200 text-amber-700 text-sm">
+        ⚠️ واتساپ/سرویس معمولاً پیوستن خودکار به گروه از طریق لینک را محدود می‌کند. لینک‌ها اینجا
         ثبت و مدیریت می‌شوند؛ در صورت پشتیبانی نشدن، عضویت باید از روی گوشی انجام شود. وضعیت هر تلاش در
         جدول پایین نمایش داده می‌شود.
       </div>
@@ -192,7 +192,7 @@ export default function JoinLinks() {
             onChange={(e) => setLink(e.target.value)}
           />
         </div>
-        <button className="btn-primary" disabled={adding} onClick={addSingle}>
+        <button className="btn-primary w-full sm:w-auto" disabled={adding} onClick={addSingle}>
           {adding ? "..." : "افزودن"}
         </button>
       </div>
@@ -218,7 +218,7 @@ export default function JoinLinks() {
       {/* Links list */}
       <div className="space-y-3">
         {loading && <Spinner />}
-        {error && <div className="card text-red-400">{error}</div>}
+        {error && <div className="card text-red-700">{error}</div>}
         {links && links.length === 0 && <Empty label="لینکی ثبت نشده است." />}
         {links && links.length > 0 && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -230,10 +230,10 @@ export default function JoinLinks() {
                     {TYPE_LABELS[l.link_type] || l.link_type || "گروه"}
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 font-mono break-all" dir="ltr">
+                <p className="text-xs text-muted font-mono break-all" dir="ltr">
                   {l.invite_link}
                 </p>
-                <button className="btn-danger text-xs" onClick={() => remove(l.id)}>
+                <button className="btn-danger btn-sm" onClick={() => remove(l.id)}>
                   حذف
                 </button>
               </div>
@@ -268,13 +268,13 @@ export default function JoinLinks() {
       <div className="card space-y-3">
         <h3 className="font-bold text-sm">وضعیت تلاش‌ها</h3>
         {(!status || status.length === 0) && (
-          <p className="text-slate-500 text-sm">هنوز تلاشی برای عضویت ثبت نشده.</p>
+          <p className="text-muted text-sm">هنوز تلاشی برای عضویت ثبت نشده.</p>
         )}
         {status && status.length > 0 && (
-          <div className="overflow-x-auto">
+          <div className="table-wrap">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-slate-400 text-right border-b border-slate-700">
+                <tr className="text-muted text-right border-b border-line">
                   <th className="py-2 px-2 font-medium">حساب</th>
                   <th className="py-2 px-2 font-medium">لینک</th>
                   <th className="py-2 px-2 font-medium">وضعیت</th>
@@ -283,7 +283,7 @@ export default function JoinLinks() {
               </thead>
               <tbody>
                 {status.map((s, i) => (
-                  <tr key={`${s.account_id}-${s.link_id}-${i}`} className="border-b border-slate-800">
+                  <tr key={`${s.account_id}-${s.link_id}-${i}`} className="border-b border-line">
                     <td className="py-2 px-2 truncate max-w-[10rem]">{s.account || s.account_id}</td>
                     <td className="py-2 px-2 font-mono text-xs truncate max-w-[14rem]" dir="ltr">
                       {s.link}
@@ -293,7 +293,7 @@ export default function JoinLinks() {
                         {STATUS_LABELS[s.status] || s.status}
                       </span>
                     </td>
-                    <td className="py-2 px-2 text-red-300 text-xs truncate max-w-[14rem]">
+                    <td className="py-2 px-2 text-red-700 text-xs truncate max-w-[14rem]">
                       {s.error || ""}
                     </td>
                   </tr>

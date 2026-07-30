@@ -4,8 +4,8 @@ import { Spinner, Empty, Modal } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
 
 const CHAT_TYPE_LABELS = {
-  group: { label: "گروه معمولی", icon: "👥", cls: "text-emerald-400" },
-  broadcast: { label: "لیست انتشار", icon: "📢", cls: "text-sky-400" },
+  group: { label: "گروه معمولی", icon: "👥", cls: "text-brand" },
+  broadcast: { label: "لیست انتشار", icon: "📢", cls: "text-sky-700" },
 };
 
 const MEMBER_FILTERS = [
@@ -185,23 +185,23 @@ export default function Groups() {
       </div>
 
       {extractProgress && extractProgress.status === "running" && (
-        <div className="card bg-amber-500/10 border-amber-500/30 space-y-1">
-          <div className="flex justify-between text-sm text-amber-200">
+        <div className="card bg-amber-50 border-amber-200 space-y-1">
+          <div className="flex justify-between text-sm text-amber-700">
             <span className="truncate">در حال استخراج: {extractProgress.current_group || "…"}</span>
             <span>{fa(extractProgress.processed)}/{fa(extractProgress.total)} گروه</span>
           </div>
-          <div className="w-full bg-slate-700 rounded-full h-2">
+          <div className="w-full bg-slate-100 rounded-full h-2">
             <div
               className="bg-amber-500 h-2 rounded-full transition-all"
               style={{ width: `${extractProgress.total ? (extractProgress.processed / extractProgress.total) * 100 : 0}%` }}
             />
           </div>
-          <p className="text-xs text-slate-400">افزوده‌شده: {fa(extractProgress.added)} · تکراری/نامعتبر: {fa(extractProgress.skipped)}</p>
+          <p className="text-xs text-muted">افزوده‌شده: {fa(extractProgress.added)} · تکراری/نامعتبر: {fa(extractProgress.skipped)}</p>
         </div>
       )}
 
-      <div className="card text-sm text-sky-300 bg-sky-500/10 border-sky-500/30">
-        💡 برای نمایش گروه‌ها ابتدا «همگام‌سازی با واتساپ» را بزنید. فقط گروه‌های معمولی (که عضوشان هستید) دریافت می‌شوند. لیست‌های انتشار (Broadcast) و کانال‌های واتساپ توسط Green API ارائه نمی‌شوند و اینجا نمایش داده نمی‌شوند.
+      <div className="card text-sm text-sky-700 bg-sky-50 border-sky-200">
+        💡 برای نمایش گروه‌ها ابتدا «همگام‌سازی با واتساپ» را بزنید. فقط گروه‌های معمولی (که عضوشان هستید) دریافت می‌شوند. لیست‌های انتشار (Broadcast) و کانال‌های واتساپ توسط سرویس ارائه نمی‌شوند و اینجا نمایش داده نمی‌شوند.
       </div>
 
       {/* Filters */}
@@ -212,23 +212,23 @@ export default function Groups() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <div className="flex gap-1 bg-slate-800 rounded-lg p-1">
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
           {TYPE_TABS.map((t) => (
             <button
               key={t.key}
               onClick={() => setTypeFilter(t.key)}
-              className={`px-3 py-1 rounded text-sm ${typeFilter === t.key ? "bg-brand text-white" : "text-slate-400 hover:text-slate-200"}`}
+              className={`px-3 py-1 rounded text-sm ${typeFilter === t.key ? "bg-brand text-white" : "text-muted hover:text-ink"}`}
             >
               {t.label}
             </button>
           ))}
         </div>
-        <div className="flex gap-1 bg-slate-800 rounded-lg p-1">
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
           {ADMIN_TABS.map((t) => (
             <button
               key={String(t.val)}
               onClick={() => setIsAdminFilter(t.val)}
-              className={`px-3 py-1 rounded text-sm ${isAdminFilter === t.val ? "bg-brand text-white" : "text-slate-400 hover:text-slate-200"}`}
+              className={`px-3 py-1 rounded text-sm ${isAdminFilter === t.val ? "bg-brand text-white" : "text-muted hover:text-ink"}`}
             >
               {t.label}
             </button>
@@ -239,13 +239,13 @@ export default function Groups() {
         </select>
       </div>
 
-      <div className="text-sm text-slate-400">
+      <div className="text-sm text-muted">
         {fa(filtered.length)} گروه نمایش داده می‌شود
         {groups.length !== filtered.length && ` (از ${fa(groups.length)} کل)`}
       </div>
 
       {loading && <Spinner />}
-      {error && <div className="card text-red-400">{error}</div>}
+      {error && <div className="card bg-red-50 text-red-700 border-red-200">{error}</div>}
       {!loading && filtered.length === 0 && (
         <Empty label={groups.length === 0 ? "گروهی پیدا نشد — ابتدا همگام‌سازی کنید." : "گروهی با این فیلترها پیدا نشد."} />
       )}
@@ -260,16 +260,16 @@ export default function Groups() {
                   {/* V15 Item 20 — always show a name; fall back to the id + «(بدون نام)» */}
                   {g.name && g.name.trim()
                     ? g.name
-                    : <span className="text-slate-400 font-mono">{g.group_chat_id || "—"} <span className="text-xs">(بدون نام)</span></span>}
-                  {g.is_admin && <span className="text-xs text-amber-400 font-bold mr-2">👑 ادمین</span>}
+                    : <span className="text-muted font-mono">{g.group_chat_id || "—"} <span className="text-xs">(بدون نام)</span></span>}
+                  {g.is_admin && <span className="text-xs text-amber-700 font-bold mr-2">👑 ادمین</span>}
                 </h3>
                 <span className={`text-xs whitespace-nowrap ${t.cls}`}>{t.icon} {t.label}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-2xl font-bold text-emerald-400">{g.member_count > 0 ? fa(g.member_count) : "—"}</span>
-                <span className="text-slate-400 text-sm">عضو</span>
+                <span className="text-2xl font-bold text-brand">{g.member_count > 0 ? fa(g.member_count) : "—"}</span>
+                <span className="text-muted text-sm">عضو</span>
                 <button
-                  className="text-xs text-slate-500 hover:text-slate-300 mr-auto disabled:opacity-40"
+                  className="text-xs text-muted hover:text-ink mr-auto disabled:opacity-40"
                   disabled={busy === g.id}
                   title="به‌روزرسانی تعداد اعضا"
                   onClick={() => refreshMembers(g.id)}
@@ -277,8 +277,8 @@ export default function Groups() {
                   {busy === g.id ? "…" : "🔄"}
                 </button>
               </div>
-              {g.description && <p className="text-slate-400 text-xs line-clamp-2">{g.description}</p>}
-              <p className="text-slate-500 text-xs font-mono truncate">{g.group_chat_id || "بدون شناسه"}</p>
+              {g.description && <p className="text-muted text-xs line-clamp-2">{g.description}</p>}
+              <p className="text-muted text-xs font-mono truncate">{g.group_chat_id || "بدون شناسه"}</p>
               <div className="flex gap-2">
                 <button className="btn-secondary flex-1 text-xs" onClick={() => setSend(g)}>ارسال پیام</button>
                 <button className="btn-secondary text-xs px-2" title="کپی شناسه" onClick={() => copyId(g.group_chat_id)}>📋</button>
@@ -356,7 +356,7 @@ function GroupManagerModal({ group, onClose, onChanged }) {
   return (
     <Modal title={`مدیریت گروه: ${group.name}`} onClose={onClose} wide>
       <div className="space-y-3">
-        <div className="card bg-red-500/10 border-red-500/40 text-red-200 text-xs">
+        <div className="card bg-red-50 border-red-200 text-red-700 text-xs">
           ⚠️ افزودن عضو به گروه پرخطرترین کار در واتساپ است. افزودن شماره‌ای که واتساپ ندارد می‌تواند باعث مسدود شدن خط شما شود.
           سامانه قبل از افزودن، وجود واتساپ را چک می‌کند و سرعت را محدود می‌کند (۵ در دقیقه). بهتر است ابتدا در پیام خصوصی از فرد اجازه بگیرید.
         </div>
@@ -370,16 +370,17 @@ function GroupManagerModal({ group, onClose, onChanged }) {
 
         {loading ? <Spinner /> : tab === "members" ? (
           <div className="max-h-80 overflow-y-auto">
-            <p className="text-xs text-slate-400 mb-2">اعضا: {participants.length} {data?.size ? `از ${data.size}` : ""}</p>
+            <p className="text-xs text-muted mb-2">اعضا: {participants.length} {data?.size ? `از ${data.size}` : ""}</p>
+            <div className="table-wrap">
             <table className="w-full text-sm">
               <tbody>
                 {participants.map((p, i) => {
                   const phone = String(p.id || "").split("@")[0];
                   const isAdmin = p.isAdmin || p.isSuperAdmin;
                   return (
-                    <tr key={i} className="border-t border-slate-800">
+                    <tr key={i} className="border-t border-line">
                       <td className="p-1 font-mono text-xs">{phone}</td>
-                      <td className="p-1">{isAdmin && <span className="text-amber-400 text-xs">👑 ادمین</span>}</td>
+                      <td className="p-1">{isAdmin && <span className="text-amber-700 text-xs">👑 ادمین</span>}</td>
                       <td className="p-1 text-left">
                         <div className="flex gap-1 justify-end flex-wrap">
                           {!isAdmin && <button className="btn-secondary text-xs" onClick={async () => { try { await Api.promote(gchat, phone, acct); toast.success("ادمین شد"); load(); } catch (e) { toast.error(e?.response?.data?.detail || e.message); } }}>ارتقا</button>}
@@ -392,6 +393,7 @@ function GroupManagerModal({ group, onClose, onChanged }) {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         ) : tab === "add" ? (
           <div className="space-y-2">
@@ -399,8 +401,8 @@ function GroupManagerModal({ group, onClose, onChanged }) {
             <button className="btn-primary w-full" onClick={startAdd}>➕ افزودن با بررسی ایمنی</button>
             {prog && (
               <div className="card space-y-1 max-h-56 overflow-y-auto">
-                <p className="text-xs text-slate-400">{prog.finished ? "✅ پایان" : "در حال افزودن…"} ({(prog.results || []).length} / {prog.total})</p>
-                {prog.error && <p className="text-red-300 text-xs">{prog.error}</p>}
+                <p className="text-xs text-muted">{prog.finished ? "✅ پایان" : "در حال افزودن…"} ({(prog.results || []).length} / {prog.total})</p>
+                {prog.error && <p className="text-red-700 text-xs">{prog.error}</p>}
                 {(prog.results || []).map((r, i) => (
                   <div key={i} className="flex justify-between text-xs">
                     <span className="font-mono">{r.phone}</span>
@@ -450,16 +452,16 @@ function ExtractedMembersModal({ data, onClose }) {
   return (
     <Modal title={`اعضای گروه: ${group.name}`} onClose={onClose}>
       <div className="space-y-3">
-        <p className="text-sm text-slate-300">{fa(count)} شماره استخراج شد</p>
-        <div className="max-h-64 overflow-y-auto bg-slate-900 rounded-lg p-2 text-xs font-mono text-slate-400 space-y-0.5" dir="ltr">
+        <p className="text-sm text-ink">{fa(count)} شماره استخراج شد</p>
+        <div className="max-h-64 overflow-y-auto bg-canvas border border-line rounded-lg p-2 text-xs font-mono text-muted space-y-0.5" dir="ltr">
           {phones.length === 0 ? (
-            <p className="text-slate-500">شماره‌ای یافت نشد.</p>
+            <p className="text-muted">شماره‌ای یافت نشد.</p>
           ) : (
             phones.map((p) => <div key={p}>{p}</div>)
           )}
         </div>
         {result ? (
-          <div className="card bg-emerald-500/10 border-emerald-500/30 text-sm text-emerald-300">
+          <div className="card bg-brand-light border-brand/30 text-sm text-brand">
             ✅ {fa(result.added)} مخاطب جدید افزوده شد · {fa(result.skipped)} تکراری · {fa(result.invalid)} نامعتبر
           </div>
         ) : (
@@ -494,7 +496,7 @@ function AddMembersModal({ group, onClose }) {
   return (
     <Modal title={`افزودن اعضا به ${group.name}`} onClose={onClose}>
       <div className="space-y-3">
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-muted">
           فایل اکسل با ستون phone آپلود کنید. اعضا به‌صورت خودکار اضافه می‌شوند. فقط در گروه‌هایی که ادمین هستید کار می‌کند.
         </p>
         <input
@@ -512,7 +514,7 @@ function AddMembersModal({ group, onClose }) {
               ✅ {fa(result.added)} نفر اضافه شد | ❌ {fa(result.failed)} خطا
             </p>
             {Array.isArray(result.errors) && result.errors.length > 0 && (
-              <div className="text-xs text-red-400 space-y-1">
+              <div className="text-xs text-red-700 space-y-1">
                 {result.errors.slice(0, 5).map((err, i) => (
                   <p key={i}>{typeof err === "string" ? err : JSON.stringify(err)}</p>
                 ))}

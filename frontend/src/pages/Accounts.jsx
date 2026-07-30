@@ -37,12 +37,12 @@ function HealthSection({ accountId }) {
   const color = pct >= 66 ? "bg-emerald-500" : pct >= 33 ? "bg-amber-500" : "bg-red-500";
   const label = pct >= 66 ? "سالم" : pct >= 33 ? "متوسط" : "ضعیف";
   return (
-    <div className="border-t border-slate-700 pt-3">
-      <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+    <div className="border-t border-line pt-3">
+      <div className="flex items-center justify-between text-xs text-muted mb-1">
         <span>سلامت حساب: {fa(pct)}٪ ({label})</span>
         <span>یلوکارت ۷روز: {fa(h.yellow_card_7d)}/{fa(h.sends_7d)}</span>
       </div>
-      <div className="h-2 rounded bg-slate-800 overflow-hidden">
+      <div className="h-2 rounded bg-slate-100 overflow-hidden">
         <div className={`h-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
@@ -64,7 +64,7 @@ export default function Accounts() {
     if (!file) return;
     const n = (data || []).filter((a) => a.status === "active").length;
     const secs = Math.max(0, (n - 1) * 10);
-    if (!(await confirmDialog(`⚠️ به دلیل محدودیت Green API، هر شماره ۱۰ ثانیه فاصله دارد. برای ${n} شماره حدود ${secs} ثانیه طول می‌کشد. ادامه؟`))) return;
+    if (!(await confirmDialog(`⚠️ به دلیل محدودیت سرویس، هر شماره ۱۰ ثانیه فاصله دارد. برای ${n} شماره حدود ${secs} ثانیه طول می‌کشد. ادامه؟`))) return;
     try {
       const r = await Api.applyProfilePictureAll(file);
       setPfpProg({ done: 0, total: r.total, finished: false });
@@ -120,9 +120,9 @@ export default function Accounts() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-2xl font-bold">حساب‌ها</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <label className="btn-secondary cursor-pointer whitespace-nowrap">
             🖼 اعمال عکس روی همه شماره‌ها
             <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; applyPfpAll(f); }} />
@@ -132,22 +132,22 @@ export default function Accounts() {
       </div>
 
       {pfpProg && (
-        <div className="card border-amber-500/40 bg-amber-500/10 text-amber-200 text-sm">
+        <div className="card border-amber-200 bg-amber-50 text-amber-700 text-sm">
           {pfpProg.finished ? "✅ عکس روی همه شماره‌ها اعمال شد" : `در حال اعمال عکس پروفایل: ${pfpProg.done} از ${pfpProg.total} شماره…`}
         </div>
       )}
 
-      <div className="card text-sm text-slate-300 bg-sky-500/10 border-sky-500/30">
+      <div className="card text-sm text-sky-700 bg-sky-50 border-sky-200">
         هر حساب یک شماره واتساپ مستقل است. می‌توانید چندین حساب همزمان فعال داشته باشید. کمپین‌ها به‌صورت چرخشی (round-robin) بین حساب‌های فعال ارسال می‌شوند.
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-sm text-slate-400">پلتفرم:</span>
+        <span className="text-sm text-muted">پلتفرم:</span>
         <PlatformSwitcher value={platform} onChange={setPlatform} />
       </div>
 
       {loading && <Spinner />}
-      {error && <div className="card text-red-400">{error}</div>}
+      {error && <div className="card bg-red-50 text-red-700 border-red-200">{error}</div>}
       {data && data.length === 0 && <Empty label="هیچ حسابی ثبت نشده است." />}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -157,25 +157,25 @@ export default function Accounts() {
               <div className="flex items-center gap-2">
                 {a.profile_picture_url
                   ? <img src={a.profile_picture_url} alt="" className="w-8 h-8 rounded-full object-cover" />
-                  : <div className="w-8 h-8 rounded-full bg-slate-700" />}
+                  : <div className="w-8 h-8 rounded-full bg-slate-100" />}
                 <span className="font-bold">{a.name}</span>
                 <HelpTip text={TIPS.name} />
                 {a.is_default && (
-                  <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">پیش‌فرض ⭐</span>
+                  <span className="badge bg-brand-light text-brand border-brand/30">پیش‌فرض ⭐</span>
                 )}
               </div>
               <Badge status={a.status} />
             </div>
             {/* V36 — instance deleted upstream in Green API: clear message + prominent remove action */}
             {a.status === "green_api_deleted" && (
-              <div className="card bg-red-500/10 border-red-500/30 text-red-200 text-xs flex items-center justify-between gap-2 flex-wrap">
-                <span>🗑️ این اینستنس در Green API دیگر وجود ندارد — دیگر قابل اتصال نیست.</span>
-                <button className="btn-danger text-xs whitespace-nowrap" disabled={busy === a.id} onClick={async () => {
-                  if (await confirmDialog("این حساب از پلتفرم حذف شود؟ (در Green API از قبل حذف شده است)")) act(() => Api.remove(a.id), a.id);
+              <div className="card bg-red-50 border-red-200 text-red-700 text-xs flex items-center justify-between gap-2 flex-wrap">
+                <span>🗑️ این اینستنس در سرویس دیگر وجود ندارد — دیگر قابل اتصال نیست.</span>
+                <button className="btn-danger btn-sm whitespace-nowrap" disabled={busy === a.id} onClick={async () => {
+                  if (await confirmDialog("این حساب از پلتفرم حذف شود؟ (در سرویس از قبل حذف شده است)")) act(() => Api.remove(a.id), a.id);
                 }}>حذف از پلتفرم</button>
               </div>
             )}
-            <div className="text-sm text-slate-400 space-y-0.5">
+            <div className="text-sm text-muted space-y-0.5">
               <p>شناسه (idInstance): {a.instance_id}<HelpTip text={TIPS.idInstance} /></p>
               <p>شماره واتساپ: {a.phone || "—"}<HelpTip text={TIPS.phone} /></p>
               <p>ارسال امروز: {a.sent_today} / {a.daily_limit}</p>
@@ -184,7 +184,7 @@ export default function Accounts() {
             </div>
 
             {/* V18 PART 2 — «گرم‌سازی هوشمند» toggle now drives the V17 mesh (warmup_enrolled) */}
-            <div className="border-t border-slate-700 pt-2">
+            <div className="border-t border-line pt-2">
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -205,21 +205,21 @@ export default function Accounts() {
                 />
                 🔥 گرم‌سازی هوشمند
                 {a.warmup_enrolled && WARMUP_STATE_FA[a.warmup_state] && (
-                  <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40">
+                  <span className="badge bg-amber-50 text-amber-700 border-amber-200">
                     {WARMUP_STATE_FA[a.warmup_state]}
                   </span>
                 )}
                 {a.warmup_state === "GRADUATED" && (
-                  <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">آماده ✅</span>
+                  <span className="badge bg-brand-light text-brand border-brand/30">آماده ✅</span>
                 )}
               </label>
-              <p className="text-[11px] text-slate-500 mt-1">
+              <p className="text-[11px] text-muted mt-1">
                 با روشن‌کردن این گزینه، شمارهٔ جدید به‌صورت خودکار توسط شبکهٔ گرم‌سازی (مش) گرم می‌شود:
                 ۲۴ساعت آماده‌سازی، سپس تبادل پیام فقط با اکانت‌های گرم خودتان. برای مشاهدهٔ وضعیت کامل به «گرم‌سازی» بروید.
               </p>
 
               {/* V20 PART 2 — warm PEER (sender) role: a SEPARATE control from being warmed */}
-              <div className="mt-2 pt-2 border-t border-slate-800">
+              <div className="mt-2 pt-2 border-t border-line">
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -236,10 +236,10 @@ export default function Accounts() {
                   />
                   📤 اکانت گرم مرجع (فرستندهٔ گرم‌سازی)
                   {a.is_warm_peer && (
-                    <span className="badge bg-sky-500/20 text-sky-300 border-sky-500/40">فرستنده</span>
+                    <span className="badge bg-sky-50 text-sky-700 border-sky-200">فرستنده</span>
                   )}
                 </label>
-                <p className="text-[11px] text-slate-500 mt-1">
+                <p className="text-[11px] text-muted mt-1">
                   این اکانتِ از قبل گرم، برای «فرستادن» پیام‌های گرم‌سازی به شماره‌های جدید استفاده می‌شود.
                   خودش گرم‌سازی نمی‌شود و در معرض ریسک قرار نمی‌گیرد — نقش آن با «گرم‌سازی هوشمند» (که شماره را گرم می‌کند) متفاوت است.
                 </p>
@@ -300,10 +300,10 @@ export default function Accounts() {
                   className="mx-auto bg-white p-2 rounded"
                   src={qr.qr.startsWith("data:") ? qr.qr : `data:image/png;base64,${qr.qr}`}
                 />
-                <p className="text-center text-xs text-slate-400">با واتس‌اپ گوشی این کد را اسکن کنید.</p>
+                <p className="text-center text-xs text-muted">با واتس‌اپ گوشی این کد را اسکن کنید.</p>
               </div>
             ) : (
-              <p className="text-slate-400 text-sm">
+              <p className="text-muted text-sm">
                 {qr.type === "alreadyLogged"
                   ? "این حساب هم‌اکنون متصل است؛ کد QR لازم نیست."
                   : qr.message || "QR در دسترس نیست (احتمالاً حساب قبلاً متصل شده)."}
@@ -368,13 +368,13 @@ function ProxySection({ accountId }) {
   };
 
   return (
-    <div className="border-t border-slate-700 pt-3">
-      <button className="text-xs text-slate-400 hover:text-slate-200" onClick={toggle}>
+    <div className="border-t border-line pt-3">
+      <button className="text-xs text-muted hover:text-ink" onClick={toggle}>
         🌐 تنظیمات پروکسی {open ? "▲" : "▼"}
       </button>
       {open && (
         <div className="mt-2 space-y-2">
-          <p className="text-xs text-slate-500">برای پایداری اتصال از ایران می‌توانید یک پروکسی SOCKS5 تنظیم کنید.</p>
+          <p className="text-xs text-muted">برای پایداری اتصال از ایران می‌توانید یک پروکسی SOCKS5 تنظیم کنید.</p>
           <input className="input" placeholder="آدرس سرور (مثال: 1.2.3.4)" value={f.proxy_host} onChange={set("proxy_host")} />
           <input className="input" type="number" placeholder="پورت (مثال: 1080)" value={f.proxy_port} onChange={set("proxy_port")} />
           <input className="input" placeholder="نام کاربری (اختیاری)" value={f.proxy_login} onChange={set("proxy_login")} />
@@ -438,20 +438,20 @@ function LimitsSection({ accountId }) {
   };
 
   return (
-    <div className="border-t border-slate-700 pt-3">
-      <button className="text-xs text-slate-400 hover:text-slate-200" onClick={toggle}>
+    <div className="border-t border-line pt-3">
+      <button className="text-xs text-muted hover:text-ink" onClick={toggle}>
         📊 محدودیت‌های ارسال {open ? "▲" : "▼"}
       </button>
       {open && (
         <div className="mt-2 space-y-2">
           {!loaded && <Spinner />}
           {detail && (
-            <div className="bg-slate-900 rounded-lg p-3 text-xs space-y-1">
-              <p className="font-bold text-emerald-400">
+            <div className="bg-canvas rounded-lg p-3 text-xs space-y-1">
+              <p className="font-bold text-brand">
                 سقف امروز: {detail.effective_limit} پیام ({detail.sent_today} ارسال، {detail.remaining_today} باقی)
               </p>
-              <p className="text-slate-300">{detail.explanation}</p>
-              <p className={detail?.breakdown?.week1_cap_active ? "text-amber-400" : "text-emerald-400"}>
+              <p className="text-ink">{detail.explanation}</p>
+              <p className={detail?.breakdown?.week1_cap_active ? "text-amber-700" : "text-brand"}>
                 {detail?.meta_compliance?.status}
               </p>
             </div>
@@ -476,7 +476,7 @@ function LimitsSection({ accountId }) {
               value={f.incoming_ratio_multiplier}
               onChange={set("incoming_ratio_multiplier")}
             />
-            <p className="text-xs text-slate-500">بیشتر = پیام دریافتی بیشتر سقف را بالا می‌برد</p>
+            <p className="text-xs text-muted">بیشتر = پیام دریافتی بیشتر سقف را بالا می‌برد</p>
           </div>
           <button className="btn-primary text-sm" disabled={busy} onClick={saveLimits}>ذخیره محدودیت‌ها</button>
         </div>
@@ -507,7 +507,7 @@ function AddAccountModal({ onClose, onDone }) {
   return (
     <Modal title="افزودن حساب جدید" onClose={onClose}>
       <div className="space-y-3">
-        <div className="text-xs text-slate-400 space-y-1">
+        <div className="text-xs text-muted space-y-1">
           <p>گام ۱: در green-api.com وارد شوید</p>
           <p>گام ۲: یک Instance جدید بسازید</p>
           <p>گام ۳: Instance ID و API Token را کپی کنید</p>

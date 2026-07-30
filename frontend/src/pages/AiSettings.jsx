@@ -40,9 +40,9 @@ export default function AiSettings() {
     <div className="space-y-5">
       <h2 className="text-2xl font-bold">تنظیمات هوش مصنوعی</h2>
 
-      {err && <div className="card text-red-400">{err}</div>}
+      {err && <div className="card bg-red-50 text-red-700 border-red-200">{err}</div>}
 
-      <div className="card bg-slate-900/60 text-sm text-slate-300 space-y-1">
+      <div className="card bg-canvas text-sm text-muted space-y-1">
         <p>🔒 کلیدها در سرور تنظیم می‌شوند (<code>.env</code>) — به دلایل امنیتی اینجا قابل ویرایش نیستند.</p>
         <p>سیستم به ترتیب اولویت امتحان می‌کند. اولین پاسخ موفق استفاده می‌شود.</p>
       </div>
@@ -58,16 +58,16 @@ export default function AiSettings() {
                   <span className="text-2xl">{p.emoji}</span>
                   {p.name}
                 </span>
-                <span className="badge bg-slate-700 text-slate-300 border-slate-600">اولویت {fa(p.priority)}</span>
+                <span className="badge bg-slate-100 text-slate-600 border-slate-300">اولویت {fa(p.priority)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span
-                  className={`badge ${on ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-slate-600/40 text-slate-400 border-slate-500/40"}`}
+                  className={`badge ${on ? "bg-brand-light text-brand border-brand/30" : "bg-slate-100 text-slate-600 border-slate-300"}`}
                 >
-                  <span className={`inline-block w-2 h-2 rounded-full ml-1 align-middle ${on ? "bg-emerald-400 animate-pulse" : "bg-slate-500"}`} />
+                  <span className={`inline-block w-2 h-2 rounded-full ml-1 align-middle ${on ? "bg-brand animate-pulse" : "bg-slate-400"}`} />
                   {on ? "فعال" : "غیرفعال"}
                 </span>
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-muted">
                   {fa(statOf(p.key).calls)} استفاده · {fa(statOf(p.key).total_tokens)} توکن
                 </span>
               </div>
@@ -80,12 +80,12 @@ export default function AiSettings() {
       <div className="card">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold">آمار زنده مصرف (۲۴ ساعت اخیر)</h3>
-          <span className="text-xs text-slate-500">به‌روزرسانی هر ۳۰ ثانیه</span>
+          <span className="text-xs text-muted">به‌روزرسانی هر ۳۰ ثانیه</span>
         </div>
-        <div className="overflow-x-auto">
+        <div className="table-wrap">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="text-right p-2">ارائه‌دهنده</th>
                 <th className="text-right p-2">تعداد استفاده</th>
                 <th className="text-right p-2">توکن مصرفی</th>
@@ -96,11 +96,11 @@ export default function AiSettings() {
               {PROVIDERS.map((p) => {
                 const s = statOf(p.key);
                 return (
-                  <tr key={p.key} className="border-b border-slate-800">
+                  <tr key={p.key} className="border-b border-line">
                     <td className="p-2">{p.emoji} {p.name}</td>
                     <td className="p-2 font-bold">{fa(s.calls)}</td>
-                    <td className="p-2 text-sky-300">{fa(s.total_tokens)}</td>
-                    <td className={`p-2 ${s.errors > 0 ? "text-red-400" : "text-slate-400"}`}>{fa(s.errors)}</td>
+                    <td className="p-2 text-sky-700">{fa(s.total_tokens)}</td>
+                    <td className={`p-2 ${s.errors > 0 ? "text-red-700" : "text-muted"}`}>{fa(s.errors)}</td>
                   </tr>
                 );
               })}

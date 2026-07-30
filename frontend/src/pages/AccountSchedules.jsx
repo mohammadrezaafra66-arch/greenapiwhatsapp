@@ -65,7 +65,7 @@ export default function AccountSchedules() {
         {accountId && <button className="btn-primary" onClick={() => setEdit({})}>+ افزودن بازه</button>}
       </div>
 
-      <div className="card text-sm text-slate-300 bg-sky-500/10 border-sky-500/30">
+      <div className="card text-sm bg-sky-50 text-sky-700 border-sky-200">
         بازه‌های زمانی که اینجا تعریف می‌کنید جایگزین زمان‌بندی پیش‌فرض سیستم می‌شوند. ساعت‌هایی که بازه تعریف نشده باشد، ارسال متوقف می‌ماند.
       </div>
 
@@ -84,13 +84,13 @@ export default function AccountSchedules() {
       </div>
 
       {loading && <Spinner />}
-      {error && <div className="card text-red-400">{error}</div>}
+      {error && <div className="card bg-red-50 text-red-700 border-red-200">{error}</div>}
 
       {accountId && sched && (
         <>
           <div className="card space-y-3">
             <h3 className="font-bold">تأخیر ارسال (ثانیه)</h3>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="label">حداقل</label>
                 <input type="number" className="input" value={delay.min_delay_seconds}
@@ -114,7 +114,7 @@ export default function AccountSchedules() {
             ) : (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-slate-400 border-b border-slate-700">
+                  <tr className="text-muted border-b border-line">
                     <th className="text-right p-2">از ساعت</th>
                     <th className="text-right p-2">تا ساعت</th>
                     <th className="text-right p-2">حداکثر ارسال در ساعت</th>
@@ -126,26 +126,26 @@ export default function AccountSchedules() {
                 </thead>
                 <tbody>
                   {sched.schedule.map((s) => (
-                    <tr key={s.id} className="border-b border-slate-800">
+                    <tr key={s.id} className="border-b border-line">
                       <td className="p-2">{s.hour_start}</td>
                       <td className="p-2">{s.hour_end}</td>
                       <td className="p-2">{s.max_per_hour}</td>
-                      <td className="p-2 text-slate-300">
+                      <td className="p-2 text-muted">
                         {(s.gpt_prompt || "").slice(0, 50)}{(s.gpt_prompt || "").length > 50 ? "…" : ""}
                         {s.include_products && (
-                          <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40 mr-1">🛒 محصولات</span>
+                          <span className="badge bg-amber-50 text-amber-700 border-amber-200 mr-1">🛒 محصولات</span>
                         )}
                       </td>
-                      <td className="p-2 text-slate-300">{(s.message_template || "").slice(0, 30)}{(s.message_template || "").length > 30 ? "…" : ""}</td>
+                      <td className="p-2 text-muted">{(s.message_template || "").slice(0, 30)}{(s.message_template || "").length > 30 ? "…" : ""}</td>
                       <td className="p-2">
-                        <span className={`badge ${s.is_active ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-slate-500/20 text-slate-300 border-slate-500/40"}`}>
+                        <span className={`badge ${s.is_active ? "bg-brand-light text-brand border-brand/30" : "bg-slate-100 text-slate-600 border-slate-300"}`}>
                           {s.is_active ? "فعال" : "غیرفعال"}
                         </span>
                       </td>
                       <td className="p-2">
                         <div className="flex gap-2">
-                          <button className="text-sky-400 hover:underline" onClick={() => setEdit(s)}>ویرایش</button>
-                          <button className="text-red-400 hover:underline" onClick={() => removeSlot(s.id)}>حذف</button>
+                          <button className="btn-secondary btn-sm" onClick={() => setEdit(s)}>ویرایش</button>
+                          <button className="btn-danger btn-sm" onClick={() => removeSlot(s.id)}>حذف</button>
                         </div>
                       </td>
                     </tr>
@@ -215,12 +215,12 @@ function SlotModal({ slot, accountId, onClose, onDone }) {
   return (
     <Modal title={isEdit ? "ویرایش بازه" : "بازه جدید"} onClose={onClose}>
       <div className="space-y-3">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div><label className="label">از ساعت</label><input type="number" min="0" max="23" className="input" value={f.hour_start} onChange={set("hour_start")} /></div>
           <div><label className="label">تا ساعت</label><input type="number" min="1" max="24" className="input" value={f.hour_end} onChange={set("hour_end")} /></div>
           <div><label className="label">حداکثر/ساعت</label><input type="number" min="0" className="input" value={f.max_per_hour} onChange={set("max_per_hour")} /></div>
         </div>
-        <p className="text-xs text-slate-500 -mt-1">(ساعت تهران، ۰ تا ۲۳)</p>
+        <p className="text-xs text-muted -mt-1">(ساعت تهران، ۰ تا ۲۳)</p>
 
         {presets.length > 0 && (
           <div className="space-y-2">
@@ -232,15 +232,15 @@ function SlotModal({ slot, accountId, onClose, onDone }) {
                   <div
                     key={p.key}
                     onClick={() => setF({ ...f, gpt_prompt: p.gpt_prompt })}
-                    className={`card cursor-pointer hover:border-emerald-500/50 transition ${selected ? "border-emerald-500 ring-1 ring-emerald-500" : ""}`}
+                    className={`card cursor-pointer hover:border-brand/50 transition ${selected ? "border-brand ring-1 ring-brand" : ""}`}
                   >
                     <div className="font-bold text-sm">{p.label}</div>
-                    <div className="text-xs text-slate-400 mt-1">{p.example}</div>
+                    <div className="text-xs text-muted mt-1">{p.example}</div>
                   </div>
                 );
               })}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted">
               💡 مثال: ساعت ۸-۹ پیش‌نویس «صبح‌بخیر» → پیام انگیزشی؛ ساعت ۱۱-۱۲ پیش‌نویس «محصولات با قیمت» + تیک «افزودن محصولات» → قیمت لحظه‌ای درج می‌شود.
             </p>
           </div>

@@ -82,7 +82,7 @@ export function ConfirmHost() {
   return (
     <div className="fixed inset-0 z-[110] bg-black/60 flex items-center justify-center p-4" dir="rtl">
       <div className="card w-full max-w-sm">
-        <p className="text-sm text-slate-200 mb-4 whitespace-pre-line">{state.message}</p>
+        <p className="text-sm text-ink mb-4 whitespace-pre-line">{state.message}</p>
         <div className="flex gap-2 justify-end">
           <button className="btn-secondary" onClick={() => _close(false)}>{state.cancelText}</button>
           <button className={state.danger ? "btn-danger" : "btn-primary"} onClick={() => _close(true)}>

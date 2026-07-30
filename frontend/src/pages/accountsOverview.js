@@ -11,10 +11,10 @@ export function warmthBadge({ level, score } = {}) {
     lvl = s >= 70 ? "بالا" : s >= 40 ? "متوسط" : "کم";
   }
   const cls = lvl === "بالا"
-    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+    ? "bg-brand-light text-brand border-brand/30"
     : lvl === "متوسط"
-      ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-      : "bg-slate-600/30 text-slate-400 border-slate-600";
+      ? "bg-amber-50 text-amber-700 border-amber-200"
+      : "bg-slate-100 text-slate-600 border-slate-300";
   return { level: lvl, cls, label: lvl };
 }
 
@@ -40,24 +40,24 @@ export function roleChips(row) {
   const chips = [];
   if (r.mesh && r.mesh !== "none") {
     chips.push({ key: "mesh", label: MESH_ROLE_FA[r.mesh] || r.mesh, to: LINK_WARMUP,
-                 cls: "bg-sky-500/20 text-sky-300 border-sky-500/40" });
+                 cls: "bg-sky-50 text-sky-700 border-sky-200" });
   }
   if (r.tc_sender) {
     chips.push({ key: "tc_sender",
                  label: `فرستندهٔ همکاری تیمی (${r.tc_contact_count || 0} مخاطب)`, to: LINK_TEAM,
-                 cls: "bg-indigo-500/20 text-indigo-300 border-indigo-500/40" });
+                 cls: "bg-indigo-50 text-indigo-700 border-indigo-200" });
   }
   if (r.tc_cold) {
     chips.push({ key: "tc_cold", label: "اکانت سرد (همکاری تیمی)", to: LINK_TEAM,
-                 cls: "bg-purple-500/20 text-purple-300 border-purple-500/40" });
+                 cls: "bg-purple-50 text-purple-700 border-purple-200" });
   }
   if (r.in_mesh_recovery) {
     chips.push({ key: "recovery", label: "در حال بازیابی گرم‌سازی", to: LINK_WARMUP,
-                 cls: "bg-amber-500/20 text-amber-300 border-amber-500/40" });
+                 cls: "bg-amber-50 text-amber-700 border-amber-200" });
   }
   if (!chips.length) {
     chips.push({ key: "none", label: NO_ROLE_FA, to: LINK_ACCOUNTS,
-                 cls: "bg-slate-600/30 text-slate-400 border-slate-600" });
+                 cls: "bg-slate-100 text-slate-600 border-slate-300" });
   }
   return chips;
 }
@@ -72,23 +72,23 @@ export const ELIGIBILITY_REASON_FA = {
 };
 
 export function eligibilityInfo(row) {
-  if (!row) return { label: "—", cls: "bg-slate-600/30 text-slate-400 border-slate-600", eligible: false };
+  if (!row) return { label: "—", cls: "bg-slate-100 text-slate-600 border-slate-300", eligible: false };
   if (row.eligible) {
-    return { label: "واجد شرایط", cls: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40", eligible: true };
+    return { label: "واجد شرایط", cls: "bg-brand-light text-brand border-brand/30", eligible: true };
   }
   const base = ELIGIBILITY_REASON_FA[row.eligibility_reason] || "واجد شرایط نیست";
   // An override lifts the 14-day/incident bar; show it so the row explains itself.
   if (row.eligibility_override) {
-    return { label: `${base} — رد شرط ۱۴روزه`, cls: "bg-rose-500/20 text-rose-300 border-rose-500/40", eligible: false };
+    return { label: `${base} — رد شرط ۱۴روزه`, cls: "bg-rose-50 text-rose-700 border-rose-200", eligible: false };
   }
-  return { label: base, cls: "bg-slate-600/30 text-slate-400 border-slate-600", eligible: false };
+  return { label: base, cls: "bg-slate-100 text-slate-600 border-slate-300", eligible: false };
 }
 
 // ── health badge (0..1 → percentage, colored like the protection page) ──
 export function healthInfo(row) {
   const v = Number((row && row.health_score) || 0);
   const pct = Math.round(v * 100);
-  const cls = v > 0.6 ? "text-emerald-300" : v > 0.3 ? "text-amber-300" : "text-red-300";
+  const cls = v > 0.6 ? "text-brand" : v > 0.3 ? "text-amber-700" : "text-red-700";
   return { pct, cls };
 }
 

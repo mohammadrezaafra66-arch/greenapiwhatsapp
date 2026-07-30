@@ -94,7 +94,7 @@ export default function Journals() {
         <h2 className="text-2xl font-bold">تاریخچه پیام‌ها</h2>
         <div className="flex flex-wrap gap-2 items-center">
           {queue && (
-            <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40">
+            <span className="badge bg-amber-50 text-amber-700 border-amber-200">
               صف: {queue.messages_in_queue} پیام · {queue.webhooks_in_queue} دریافت خودکار
             </span>
           )}
@@ -127,7 +127,7 @@ export default function Journals() {
         {TABS.map((t) => (
           <button
             key={t.key}
-            className={`px-3 py-2 rounded-lg text-sm ${tab === t.key ? "bg-brand/20 text-brand" : "text-slate-300 hover:bg-slate-800"}`}
+            className={`px-3 py-2 rounded-lg text-sm ${tab === t.key ? "bg-brand-light text-brand" : "text-muted hover:bg-canvas"}`}
             onClick={() => setTab(t.key)}
           >
             {t.label}
@@ -136,15 +136,15 @@ export default function Journals() {
       </div>
 
       {loading && <Spinner />}
-      {error && <div className="card text-red-400">{error}</div>}
+      {error && <div className="card text-red-700">{error}</div>}
       {!accountId && <Empty label="ابتدا یک حساب انتخاب کنید." />}
       {accountId && rows && rows.length === 0 && !loading && <Empty label="موردی یافت نشد." />}
 
       {accountId && rows && rows.length > 0 && (
-        <div className="card overflow-x-auto">
+        <div className="card table-wrap">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 {tab === "chats" ? (
                   <>
                     <th className="text-right p-2">شناسه چت</th>
@@ -162,7 +162,7 @@ export default function Journals() {
             </thead>
             <tbody>
               {rows.map((m, i) => (
-                <tr key={m.idMessage || m.id || m.chatId || i} className="border-b border-slate-800">
+                <tr key={m.idMessage || m.id || m.chatId || i} className="border-b border-line">
                   {tab === "chats" ? (
                     <>
                       <td className="p-2 font-mono text-xs">{m.id || m.chatId}</td>
@@ -172,8 +172,8 @@ export default function Journals() {
                     <>
                       <td className="p-2 font-mono text-xs">{m.chatId || m.senderId || "—"}</td>
                       <td className="p-2">{m.typeMessage || "text"}</td>
-                      <td className="p-2 text-slate-300">{String(preview(m)).slice(0, 60)}</td>
-                      <td className="p-2 text-xs text-slate-500">{tsFmt(m.timestamp)}</td>
+                      <td className="p-2 text-ink">{String(preview(m)).slice(0, 60)}</td>
+                      <td className="p-2 text-xs text-muted">{tsFmt(m.timestamp)}</td>
                     </>
                   )}
                 </tr>

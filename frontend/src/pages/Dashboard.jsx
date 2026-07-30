@@ -21,15 +21,15 @@ function timeAgo(iso) {
 }
 
 const CAT = {
-  price_inquiry: { fa: "استعلام قیمت", c: "bg-sky-500/20 text-sky-300 border-sky-500/40" },
-  complaint: { fa: "شکایت", c: "bg-red-500/20 text-red-300 border-red-500/40" },
-  order: { fa: "سفارش", c: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" },
-  unsubscribe: { fa: "لغو اشتراک", c: "bg-amber-500/20 text-amber-300 border-amber-500/40" },
-  other: { fa: "سایر", c: "bg-slate-600/40 text-slate-300 border-slate-500/40" },
+  price_inquiry: { fa: "استعلام قیمت", c: "bg-sky-50 text-sky-700 border-sky-200" },
+  complaint: { fa: "شکایت", c: "bg-red-50 text-red-700 border-red-200" },
+  order: { fa: "سفارش", c: "bg-brand-light text-brand border-brand/30" },
+  unsubscribe: { fa: "لغو اشتراک", c: "bg-amber-50 text-amber-700 border-amber-200" },
+  other: { fa: "سایر", c: "bg-slate-100 text-slate-600 border-slate-300" },
 };
 
 const STATUS_FA = { active: "فعال", banned: "مسدود", disconnected: "قطع", pending: "در انتظار" };
-const STATUS_DOT = { active: "bg-emerald-400", banned: "bg-red-400", disconnected: "bg-yellow-400", pending: "bg-slate-400" };
+const STATUS_DOT = { active: "bg-brand", banned: "bg-red-500", disconnected: "bg-amber-500", pending: "bg-slate-400" };
 
 // ── count-up animated number ───────────────────────────────
 function AnimatedNumber({ value = 0, className = "" }) {
@@ -59,17 +59,17 @@ function AnimatedNumber({ value = 0, className = "" }) {
 function HealthDot({ ok, label }) {
   return (
     <span className="flex items-center gap-1" title={label + (ok ? " — سالم" : " — مشکل")}>
-      <span className={`inline-block w-2 h-2 rounded-full ${ok ? "bg-emerald-400" : "bg-red-500 animate-pulse"}`} />
+      <span className={`inline-block w-2 h-2 rounded-full ${ok ? "bg-brand" : "bg-red-500 animate-pulse"}`} />
       <span className="hidden sm:inline">{label}</span>
     </span>
   );
 }
 
-function Kpi({ label, icon, children, accent = "text-slate-100", pulse = false, to = null }) {
+function Kpi({ label, icon, children, accent = "text-ink", pulse = false, to = null }) {
   const body = (
     <>
       <div className="flex items-start justify-between">
-        <p className="text-slate-400 text-sm">{label}</p>
+        <p className="text-muted text-sm">{label}</p>
         <span className="text-xl opacity-80">
           {icon}
           {pulse && <span className="inline-block w-2 h-2 mr-1 rounded-full bg-amber-400 animate-pulse align-middle" />}
@@ -83,9 +83,9 @@ function Kpi({ label, icon, children, accent = "text-slate-100", pulse = false, 
 }
 
 const CHART_TOOLTIP = {
-  contentStyle: { background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 12 },
-  labelStyle: { color: "#cbd5e1" },
-  itemStyle: { color: "#e2e8f0" },
+  contentStyle: { background: "#ffffff", border: "1px solid #E2E8F0", borderRadius: 8, fontSize: 12 },
+  labelStyle: { color: "#334155" },
+  itemStyle: { color: "#0f172a" },
 };
 
 // Stacked delivery bar: green = delivered+read, amber = sent/pending/other, red = yellowCard
@@ -97,11 +97,11 @@ function DeliverBar({ d }) {
   const gray = d.failed || 0;
   const w = (n) => (total > 0 ? (n / total) * 100 : 0);
   return (
-    <div className="w-full h-3 rounded-full overflow-hidden bg-slate-700 flex" dir="ltr" title={`تحویل/خوانده ${green} · در انتظار ${amber} · یلوکارت ${red}`}>
-      <div className="bg-emerald-500 h-3" style={{ width: `${w(green)}%` }} />
+    <div className="w-full h-3 rounded-full overflow-hidden bg-slate-100 flex" dir="ltr" title={`تحویل/خوانده ${green} · در انتظار ${amber} · یلوکارت ${red}`}>
+      <div className="bg-brand h-3" style={{ width: `${w(green)}%` }} />
       <div className="bg-amber-500 h-3" style={{ width: `${w(amber)}%` }} />
       <div className="bg-red-500 h-3" style={{ width: `${w(red)}%` }} />
-      <div className="bg-slate-500 h-3" style={{ width: `${w(gray)}%` }} />
+      <div className="bg-slate-400 h-3" style={{ width: `${w(gray)}%` }} />
     </div>
   );
 }
@@ -214,9 +214,9 @@ export default function Dashboard() {
   if (!stats && !err) return <Spinner />;
   if (err && !stats)
     return (
-      <div className="card text-red-400">
+      <div className="card border-red-200 bg-red-50 text-red-700">
         خطا در اتصال به سرور: {err}
-        <p className="text-slate-400 text-sm mt-2">
+        <p className="text-muted text-sm mt-2">
           مطمئن شوید سرور روی <code>http://localhost:8002</code> در حال اجراست.
         </p>
       </div>
@@ -270,28 +270,28 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {critical.length > 0 && (
-        <Link to="/protection" className="block card border-red-500/60 bg-red-500/15 text-red-200 text-sm hover:bg-red-500/25">
+        <Link to="/protection" className="block card border-red-200 bg-red-50 text-red-700 text-sm hover:bg-red-100">
           🔴 {critical.map((i) => i.account_name).join("، ")} کارت زرد گرفت — ارسال متوقف شد. مشاهده جزئیات
         </Link>
       )}
       {warnings.length > 0 && (
-        <Link to="/protection" className="block card border-amber-500/50 bg-amber-500/10 text-amber-200 text-sm hover:bg-amber-500/20">
+        <Link to="/protection" className="block card border-amber-200 bg-amber-50 text-amber-700 text-sm hover:bg-amber-100">
           🟡 {fa(warnings.length)} هشدار سلامت شماره — مشاهده «محافظت و سلامت»
         </Link>
       )}
       {missedCalls > 0 && (
-        <Link to="/calls" className="block card border-orange-500/40 bg-orange-500/10 text-orange-200 text-sm hover:bg-orange-500/20">
+        <Link to="/calls" className="block card border-orange-200 bg-orange-50 text-orange-700 text-sm hover:bg-orange-100">
           📞 تماس‌های بی‌پاسخ امروز: {fa(missedCalls)} — سرنخ‌های داغ، مشاهده تماس‌ها
         </Link>
       )}
       {queueTotal > 0 && (
-        <Link to="/send-queue" className="block card border-amber-500/50 bg-amber-500/10 text-amber-200 text-sm hover:bg-amber-500/20">
+        <Link to="/send-queue" className="block card border-amber-200 bg-amber-50 text-amber-700 text-sm hover:bg-amber-100">
           ⏳ {fa(queueTotal)} پیام در صف ارسال — مشاهده صف
         </Link>
       )}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-2xl font-bold">داشبورد زنده</h2>
-        <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
+        <div className="flex items-center gap-3 text-xs text-muted flex-wrap">
           {/* System health dots (C3) */}
           {health && (
             <span className="flex items-center gap-2">
@@ -301,7 +301,7 @@ export default function Dashboard() {
             </span>
           )}
           <span className="flex items-center gap-1">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="inline-block w-2 h-2 rounded-full bg-brand animate-pulse" />
             {secsAgo != null ? `به‌روزرسانی ${fa(secsAgo)} ثانیه پیش` : "در حال بارگذاری…"}
           </span>
           <button className="btn-secondary text-xs py-1 px-2" onClick={() => load()} title="تازه‌سازی">🔄</button>
@@ -309,45 +309,45 @@ export default function Dashboard() {
       </div>
 
       {quotaHit.map((a) => (
-        <div key={a.id} className="card bg-red-500/10 border-red-500/40 text-red-300">
+        <div key={a.id} className="card bg-red-50 border-red-200 text-red-700">
           ⚠️ حساب {a.name} به سقف ارسال رسیده — تا فردا صبر کنید
         </div>
       ))}
 
       {bannedAccounts.map((a) => (
-        <div key={`ban-${a.id}`} className="card bg-red-500/10 border-red-500/40 text-red-300">
+        <div key={`ban-${a.id}`} className="card bg-red-50 border-red-200 text-red-700">
           ⚠️ حساب {a.name} مسدود شده — فوراً بررسی کنید
         </div>
       ))}
 
       {disconnectedAccounts.map((a) => (
-        <div key={`disc-${a.id}`} className="card bg-red-500/10 border-red-500/40 text-red-300">
+        <div key={`disc-${a.id}`} className="card bg-red-50 border-red-200 text-red-700">
           ⚠️ حساب {a.name} قطع شده — اتصال را بررسی کنید یا ری‌بوت بزنید
         </div>
       ))}
 
       {deliver && deliver.total_sent > 0 && deliver.yellow_card.pct > 50 && (
-        <div className="card bg-red-500/10 border-red-500/40 text-red-300">
+        <div className="card bg-red-50 border-red-200 text-red-700">
           🚨 نرخ یلوکارت {fa(deliver.yellow_card.pct)}٪ است — پیام‌های شما مشکوک علامت خورده‌اند. سرعت ارسال را کم کنید و گرم‌سازی/پروکسی را فعال کنید.
         </div>
       )}
 
       {/* ── TOP ROW: KPI cards ─────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Kpi label="پیام‌های ارسالی امروز" icon="📤" accent="text-emerald-400" to="/campaigns">
+        <Kpi label="پیام‌های ارسالی امروز" icon="📤" accent="text-brand" to="/campaigns">
           <AnimatedNumber value={stats.messages.sent_today} />
         </Kpi>
-        <Kpi label="پیام‌های دریافتی امروز" icon="📥" accent="text-sky-400" to="/inbox">
+        <Kpi label="پیام‌های دریافتی امروز" icon="📥" accent="text-sky-600" to="/inbox">
           <AnimatedNumber value={stats.messages.received_today} />
         </Kpi>
         <Kpi label="حساب‌های فعال / کل" icon="📱" to="/accounts">
-          <span className="text-emerald-400"><AnimatedNumber value={activeCount} /></span>
-          <span className="text-slate-500 text-2xl"> / </span>
-          <span className={totalCount - activeCount > 0 ? "text-red-400" : "text-slate-300"}>
+          <span className="text-brand"><AnimatedNumber value={activeCount} /></span>
+          <span className="text-muted text-2xl"> / </span>
+          <span className={totalCount - activeCount > 0 ? "text-red-600" : "text-ink"}>
             <AnimatedNumber value={totalCount} />
           </span>
         </Kpi>
-        <Kpi label="گروه‌های پیام فعال" icon="🚀" accent="text-amber-400" pulse={stats.campaigns.active > 0} to="/campaigns">
+        <Kpi label="گروه‌های پیام فعال" icon="🚀" accent="text-amber-600" pulse={stats.campaigns.active > 0} to="/campaigns">
           <AnimatedNumber value={stats.campaigns.active} />
         </Kpi>
       </div>
@@ -357,14 +357,14 @@ export default function Dashboard() {
         <div className="card">
           <h3 className="font-bold mb-3">ارسال امروز به تفکیک حساب</h3>
           {barData.length === 0 ? (
-            <p className="text-slate-500 text-sm">حسابی وجود ندارد.</p>
+            <p className="text-muted text-sm">حسابی وجود ندارد.</p>
           ) : (
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={barData} margin={{ top: 6, right: 8, left: -12, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                 <XAxis dataKey="name" tick={{ fill: "#94a3b8", fontSize: 12 }} />
                 <YAxis allowDecimals={false} tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                <Tooltip {...CHART_TOOLTIP} cursor={{ fill: "#1e293b55" }} />
+                <Tooltip {...CHART_TOOLTIP} cursor={{ fill: "#F1F5F9" }} />
                 <Bar dataKey="sent" name="ارسال امروز" fill="#10b981" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -374,16 +374,16 @@ export default function Dashboard() {
         <div className="card">
           <h3 className="font-bold mb-3">وضعیت حساب‌ها</h3>
           {pieData.length === 0 ? (
-            <p className="text-slate-500 text-sm">حسابی وجود ندارد.</p>
+            <p className="text-muted text-sm">حسابی وجود ندارد.</p>
           ) : (
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
                 <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
                   innerRadius={55} outerRadius={90} paddingAngle={3}>
-                  {pieData.map((d) => <Cell key={d.name} fill={d.color} stroke="#0f172a" />)}
+                  {pieData.map((d) => <Cell key={d.name} fill={d.color} stroke="#ffffff" />)}
                 </Pie>
                 <Tooltip {...CHART_TOOLTIP} />
-                <Legend wrapperStyle={{ fontSize: 12, color: "#cbd5e1" }} />
+                <Legend wrapperStyle={{ fontSize: 12, color: "#334155" }} />
               </PieChart>
             </ResponsiveContainer>
           )}
@@ -396,8 +396,8 @@ export default function Dashboard() {
           <h3 className="font-bold">مصرف هوش مصنوعی امروز</h3>
           <div className="flex items-center gap-3 flex-wrap">
             {aiOrder.map((k) => (
-              <span key={k} className="flex items-center gap-1.5 text-xs text-slate-400">
-                <span className={`inline-block w-2 h-2 rounded-full ${ai.providers[k] ? "bg-emerald-400 animate-pulse" : "bg-slate-600"}`} />
+              <span key={k} className="flex items-center gap-1.5 text-xs text-muted">
+                <span className={`inline-block w-2 h-2 rounded-full ${ai.providers[k] ? "bg-brand animate-pulse" : "bg-slate-300"}`} />
                 {AI_LABEL[k]}
               </span>
             ))}
@@ -405,9 +405,9 @@ export default function Dashboard() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
           <div>
-            <p className="text-slate-400 text-sm">مجموع توکن مصرفی (۲۴ ساعت)</p>
-            <p className="text-4xl font-bold mt-2 text-sky-400"><AnimatedNumber value={aiTotalTokens} /></p>
-            <p className="text-xs text-slate-500 mt-2">
+            <p className="text-muted text-sm">مجموع توکن مصرفی (۲۴ ساعت)</p>
+            <p className="text-4xl font-bold mt-2 text-sky-600"><AnimatedNumber value={aiTotalTokens} /></p>
+            <p className="text-xs text-muted mt-2">
               {aiOrder.filter((k) => ai.providers[k]).length > 0
                 ? `${fa(aiOrder.filter((k) => ai.providers[k]).length)} ارائه‌دهنده فعال`
                 : "هیچ ارائه‌دهنده‌ای پیکربندی نشده"}
@@ -416,10 +416,10 @@ export default function Dashboard() {
           <div className="md:col-span-2">
             <ResponsiveContainer width="100%" height={160}>
               <BarChart data={aiBar} margin={{ top: 6, right: 8, left: -12, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                 <XAxis dataKey="name" tick={{ fill: "#94a3b8", fontSize: 12 }} />
                 <YAxis allowDecimals={false} tick={{ fill: "#94a3b8", fontSize: 12 }} />
-                <Tooltip {...CHART_TOOLTIP} cursor={{ fill: "#1e293b55" }} />
+                <Tooltip {...CHART_TOOLTIP} cursor={{ fill: "#F1F5F9" }} />
                 <Bar dataKey="tokens" name="توکن" fill="#38bdf8" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -432,34 +432,34 @@ export default function Dashboard() {
         <div className="card space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h3 className="font-bold">تحویل پیام‌ها (۷ روز اخیر)</h3>
-            <div className="flex items-center gap-3 text-xs text-slate-400 flex-wrap">
-              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-emerald-500" /> تحویل/خوانده</span>
+            <div className="flex items-center gap-3 text-xs text-muted flex-wrap">
+              <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-brand" /> تحویل/خوانده</span>
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-amber-500" /> ارسال‌شده</span>
               <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-red-500" /> یلوکارت</span>
             </div>
           </div>
 
           {deliver.total_sent === 0 ? (
-            <p className="text-slate-500 text-sm">در ۷ روز اخیر پیامی ارسال نشده است.</p>
+            <p className="text-muted text-sm">در ۷ روز اخیر پیامی ارسال نشده است.</p>
           ) : (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
-                  <p className="text-slate-400 text-sm">کل ارسال</p>
+                  <p className="text-muted text-sm">کل ارسال</p>
                   <p className="text-3xl font-bold mt-1"><AnimatedNumber value={deliver.total_sent} /></p>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-sm">خوانده‌شده</p>
-                  <p className="text-3xl font-bold mt-1 text-emerald-400"><AnimatedNumber value={deliver.read.count} /> <span className="text-base text-slate-500">({fa(deliver.read.pct)}٪)</span></p>
+                  <p className="text-muted text-sm">خوانده‌شده</p>
+                  <p className="text-3xl font-bold mt-1 text-brand"><AnimatedNumber value={deliver.read.count} /> <span className="text-base text-muted">({fa(deliver.read.pct)}٪)</span></p>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-sm">تحویل‌شده</p>
-                  <p className="text-3xl font-bold mt-1 text-emerald-300"><AnimatedNumber value={deliver.delivered.count} /> <span className="text-base text-slate-500">({fa(deliver.delivered.pct)}٪)</span></p>
+                  <p className="text-muted text-sm">تحویل‌شده</p>
+                  <p className="text-3xl font-bold mt-1 text-brand"><AnimatedNumber value={deliver.delivered.count} /> <span className="text-base text-muted">({fa(deliver.delivered.pct)}٪)</span></p>
                 </div>
                 <div>
-                  <p className="text-slate-400 text-sm">یلوکارت</p>
-                  <p className={`text-3xl font-bold mt-1 ${deliver.yellow_card.pct > 50 ? "text-red-400" : "text-amber-400"}`}>
-                    <AnimatedNumber value={deliver.yellow_card.count} /> <span className="text-base text-slate-500">({fa(deliver.yellow_card.pct)}٪)</span>
+                  <p className="text-muted text-sm">یلوکارت</p>
+                  <p className={`text-3xl font-bold mt-1 ${deliver.yellow_card.pct > 50 ? "text-red-600" : "text-amber-600"}`}>
+                    <AnimatedNumber value={deliver.yellow_card.count} /> <span className="text-base text-muted">({fa(deliver.yellow_card.pct)}٪)</span>
                   </p>
                 </div>
               </div>
@@ -468,13 +468,13 @@ export default function Dashboard() {
 
               {/* Per-account breakdown */}
               <div className="space-y-2">
-                <p className="text-xs text-slate-500">به تفکیک حساب:</p>
+                <p className="text-xs text-muted">به تفکیک حساب:</p>
                 {deliver.per_account.map((a) => (
                   <div key={a.account_id || a.name} className="space-y-1">
                     <div className="flex justify-between text-xs">
-                      <span className="text-slate-300">{a.name}</span>
-                      <span className="text-slate-500">
-                        {fa(a.total)} ارسال · خوانده {fa(a.read)} · یلوکارت <span className={a.yellow_card_pct > 50 ? "text-red-400" : "text-amber-400"}>{fa(a.yellow_card)} ({fa(a.yellow_card_pct)}٪)</span>
+                      <span className="text-ink">{a.name}</span>
+                      <span className="text-muted">
+                        {fa(a.total)} ارسال · خوانده {fa(a.read)} · یلوکارت <span className={a.yellow_card_pct > 50 ? "text-red-600" : "text-amber-600"}>{fa(a.yellow_card)} ({fa(a.yellow_card_pct)}٪)</span>
                       </span>
                     </div>
                     <DeliverBar d={a} />
@@ -490,24 +490,24 @@ export default function Dashboard() {
       <div className="card space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <h3 className="font-bold">محدودکننده نرخ ارسال</h3>
-          <span className={`badge ${allowed ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-red-500/20 text-red-300 border-red-500/40"}`}>
+          <span className={`badge ${allowed ? "bg-brand-light text-brand border-brand/30" : "bg-red-50 text-red-700 border-red-200"}`}>
             {allowed ? "مجاز ✅" : "متوقف 🔴"}
           </span>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div>
-            <p className="text-slate-400 text-sm">ساعت تهران</p>
+            <p className="text-muted text-sm">ساعت تهران</p>
             <p className="text-3xl font-bold mt-1">{fa(curHour)}:۰۰</p>
           </div>
           <div>
-            <p className="text-slate-400 text-sm">حداکثر در این ساعت</p>
-            <p className={`text-3xl font-bold mt-1 ${allowed ? "text-emerald-400" : "text-red-400"}`}>
+            <p className="text-muted text-sm">حداکثر در این ساعت</p>
+            <p className={`text-3xl font-bold mt-1 ${allowed ? "text-brand" : "text-red-600"}`}>
               <AnimatedNumber value={curMax} />
             </p>
           </div>
           <div>
-            <p className="text-slate-400 text-sm">وضعیت</p>
-            <p className={`text-3xl font-bold mt-1 ${allowed ? "text-emerald-400" : "text-red-400"}`}>
+            <p className="text-muted text-sm">وضعیت</p>
+            <p className={`text-3xl font-bold mt-1 ${allowed ? "text-brand" : "text-red-600"}`}>
               {allowed ? "باز" : "بسته"}
             </p>
           </div>
@@ -523,21 +523,21 @@ export default function Dashboard() {
                 <div key={h} className="flex-1 flex flex-col items-center gap-1">
                   <div
                     title={`${h}:00 → ${maxAtHour(h)}`}
-                    className={`w-full h-6 rounded-sm ${open ? "bg-emerald-500/70" : "bg-slate-700"} ${isNow ? "ring-2 ring-amber-400" : ""}`}
+                    className={`w-full h-6 rounded-sm ${open ? "bg-brand" : "bg-slate-200"} ${isNow ? "ring-2 ring-amber-400" : ""}`}
                   />
-                  {h % 3 === 0 && <span className="text-[9px] text-slate-500">{h}</span>}
+                  {h % 3 === 0 && <span className="text-[9px] text-muted">{h}</span>}
                 </div>
               );
             })}
           </div>
-          <p className="text-xs text-slate-500 mt-2">نوار سبز = بازه مجاز ارسال · قاب زرد = ساعت فعلی</p>
+          <p className="text-xs text-muted mt-2">نوار سبز = بازه مجاز ارسال · قاب زرد = ساعت فعلی</p>
         </div>
 
         {/* schedule table */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="text-right p-2">بازه ساعت</th>
                 <th className="text-right p-2">حداکثر در ساعت</th>
               </tr>
@@ -546,7 +546,7 @@ export default function Dashboard() {
               {(rl?.schedule || []).map((s, i) => {
                 const active = s.hour_start <= curHour && curHour < s.hour_end;
                 return (
-                  <tr key={i} className={`border-b border-slate-800 ${active ? "bg-emerald-500/10" : ""}`}>
+                  <tr key={i} className={`border-b border-line ${active ? "bg-brand-light" : ""}`}>
                     <td className="p-2">{fa(s.hour_start)}:۰۰ — {fa(s.hour_end)}:۰۰</td>
                     <td className="p-2 font-bold">{fa(s.max_per_hour)}</td>
                   </tr>
@@ -563,26 +563,26 @@ export default function Dashboard() {
         <div className="card">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold">آخرین پیام‌ها</h3>
-            <span className="badge bg-purple-500/20 text-purple-300 border-purple-500/40">
+            <span className="badge bg-sky-50 text-sky-700 border-sky-200">
               خوانده‌نشده: <AnimatedNumber value={stats.messages.unread} />
             </span>
           </div>
           {inbox.length === 0 ? (
-            <p className="text-slate-500 text-sm">پیامی وجود ندارد.</p>
+            <p className="text-muted text-sm">پیامی وجود ندارد.</p>
           ) : (
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {inbox.map((m) => {
                 const cat = CAT[m.category] || CAT.other;
                 return (
-                  <div key={m.id} className={`rounded-lg border p-2 ${m.is_read ? "border-slate-700 bg-slate-900/40" : "border-brand/40 bg-slate-900"}`}>
+                  <div key={m.id} className={`rounded-lg border p-2 ${m.is_read ? "border-line bg-canvas" : "border-brand/40 bg-brand-light"}`}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-xs text-slate-300">{m.sender_phone}</span>
+                      <span className="font-mono text-xs text-ink">{m.sender_phone}</span>
                       <span className="flex items-center gap-2">
                         <span className={`badge ${cat.c}`}>{cat.fa}</span>
-                        <span className="text-[11px] text-slate-500">{timeAgo(m.received_at)}</span>
+                        <span className="text-[11px] text-muted">{timeAgo(m.received_at)}</span>
                       </span>
                     </div>
-                    <p className="text-sm text-slate-300 mt-1 truncate">
+                    <p className="text-sm text-ink mt-1 truncate">
                       {(m.text || "—").slice(0, 40)}{(m.text || "").length > 40 ? "…" : ""}
                     </p>
                   </div>
@@ -596,22 +596,22 @@ export default function Dashboard() {
         <div className="card">
           <h3 className="font-bold mb-3">وضعیت حساب‌ها</h3>
           {detail.length === 0 ? (
-            <p className="text-slate-500 text-sm">حسابی ثبت نشده است.</p>
+            <p className="text-muted text-sm">حسابی ثبت نشده است.</p>
           ) : (
             <>
               {/* summary line + active/total progress bar */}
               <div className="mb-3">
                 <div className="flex justify-between text-xs mb-1">
-                  <span className="text-slate-300 font-bold">
+                  <span className="text-ink font-bold">
                     <AnimatedNumber value={activeCount} /> حساب فعال از {fa(totalCount)} کل
                   </span>
-                  <span className="text-slate-500">
+                  <span className="text-muted">
                     {fa(totalCount > 0 ? Math.round((activeCount / totalCount) * 100) : 0)}٪
                   </span>
                 </div>
-                <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                   <div
-                    className="bg-emerald-500 h-2 rounded-full transition-all duration-700"
+                    className="bg-brand h-2 rounded-full transition-all duration-700"
                     style={{ width: `${totalCount > 0 ? (activeCount / totalCount) * 100 : 0}%` }}
                   />
                 </div>
@@ -619,25 +619,25 @@ export default function Dashboard() {
 
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {detail.map((a) => (
-                  <div key={a.id} className="rounded-lg border border-slate-700 p-3">
+                  <div key={a.id} className="rounded-lg border border-line p-3">
                     <div className="flex items-center justify-between mb-1">
                       <span className="flex items-center gap-2 font-bold flex-wrap">
                         <span className={`inline-block w-2.5 h-2.5 rounded-full ${STATUS_DOT[a.status] || "bg-slate-400"} ${a.status === "active" ? "animate-pulse" : ""}`} />
                         {a.name}
-                        {a.is_default && <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">پیش‌فرض ⭐</span>}
-                        {a.warmup_enabled && <span className="badge bg-orange-500/20 text-orange-300 border-orange-500/40">🔥 گرم‌سازی</span>}
-                        {a.days_active != null && <span className="badge bg-slate-600/40 text-slate-300 border-slate-500/40">{fa(a.days_active)} روز فعال</span>}
+                        {a.is_default && <span className="badge bg-brand-light text-brand border-brand/30">پیش‌فرض ⭐</span>}
+                        {a.warmup_enabled && <span className="badge bg-orange-50 text-orange-700 border-orange-200">🔥 گرم‌سازی</span>}
+                        {a.days_active != null && <span className="badge bg-slate-100 text-slate-600 border-slate-300">{fa(a.days_active)} روز فعال</span>}
                       </span>
-                      <span className="text-xs text-slate-400">{STATUS_FA[a.status] || a.status}</span>
+                      <span className="text-xs text-muted">{STATUS_FA[a.status] || a.status}</span>
                     </div>
-                    <p className="text-xs text-slate-500 mb-2">{a.phone || "بدون شماره"}</p>
+                    <p className="text-xs text-muted mb-2">{a.phone || "بدون شماره"}</p>
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="text-slate-400">ارسال امروز</span>
+                      <span className="text-muted">ارسال امروز</span>
                       <span className="font-bold"><AnimatedNumber value={sentOf(a)} /> / {fa(a.daily_limit)}</span>
                     </div>
-                    <div className="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                       <div
-                        className="bg-emerald-500 h-2 rounded-full transition-all duration-700"
+                        className="bg-brand h-2 rounded-full transition-all duration-700"
                         style={{ width: `${a.daily_limit > 0 ? Math.min(100, (sentOf(a) / a.daily_limit) * 100) : 0}%` }}
                       />
                     </div>
@@ -646,9 +646,9 @@ export default function Dashboard() {
               </div>
 
               {/* total sent today across all accounts */}
-              <div className="mt-3 pt-3 border-t border-slate-700 flex items-center justify-between">
-                <span className="text-slate-400 text-sm">مجموع ارسال امروز</span>
-                <span className="text-2xl font-bold text-emerald-400">
+              <div className="mt-3 pt-3 border-t border-line flex items-center justify-between">
+                <span className="text-muted text-sm">مجموع ارسال امروز</span>
+                <span className="text-2xl font-bold text-brand">
                   <AnimatedNumber value={totalSentToday} />
                 </span>
               </div>
@@ -661,21 +661,21 @@ export default function Dashboard() {
       <div className="card">
         <h3 className="font-bold mb-3">راهنمای سریع</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <Link to="/accounts" className="rounded-lg border border-slate-700 hover:border-brand/50 hover:bg-slate-800/50 p-3 transition-colors">
-            <div className="text-xs text-slate-500 mb-1">گام ۱</div>
-            <div className="font-bold text-slate-200">📱 حساب واتس‌اپ اضافه کن</div>
+          <Link to="/accounts" className="rounded-lg border border-line hover:border-brand/50 hover:bg-canvas p-3 transition-colors">
+            <div className="text-xs text-muted mb-1">گام ۱</div>
+            <div className="font-bold text-ink">📱 حساب واتس‌اپ اضافه کن</div>
           </Link>
-          <Link to="/contacts" className="rounded-lg border border-slate-700 hover:border-brand/50 hover:bg-slate-800/50 p-3 transition-colors">
-            <div className="text-xs text-slate-500 mb-1">گام ۲</div>
-            <div className="font-bold text-slate-200">👥 مخاطبین را آپلود کن</div>
+          <Link to="/contacts" className="rounded-lg border border-line hover:border-brand/50 hover:bg-canvas p-3 transition-colors">
+            <div className="text-xs text-muted mb-1">گام ۲</div>
+            <div className="font-bold text-ink">👥 مخاطبین را آپلود کن</div>
           </Link>
-          <Link to="/campaigns" className="rounded-lg border border-slate-700 hover:border-brand/50 hover:bg-slate-800/50 p-3 transition-colors">
-            <div className="text-xs text-slate-500 mb-1">گام ۳</div>
-            <div className="font-bold text-slate-200">📨 گروه پیام بساز</div>
+          <Link to="/campaigns" className="rounded-lg border border-line hover:border-brand/50 hover:bg-canvas p-3 transition-colors">
+            <div className="text-xs text-muted mb-1">گام ۳</div>
+            <div className="font-bold text-ink">📨 گروه پیام بساز</div>
           </Link>
-          <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3">
-            <div className="text-xs text-slate-500 mb-1">گام ۴</div>
-            <div className="font-bold text-emerald-300">🚀 شروع کن!</div>
+          <div className="rounded-lg border border-brand/30 bg-brand-light p-3">
+            <div className="text-xs text-muted mb-1">گام ۴</div>
+            <div className="font-bold text-brand">🚀 شروع کن!</div>
           </div>
         </div>
       </div>

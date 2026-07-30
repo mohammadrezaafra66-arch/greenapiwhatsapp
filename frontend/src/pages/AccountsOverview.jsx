@@ -17,13 +17,13 @@ const fa = (n) => (n == null ? "" : String(n).replace(/\d/g, (d) => "۰۱۲۳۴�
 
 const STATUS_FA = {
   active: "فعال", banned: "مسدود", disconnected: "قطع", pending: "در انتظار",
-  suspended: "محدود", green_api_deleted: "حذف‌شده در Green API",
+  suspended: "محدود", green_api_deleted: "حذف‌شده در سرویس",
 };
 const STATUS_CLS = {
-  active: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-  banned: "bg-red-500/20 text-red-300 border-red-500/40",
-  disconnected: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40",
-  pending: "bg-slate-600/30 text-slate-400 border-slate-600",
+  active: "bg-brand-light text-brand border-brand/30",
+  banned: "bg-red-50 text-red-700 border-red-200",
+  disconnected: "bg-amber-50 text-amber-700 border-amber-200",
+  pending: "bg-slate-100 text-slate-600 border-slate-300",
 };
 
 const SORT_COLS = [
@@ -39,7 +39,7 @@ function Th({ col, sort, setSort }) {
   const arrow = active ? (sort.dir === "asc" ? " ▲" : " ▼") : "";
   return (
     <th
-      className={`py-2 px-2 cursor-pointer select-none whitespace-nowrap ${active ? "text-brand font-bold" : "text-slate-400"}`}
+      className={`py-2 px-2 cursor-pointer select-none whitespace-nowrap ${active ? "text-brand font-bold" : "text-muted"}`}
       onClick={() => setSort({ key: col.key, dir: active && sort.dir === "desc" ? "asc" : "desc" })}
       title="برای مرتب‌سازی کلیک کنید">
       {col.label}{arrow}
@@ -63,7 +63,7 @@ export default function AccountsOverview() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold">🗂️ نمای کلی حساب‌ها</h1>
-        <p className="text-sm text-slate-400 mt-1">
+        <p className="text-sm text-muted mt-1">
           وضعیت کامل هر حساب در یک نگاه — اتصال، امتیاز گرمی، روزهای اتصال، حوادث، نقش، واجد‌شرایط‌بودن
           فرستنده و فعالیت امروز. برای جزئیات هر بخش، روی نقش یا مقدار مربوطه بزنید.
         </p>
@@ -71,7 +71,7 @@ export default function AccountsOverview() {
 
       <div className="card space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <span className="badge bg-slate-700 text-slate-300 border-slate-600">
+          <span className="badge bg-slate-100 text-slate-600 border-slate-300">
             {fa(rows.length)} از {fa(all.length)} حساب
           </span>
           <div className="flex gap-2 flex-wrap">
@@ -83,7 +83,7 @@ export default function AccountsOverview() {
             <select className="input text-xs py-1" value={elig} onChange={(e) => setElig(e.target.value)}>
               {ELIG_FILTERS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-            <button className="btn-secondary text-xs" onClick={reload}>تازه‌سازی</button>
+            <button className="btn-secondary btn-sm" onClick={reload}>تازه‌سازی</button>
           </div>
         </div>
 
@@ -91,12 +91,12 @@ export default function AccountsOverview() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-xs border-b border-slate-800">
+                <tr className="text-xs border-b border-line">
                   {SORT_COLS.map((c) => <Th key={c.key} col={c} sort={sort} setSort={setSort} />)}
-                  <th className="py-2 px-2 text-slate-400 whitespace-nowrap">اتصال</th>
-                  <th className="py-2 px-2 text-slate-400 whitespace-nowrap">نقش</th>
-                  <th className="py-2 px-2 text-slate-400 whitespace-nowrap">واجد شرایط فرستنده</th>
-                  <th className="py-2 px-2 text-slate-400 whitespace-nowrap">فعالیت امروز</th>
+                  <th className="py-2 px-2 text-muted whitespace-nowrap">اتصال</th>
+                  <th className="py-2 px-2 text-muted whitespace-nowrap">نقش</th>
+                  <th className="py-2 px-2 text-muted whitespace-nowrap">واجد شرایط فرستنده</th>
+                  <th className="py-2 px-2 text-muted whitespace-nowrap">فعالیت امروز</th>
                 </tr>
               </thead>
               <tbody>
@@ -116,41 +116,41 @@ function Row({ row }) {
   const ei = eligibilityInfo(row);
   const hi = healthInfo(row);
   return (
-    <tr className="border-b border-slate-800/70 align-top">
+    <tr className="border-b border-line align-top">
       {/* account (links to /accounts) */}
       <td className="py-2 px-2">
         <Link to="/accounts" className="hover:text-brand font-medium">{row.name || row.instance_id}</Link>
-        <div className="text-[11px] text-slate-500 font-mono">{fa(row.phone || row.instance_id)}</div>
+        <div className="text-[11px] text-muted font-mono">{fa(row.phone || row.instance_id)}</div>
       </td>
       {/* warmth (links to team-collaboration where the warmth badge lives) */}
       <td className="py-2 px-2">
         <Link to={LINK_TEAM} title="امتیاز گرمی فرستنده">
           <span className={`badge ${w.cls}`}>{fa(w.label)}</span>
-          <span className="text-[11px] text-slate-500 mr-1">{fa(row.warmth_score)}</span>
+          <span className="text-[11px] text-muted mr-1">{fa(row.warmth_score)}</span>
         </Link>
       </td>
       {/* days connected */}
       <td className="py-2 px-2 whitespace-nowrap">
         {row.days_connected == null ? "—" : `${fa(row.days_connected)} روز`}
         {row.incident_free_14d
-          ? <div className="text-[11px] text-emerald-400/80">۱۴ روز بدون حادثه</div>
-          : <div className="text-[11px] text-amber-400/80">{fa(row.recent_incidents_14d)} حادثه در ۱۴ روز</div>}
+          ? <div className="text-[11px] text-brand">۱۴ روز بدون حادثه</div>
+          : <div className="text-[11px] text-amber-700">{fa(row.recent_incidents_14d)} حادثه در ۱۴ روز</div>}
       </td>
       {/* health (links to /protection) */}
       <td className="py-2 px-2 whitespace-nowrap">
         <Link to={LINK_PROTECTION} className={`font-bold ${hi.cls}`} title="امتیاز سلامت">{fa(hi.pct)}٪</Link>
-        {row.in_cooldown && <div className="text-[11px] text-red-300">در خنک‌سازی</div>}
+        {row.in_cooldown && <div className="text-[11px] text-red-700">در خنک‌سازی</div>}
       </td>
       {/* incidents (links to /protection) */}
       <td className="py-2 px-2 whitespace-nowrap">
         <Link to={LINK_PROTECTION} className="hover:text-brand">{fa(row.incident_total)}</Link>
         {row.last_incident_type && (
-          <div className="text-[11px] text-slate-500">{row.last_incident_type}</div>
+          <div className="text-[11px] text-muted">{row.last_incident_type}</div>
         )}
       </td>
       {/* connection status */}
       <td className="py-2 px-2">
-        <span className={`badge ${STATUS_CLS[row.status] || "bg-slate-600/30 text-slate-400 border-slate-600"}`}>
+        <span className={`badge ${STATUS_CLS[row.status] || "bg-slate-100 text-slate-600 border-slate-300"}`}>
           {STATUS_FA[row.status] || row.status}
         </span>
       </td>
@@ -169,11 +169,11 @@ function Row({ row }) {
         <Link to={LINK_TEAM}><span className={`badge ${ei.cls}`}>{ei.label}</span></Link>
       </td>
       {/* activity today */}
-      <td className="py-2 px-2 whitespace-nowrap text-slate-300">
-        <span className="text-sky-300">↑{fa(row.sent_today)}</span>
+      <td className="py-2 px-2 whitespace-nowrap text-ink">
+        <span className="text-sky-700">↑{fa(row.sent_today)}</span>
         {" / "}
-        <span className="text-emerald-300">↓{fa(row.received_today)}</span>
-        <div className="text-[11px] text-slate-500">سقف {fa(row.daily_cap)}</div>
+        <span className="text-brand">↓{fa(row.received_today)}</span>
+        <div className="text-[11px] text-muted">سقف {fa(row.daily_cap)}</div>
       </td>
     </tr>
   );

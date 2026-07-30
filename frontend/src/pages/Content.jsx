@@ -43,21 +43,23 @@ function SavedContacts() {
         <input className="input" placeholder="نام خانوادگی" value={f.last_name} onChange={set("last_name")} />
         <input className="input" placeholder="شرکت" value={f.company} onChange={set("company")} />
       </div>
-      <button className="btn-primary" onClick={add}>افزودن کارت</button>
+      <button className="btn-primary w-full sm:w-auto" onClick={add}>افزودن کارت</button>
       {loading ? <Spinner /> : (!data || data.length === 0) ? <Empty label="کارتی ذخیره نشده." /> : (
-        <table className="w-full text-sm">
-          <tbody>
-            {data.map((c) => (
-              <tr key={c.id} className="border-t border-slate-800">
-                <td className="p-2">{c.label}</td>
-                <td className="p-2 font-mono text-xs">{c.phone_contact}</td>
-                <td className="p-2">{[c.first_name, c.last_name].filter(Boolean).join(" ")}</td>
-                <td className="p-2">{c.company}</td>
-                <td className="p-2 text-left"><button className="btn-danger text-xs" onClick={() => del(c.id)}>حذف</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="table-wrap">
+          <table className="w-full text-sm">
+            <tbody>
+              {data.map((c) => (
+                <tr key={c.id} className="border-t border-line">
+                  <td className="p-2">{c.label}</td>
+                  <td className="p-2 font-mono text-xs">{c.phone_contact}</td>
+                  <td className="p-2">{[c.first_name, c.last_name].filter(Boolean).join(" ")}</td>
+                  <td className="p-2">{c.company}</td>
+                  <td className="p-2 text-left"><button className="btn-danger btn-sm" onClick={() => del(c.id)}>حذف</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
@@ -94,20 +96,22 @@ function SavedLocations() {
         <input className="input" placeholder="عرض (latitude)" value={f.latitude} onChange={set("latitude")} />
         <input className="input" placeholder="طول (longitude)" value={f.longitude} onChange={set("longitude")} />
       </div>
-      <button className="btn-primary" onClick={add}>افزودن موقعیت</button>
+      <button className="btn-primary w-full sm:w-auto" onClick={add}>افزودن موقعیت</button>
       {loading ? <Spinner /> : (!data || data.length === 0) ? <Empty label="موقعیتی ذخیره نشده." /> : (
-        <table className="w-full text-sm">
-          <tbody>
-            {data.map((l) => (
-              <tr key={l.id} className="border-t border-slate-800">
-                <td className="p-2">{l.name}</td>
-                <td className="p-2">{l.address}</td>
-                <td className="p-2 font-mono text-xs">{l.latitude}, {l.longitude}</td>
-                <td className="p-2 text-left"><button className="btn-danger text-xs" onClick={() => del(l.id)}>حذف</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="table-wrap">
+          <table className="w-full text-sm">
+            <tbody>
+              {data.map((l) => (
+                <tr key={l.id} className="border-t border-line">
+                  <td className="p-2">{l.name}</td>
+                  <td className="p-2">{l.address}</td>
+                  <td className="p-2 font-mono text-xs">{l.latitude}, {l.longitude}</td>
+                  <td className="p-2 text-left"><button className="btn-danger btn-sm" onClick={() => del(l.id)}>حذف</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

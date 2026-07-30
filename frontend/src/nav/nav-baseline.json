@@ -218,7 +218,7 @@
         },
         {
           "group": "تنظیمات",
-          "label": "قابلیت‌های Green API",
+          "label": "قابلیت‌های سرویس",
           "to": "/capabilities"
         },
         {
@@ -422,7 +422,7 @@
     },
     {
       "group": "تنظیمات",
-      "label": "قابلیت‌های Green API",
+      "label": "قابلیت‌های سرویس",
       "to": "/capabilities"
     },
     {

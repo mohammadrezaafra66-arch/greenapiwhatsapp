@@ -37,7 +37,7 @@ export default function SendQueue() {
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold">صف ارسال</h2>
-      <p className="text-sm text-amber-300">
+      <p className="text-sm text-amber-700">
         💡 نکته: پیش از اتصال مجدد یک شماره، صف ارسال آن را بررسی و در صورت لزوم خالی کنید.
       </p>
       {(!data?.accounts || data.accounts.length === 0) ? (
@@ -95,15 +95,15 @@ function QueueCard({ acc, onChange }) {
   }
 
   return (
-    <div className={`card ${hasQueue ? "border-red-500/50 bg-red-500/5" : ""}`}>
+    <div className={`card ${hasQueue ? "border-red-200 bg-red-50" : ""}`}>
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <p className="font-bold">{acc.name}</p>
-          <p className={`text-lg font-bold ${hasQueue ? "text-red-300" : "text-slate-400"}`}>
+          <p className={`text-lg font-bold ${hasQueue ? "text-red-700" : "text-muted"}`}>
             صف ارسال: {fa(acc.count || 0)} پیام در انتظار
           </p>
         </div>
-        <button className="btn-secondary text-sm" onClick={loadDetail}>
+        <button className="btn-secondary btn-sm" onClick={loadDetail}>
           {expanded ? "بستن" : "مشاهده پیام‌ها"}
         </button>
       </div>
@@ -111,13 +111,13 @@ function QueueCard({ acc, onChange }) {
       {expanded && (
         <div className="mt-3 overflow-x-auto">
           {detailLoading ? (
-            <div className="flex items-center gap-2 text-sm text-slate-400 p-2">
+            <div className="flex items-center gap-2 text-sm text-muted p-2">
               <Spinner /> در حال دریافت پیام‌های صف…
             </div>
           ) : detailError ? (
-            <div className="card text-sm border-red-500/50 bg-red-500/10 text-red-200 p-2">
+            <div className="card text-sm border-red-200 bg-red-50 text-red-700 p-2">
               ⚠️ {detailError}
-              <button className="btn-secondary text-xs mr-2" onClick={() => { setExpanded(false); loadDetail(); }}>
+              <button className="btn-secondary btn-sm mr-2" onClick={() => { setExpanded(false); loadDetail(); }}>
                 تلاش مجدد
               </button>
             </div>
@@ -125,12 +125,12 @@ function QueueCard({ acc, onChange }) {
             <Empty label="صف خالی است." />
           ) : (
             <table className="w-full text-xs">
-              <thead className="text-slate-400"><tr><th className="text-right p-1">نوع</th><th className="text-right p-1">متن</th></tr></thead>
+              <thead className="text-muted"><tr><th className="text-right p-1">نوع</th><th className="text-right p-1">متن</th></tr></thead>
               <tbody>
                 {detail.queue.slice(0, 100).map((q, i) => (
-                  <tr key={i} className="border-t border-slate-800">
+                  <tr key={i} className="border-t border-line">
                     <td className="p-1">{queueItemType(q)}</td>
-                    <td className="p-1 text-slate-300">{queueItemText(q).slice(0, 80) || "—"}</td>
+                    <td className="p-1 text-muted">{queueItemText(q).slice(0, 80) || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -140,8 +140,8 @@ function QueueCard({ acc, onChange }) {
       )}
 
       {hasQueue && (
-        <div className="mt-3 border-t border-slate-700 pt-3 space-y-2">
-          <p className="text-xs text-red-300">
+        <div className="mt-3 border-t border-line pt-3 space-y-2">
+          <p className="text-xs text-red-700">
             ⚠️ تمام پیام‌های در صف حذف می‌شوند و ارسال نخواهند شد. برای توقف اضطراری یک کمپین اشتباه.
           </p>
           <div className="flex gap-2">

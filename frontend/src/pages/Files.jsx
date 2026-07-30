@@ -84,20 +84,20 @@ export default function Files() {
       {accountId && (
         <>
           <div
-            className={`card border-2 border-dashed text-center py-10 cursor-pointer transition-colors ${dragOver ? "border-brand bg-brand/10" : "border-slate-600"}`}
+            className={`card border-2 border-dashed text-center py-10 cursor-pointer transition-colors ${dragOver ? "border-brand bg-brand-light" : "border-line"}`}
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={onDrop}
             onClick={() => inputRef.current?.click()}
           >
             <input ref={inputRef} type="file" className="hidden" onChange={(e) => doUpload(e.target.files?.[0])} />
-            <p className="text-slate-300">{uploading ? "در حال آپلود..." : "فایل را اینجا رها کنید یا کلیک کنید"}</p>
-            <p className="text-xs text-slate-500 mt-1">تصویر، ویدیو، سند و ...</p>
+            <p className="text-ink">{uploading ? "در حال آپلود..." : "فایل را اینجا رها کنید یا کلیک کنید"}</p>
+            <p className="text-xs text-muted mt-1">تصویر، ویدیو، سند و ...</p>
           </div>
 
           {lastUrl && (
             <div className="card space-y-2">
-              <p className="text-sm text-emerald-300">آپلود موفق بود:</p>
+              <p className="text-sm text-brand">آپلود موفق بود:</p>
               <div className="flex flex-wrap items-center gap-2">
                 <input className="input flex-1 font-mono text-xs" value={lastUrl} readOnly />
                 <button className="btn-secondary" onClick={() => copy(lastUrl)}>کپی</button>
@@ -106,36 +106,38 @@ export default function Files() {
             </div>
           )}
 
-          <div className="card overflow-x-auto">
+          <div className="card">
             <h3 className="font-bold mb-3">فایل‌های آپلودشده</h3>
             {loading && <Spinner />}
             {files && files.length === 0 && <Empty label="فایلی آپلود نشده است." />}
             {files && files.length > 0 && (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-slate-400 border-b border-slate-700">
-                    <th className="text-right p-2">نام فایل</th>
-                    <th className="text-right p-2">لینک</th>
-                    <th className="text-right p-2">تاریخ</th>
-                    <th className="text-right p-2"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {files.map((f) => (
-                    <tr key={f.id} className="border-b border-slate-800">
-                      <td className="p-2">{f.filename}</td>
-                      <td className="p-2 font-mono text-xs truncate max-w-xs">{f.url}</td>
-                      <td className="p-2 text-xs text-slate-500">{f.uploaded_at?.slice(0, 16)}</td>
-                      <td className="p-2">
-                        <div className="flex gap-2">
-                          <button className="text-sky-400 hover:underline" onClick={() => copy(f.url)}>کپی</button>
-                          <button className="text-brand hover:underline" onClick={() => useInCampaign(f.url)}>گروه پیام</button>
-                        </div>
-                      </td>
+              <div className="table-wrap">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-muted border-b border-line">
+                      <th className="text-right p-2">نام فایل</th>
+                      <th className="text-right p-2">لینک</th>
+                      <th className="text-right p-2">تاریخ</th>
+                      <th className="text-right p-2"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {files.map((f) => (
+                      <tr key={f.id} className="border-b border-line">
+                        <td className="p-2">{f.filename}</td>
+                        <td className="p-2 font-mono text-xs truncate max-w-xs">{f.url}</td>
+                        <td className="p-2 text-xs text-muted">{f.uploaded_at?.slice(0, 16)}</td>
+                        <td className="p-2">
+                          <div className="flex gap-2">
+                            <button className="btn-ghost btn-sm" onClick={() => copy(f.url)}>کپی</button>
+                            <button className="btn-ghost btn-sm text-brand" onClick={() => useInCampaign(f.url)}>گروه پیام</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </>

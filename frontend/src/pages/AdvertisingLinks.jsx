@@ -30,7 +30,7 @@ export default function AdvertisingLinks() {
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold">لینک‌های تبلیغاتی</h2>
-      <p className="text-sm text-slate-400">لینک‌های خود را ذخیره کنید تا در انتهای پیام‌های کمپین (به‌صورت ثابت یا رندوم وزنی) اضافه شوند.</p>
+      <p className="text-sm text-muted">لینک‌های خود را ذخیره کنید تا در انتهای پیام‌های کمپین (به‌صورت ثابت یا رندوم وزنی) اضافه شوند.</p>
 
       <div className="card space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -48,15 +48,15 @@ export default function AdvertisingLinks() {
           <input type="checkbox" checked={f.is_active} onChange={set("is_active")} /> فعال
         </label>
         <div className="flex gap-2">
-          <button className="btn-primary" onClick={save}>{editId ? "ذخیره تغییرات" : "افزودن لینک"}</button>
-          {editId && <button className="btn-secondary" onClick={() => { setEditId(null); setF(BLANK); }}>انصراف</button>}
+          <button className="btn-primary btn-md" onClick={save}>{editId ? "ذخیره تغییرات" : "افزودن لینک"}</button>
+          {editId && <button className="btn-secondary btn-md" onClick={() => { setEditId(null); setF(BLANK); }}>انصراف</button>}
         </div>
       </div>
 
       {loading ? <Spinner /> : (!data || data.length === 0) ? <Empty label="لینکی ثبت نشده." /> : (
-        <div className="card overflow-x-auto">
+        <div className="card table-wrap">
           <table className="w-full text-sm">
-            <thead className="text-slate-400 text-xs">
+            <thead className="text-muted text-xs">
               <tr>
                 <th className="text-right p-2">عنوان</th>
                 <th className="text-right p-2">آدرس</th>
@@ -68,21 +68,21 @@ export default function AdvertisingLinks() {
             </thead>
             <tbody>
               {data.map((l) => (
-                <tr key={l.id} className="border-t border-slate-800">
+                <tr key={l.id} className="border-t border-line">
                   <td className="p-2">{l.title}</td>
-                  <td className="p-2 font-mono text-xs" dir="ltr"><a href={l.url} target="_blank" rel="noreferrer" className="text-sky-400 underline">{l.url}</a></td>
+                  <td className="p-2 font-mono text-xs" dir="ltr"><a href={l.url} target="_blank" rel="noreferrer" className="text-sky-700 underline">{l.url}</a></td>
                   <td className="p-2">{TYPE_FA[l.link_type] || l.link_type}</td>
                   <td className="p-2">{fa(l.weight)}</td>
                   <td className="p-2">
-                    <button className={`badge ${l.is_active ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-slate-600/30 text-slate-400 border-slate-600"}`}
+                    <button className={`badge ${l.is_active ? "bg-brand-light text-brand border-brand/30" : "bg-slate-100 text-slate-600 border-slate-300"}`}
                       onClick={async () => { await AdLinksApi.toggle(l.id); reload(); }}>
                       {l.is_active ? "فعال" : "غیرفعال"}
                     </button>
                   </td>
                   <td className="p-2">
                     <div className="flex gap-1">
-                      <button className="btn-secondary text-xs" onClick={() => edit(l)}>ویرایش</button>
-                      <button className="btn-danger text-xs" onClick={() => del(l.id)}>حذف</button>
+                      <button className="btn-secondary btn-sm" onClick={() => edit(l)}>ویرایش</button>
+                      <button className="btn-danger btn-sm" onClick={() => del(l.id)}>حذف</button>
                     </div>
                   </td>
                 </tr>

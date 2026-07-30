@@ -51,7 +51,7 @@ function NewOnboardingForm({ onCreated }) {
   return (
     <div className="card space-y-3">
       <h3 className="font-bold">مرحلهٔ ۱ — ثبت واردکردن سیم‌کارت</h3>
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-muted">
         شماره، زمان دقیق واردکردن سیم‌کارت در گوشی و مدل گوشی را وارد کنید. از این لحظه دورهٔ
         ۲۴ ساعتهٔ اول شروع می‌شود. در این مدت با این سیم‌کارت تماس بگیرید و پیامک رد و بدل کنید —
         با شماره‌های واقعی، نه به‌صورت خودکار.
@@ -62,12 +62,12 @@ function NewOnboardingForm({ onCreated }) {
         <input className="input" placeholder="مدل گوشی (مثلاً Samsung A14)" value={model}
           onChange={(e) => setModel(e.target.value)} />
         <div className="sm:col-span-2">
-          <label className="text-xs text-slate-400 block mb-1">زمان واردکردن سیم‌کارت (شمسی):</label>
+          <label className="text-xs text-muted block mb-1">زمان واردکردن سیم‌کارت (شمسی):</label>
           <ShamsiDateTimePicker value={simAt} onChange={setSimAt}
             placeholder="تاریخ و ساعت واردکردن سیم‌کارت" />
         </div>
       </div>
-      <button className="btn-primary" onClick={submit} disabled={busy}>
+      <button className="btn-primary w-full sm:w-auto" onClick={submit} disabled={busy}>
         {busy ? "در حال ثبت…" : "ثبت و شروع دورهٔ ۲۴ ساعتهٔ اول"}
       </button>
     </div>
@@ -76,19 +76,19 @@ function NewOnboardingForm({ onCreated }) {
 
 // ── 4-step progress tracker ──────────────────────────────────────────────────
 function StepTracker({ step }) {
-  const labels = { 1: "سیم‌کارت", 2: "واتساپ", 3: "انتظار", 4: "Green API" };
+  const labels = { 1: "سیم‌کارت", 2: "واتساپ", 3: "انتظار", 4: "سرویس" };
   return (
     <div className="flex items-center gap-1 text-[11px]">
       {STEP_ORDER.map((s, i) => (
         <React.Fragment key={s}>
           <span className={`px-2 py-0.5 rounded-full border ${s < step
-            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+            ? "bg-brand-light text-brand border-brand/30"
             : s === step
-              ? "bg-brand/15 text-brand border-brand font-bold"
-              : "bg-slate-800 text-slate-500 border-slate-700"}`}>
+              ? "bg-brand-light text-brand border-brand font-bold"
+              : "bg-slate-100 text-slate-600 border-slate-300"}`}>
             {fa(s)}. {labels[s]}
           </span>
-          {i < STEP_ORDER.length - 1 && <span className="text-slate-600">—</span>}
+          {i < STEP_ORDER.length - 1 && <span className="text-muted">—</span>}
         </React.Fragment>
       ))}
     </div>
@@ -109,7 +109,7 @@ function OnboardingCard({ item, now, onChange }) {
         toast.success("واتساپ فعال شد — دورهٔ ۲۴ ساعتهٔ دوم آغاز شد");
       } else if (item.phase === "connect_green_api") {
         await OnboardingApi.confirmGreenApi(item.id);
-        toast.success("اتصال Green API ثبت شد — راه‌اندازی کامل شد");
+        toast.success("اتصال سرویس ثبت شد — راه‌اندازی کامل شد");
       }
       onChange && onChange();
     } catch (e) { toast.error(e?.response?.data?.detail || e.message); }
@@ -123,49 +123,49 @@ function OnboardingCard({ item, now, onChange }) {
   }
 
   return (
-    <div className={`card space-y-3 ${item.done ? "border-emerald-500/30" : ""}`}>
+    <div className={`card space-y-3 ${item.done ? "border-brand/30" : ""}`}>
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <span className="font-bold font-mono">{fa(item.phone_number)}</span>
-          {item.phone_make_model && <span className="text-xs text-slate-400">{item.phone_make_model}</span>}
+          {item.phone_make_model && <span className="text-xs text-muted">{item.phone_make_model}</span>}
         </div>
         <StepTracker step={item.step} />
       </div>
 
-      <div className={`rounded-lg p-3 ${content.locked ? "bg-amber-500/10 border border-amber-500/30" : "bg-slate-800/50 border border-slate-700"}`}>
+      <div className={`rounded-lg p-3 ${content.locked ? "bg-amber-50 border border-amber-200" : "bg-canvas border border-line"}`}>
         <h4 className="font-bold text-sm mb-1">{content.title}</h4>
-        <p className="text-xs text-slate-300 whitespace-pre-wrap">{content.body}</p>
+        <p className="text-xs text-ink whitespace-pre-wrap">{content.body}</p>
 
         {content.locked && item.next_unlock_shamsi && (
-          <p className="text-xs text-amber-300 mt-2">
+          <p className="text-xs text-amber-700 mt-2">
             هنوز زود است — تا ساعت <span className="font-mono">{fa(item.next_unlock_shamsi)}</span> صبر کنید
             {countdown && <> (تقریباً {countdown} دیگر)</>}
           </p>
         )}
 
         {!content.locked && content.action && (
-          <button className="btn-primary text-sm mt-2" onClick={confirm} disabled={busy}>
+          <button className="btn-primary btn-sm mt-2" onClick={confirm} disabled={busy}>
             {busy ? "…" : content.action}
           </button>
         )}
 
         {item.phase === "connect_green_api" && (
-          <div className="flex gap-2 mt-2 text-xs">
-            <Link to="/accounts" className="btn-secondary">رفتن به اسکن QR (حساب‌ها)</Link>
-            <Link to="/team-collaboration" className="btn-secondary">فعال‌سازی همکاری تیمی</Link>
+          <div className="flex gap-2 mt-2 flex-wrap">
+            <Link to="/accounts" className="btn-secondary btn-sm">رفتن به اسکن QR (حساب‌ها)</Link>
+            <Link to="/team-collaboration" className="btn-secondary btn-sm">فعال‌سازی همکاری تیمی</Link>
           </div>
         )}
         {item.done && (
-          <div className="flex gap-2 mt-2 text-xs">
-            <Link to="/team-collaboration" className="btn-secondary">مدیریت همکاری تیمی</Link>
+          <div className="flex gap-2 mt-2 flex-wrap">
+            <Link to="/team-collaboration" className="btn-secondary btn-sm">مدیریت همکاری تیمی</Link>
           </div>
         )}
       </div>
 
-      <div className="flex items-center justify-between text-[11px] text-slate-500">
+      <div className="flex items-center justify-between gap-2 flex-wrap text-[11px] text-muted">
         <span>واردکردن سیم‌کارت: {item.sim_inserted_shamsi ? fa(item.sim_inserted_shamsi) : "—"}</span>
         {item.whatsapp_activated_shamsi && <span>فعال‌سازی واتساپ: {fa(item.whatsapp_activated_shamsi)}</span>}
-        <button className="btn-danger text-[11px]" onClick={del}>حذف</button>
+        <button className="btn-danger btn-sm" onClick={del}>حذف</button>
       </div>
     </div>
   );
@@ -181,10 +181,11 @@ export default function Onboarding() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">🚀 راه‌اندازی شمارهٔ جدید</h1>
-        <p className="text-sm text-slate-400 mt-1">
+        <p className="text-xs font-bold text-brand">افراپیام — هر پیام، یک فرصت فروش</p>
+        <h1 className="text-2xl font-bold mt-1">🚀 راه‌اندازی شمارهٔ جدید</h1>
+        <p className="text-sm text-muted mt-1">
           راهنمای گام‌به‌گام و زمان‌بندی‌شده برای راه‌اندازی امن یک شمارهٔ نو — از واردکردن سیم‌کارت تا
-          اتصال به Green API و همکاری تیمی. دو دورهٔ ۲۴ ساعتهٔ اجباری برای کاهش ریسک مسدودشدن رعایت می‌شود.
+          اتصال به سرویس و همکاری تیمی. دو دورهٔ ۲۴ ساعتهٔ اجباری برای کاهش ریسک مسدودشدن رعایت می‌شود.
         </p>
       </div>
 
@@ -203,7 +204,7 @@ export default function Onboarding() {
 
       {completed.length > 0 && (
         <div className="space-y-2">
-          <h3 className="font-bold text-slate-400">راه‌اندازی‌های کامل‌شده ({fa(completed.length)})</h3>
+          <h3 className="font-bold text-muted">راه‌اندازی‌های کامل‌شده ({fa(completed.length)})</h3>
           <div className="space-y-3">
             {completed.map((o) => <OnboardingCard key={o.id} item={o} now={now} onChange={reload} />)}
           </div>

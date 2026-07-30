@@ -30,7 +30,7 @@ test("phaseContent unlocked steps carry a single next-action label", () => {
 });
 
 test("phaseContent step 4 body hands off to QR + Team Collaboration", () => {
-  assert.match(PHASE_CONTENT.connect_green_api.body, /Green API/);
+  assert.match(PHASE_CONTENT.connect_green_api.body, /سرویس/);
   assert.match(PHASE_CONTENT.connect_green_api.body, /QR/);
   assert.match(PHASE_CONTENT.connect_green_api.body, /همکاری تیمی/);
 });

@@ -10,7 +10,7 @@ import { toast, confirmDialog } from "../ui/toast.jsx";
 import {
   warmthBadge, canAssignCold, filterLogEvents, threadStatusSummary,
   dayInCycleLabel, askRunningCounts, askCountSentence, MAX_COLD_PER_CONTACT,
-  filterUnrespondedTasks, taskStatusFa,
+  filterUnrespondedTasks, taskStatusFa, logSenderOptions,
   OVERRIDE_BADGE_FA, OVERRIDE_CONFIRM_LABEL_FA, needsOverridePrompt,
   overrideConfirmValid, eligibilityWarningText, senderHasOverride,
   RECOVERY_BADGE_FA, senderInMeshRecovery,
@@ -78,7 +78,7 @@ function ManagePanel() {
     <div className="space-y-4">
       <div className="card space-y-3">
         <h3 className="font-bold">انتخاب فرستنده</h3>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-muted">
           هر فرستنده مجموعهٔ مخاطبان و برنامهٔ گرم‌سازی مخصوص خود را دارد. امتیاز گرمی نشان می‌دهد
           این اکانت چقدر برای ارسال امن است (کم/متوسط/بالا).
         </p>
@@ -91,19 +91,19 @@ function ManagePanel() {
                 <button key={s.instance_id} onClick={() => setSender(s.instance_id)}
                   className={`px-3 py-2 rounded-lg border text-sm flex items-center gap-2 ${isSel
                     ? "bg-brand/15 border-brand text-brand font-bold"
-                    : "bg-slate-800 border-slate-700 text-slate-300"}`}>
+                    : "bg-canvas border-line text-ink"}`}>
                   <span>{s.name || s.instance_id}</span>
                   <span className="text-xs opacity-70">({fa(s.contact_count)} مخاطب)</span>
                   {w && <WarmthBadge level={w.level} score={w.score} />}
                   {senderHasOverride(s) && (
-                    <span className="badge bg-rose-500/20 text-rose-300 border-rose-500/40"
+                    <span className="badge bg-red-50 text-red-700 border-red-200"
                       title="این فرستنده با رد شرط ۱۴روزه (به‌صورت دستی) فعال شده است">{OVERRIDE_BADGE_FA}</span>
                   )}
                   {senderInMeshRecovery(s) && (
-                    <span className="badge bg-amber-500/20 text-amber-300 border-amber-500/40"
+                    <span className="badge bg-amber-50 text-amber-700 border-amber-200"
                       title="این اکانت در حال بازیابی گرم‌سازی است و تا پایان دوره به‌عنوان فرستنده ارسال نمی‌کند">{RECOVERY_BADGE_FA}</span>
                   )}
-                  {!s.team_enabled && <span className="badge bg-slate-600/30 text-slate-400 border-slate-600">خاموش</span>}
+                  {!s.team_enabled && <span className="badge bg-slate-100 text-slate-600 border-slate-300">خاموش</span>}
                 </button>
               );
             })}
@@ -112,8 +112,8 @@ function ManagePanel() {
         {current && (
           <div className="flex items-center gap-2">
             <button className={`text-sm px-3 py-1.5 rounded font-bold border ${current.team_enabled
-              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-              : "bg-slate-700 text-slate-300 border-slate-600"}`} onClick={() => toggleSender(current)}>
+              ? "bg-brand-light text-brand border-brand/30"
+              : "bg-slate-100 text-slate-600 border-slate-300"}`} onClick={() => toggleSender(current)}>
               {current.team_enabled ? "همکاری تیمی این فرستنده: روشن ✓" : "همکاری تیمی این فرستنده: خاموش"}
             </button>
           </div>
@@ -138,7 +138,7 @@ function BriefEditor({ senderInstanceId }) {
   return (
     <div className="card space-y-2">
       <h3 className="font-bold">خلاصهٔ فعال (Brief) این فرستنده</h3>
-      <p className="text-xs text-slate-400">یک جملهٔ کوتاه که به هوش مصنوعی جهت می‌دهد چه پیامی برای مخاطبان ساخته شود.</p>
+      <p className="text-xs text-muted">یک جملهٔ کوتاه که به هوش مصنوعی جهت می‌دهد چه پیامی برای مخاطبان ساخته شود.</p>
       <div className="flex gap-2">
         <input className="input flex-1" placeholder="مثلاً: به شماره‌های جدید ما یک سلام دوستانه بده" value={text}
           onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} />
@@ -213,9 +213,9 @@ function ContactsEditor({ senderInstanceId, onChange }) {
     <div className="card space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="font-bold">مخاطبان این فرستنده</h3>
-        <span className="badge bg-slate-700 text-slate-300 border-slate-600">{fa(helpers.filter((h) => h.is_active).length)} فعال</span>
+        <span className="badge bg-slate-100 text-slate-600 border-slate-300">{fa(helpers.filter((h) => h.is_active).length)} فعال</span>
       </div>
-      {softWarning && <p className="text-xs text-amber-300">{softWarning}</p>}
+      {softWarning && <p className="text-xs text-amber-700">{softWarning}</p>}
 
       <div className="space-y-2">
         <div className="flex gap-2 flex-wrap">
@@ -247,7 +247,7 @@ function ContactsEditor({ senderInstanceId, onChange }) {
       </div>
 
       {loading ? <Spinner /> : helpers.length === 0 ? <Empty label="هنوز مخاطبی اضافه نشده." /> : (
-        <div className="divide-y divide-slate-800">
+        <div className="divide-y divide-line">
           {helpers.map((h) => (
             <ContactRow key={h.id} helper={h} onDelete={() => del(h)} onToggle={() => toggleActive(h)} />
           ))}
@@ -256,14 +256,14 @@ function ContactsEditor({ senderInstanceId, onChange }) {
 
       {overrideDlg && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" dir="rtl">
-          <div className="card max-w-md w-full space-y-3 border-rose-500/40">
-            <h3 className="font-bold text-rose-300">⚠️ این فرستنده هنوز آماده نیست</h3>
-            <p className="text-sm text-slate-300">{eligibilityWarningText(overrideDlg.elig)}</p>
-            <p className="text-xs text-slate-400">
+          <div className="card max-w-md w-full space-y-3 border-red-200">
+            <h3 className="font-bold text-red-700">⚠️ این فرستنده هنوز آماده نیست</h3>
+            <p className="text-sm text-ink">{eligibilityWarningText(overrideDlg.elig)}</p>
+            <p className="text-xs text-muted">
               استفاده از یک اکانت زیر ۱۴ روز (یا با حادثهٔ اخیر) به‌عنوان فرستنده ریسک مسدودشدن دارد.
               برای ادامه، تأیید کنید و دلیل را بنویسید — این تصمیم ثبت و ماندگار می‌شود.
             </p>
-            <label className="flex items-start gap-2 text-sm text-slate-200">
+            <label className="flex items-start gap-2 text-sm text-ink">
               <input type="checkbox" className="mt-1" checked={ovConfirmed}
                 onChange={(e) => setOvConfirmed(e.target.checked)} />
               <span>{OVERRIDE_CONFIRM_LABEL_FA}</span>
@@ -307,24 +307,24 @@ function ContactRow({ helper, onDelete, onToggle }) {
     <div className="py-2 text-sm space-y-1">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <span className={helper.is_active ? "font-bold" : "text-slate-500 line-through"}>{helper.name}</span>
-          <span className="text-xs text-slate-500 font-mono mr-2">{fa(helper.phone)}</span>
-          {helper.job_title && <span className="text-xs text-sky-300 mr-2">{helper.job_title}</span>}
-          {helper.years_experience != null && <span className="text-xs text-slate-400 mr-1">({fa(helper.years_experience)} سال)</span>}
-          {helper.relationship && RELATIONSHIP_FA[helper.relationship] && <span className="badge bg-indigo-500/20 text-indigo-300 border-indigo-500/40 mr-2">{RELATIONSHIP_FA[helper.relationship]}</span>}
-          {helper.referral_note && <span className="text-xs text-amber-300/80 mr-1" title="یادداشت معرف">📇 {helper.referral_note}</span>}
+          <span className={helper.is_active ? "font-bold" : "text-muted line-through"}>{helper.name}</span>
+          <span className="text-xs text-muted font-mono mr-2">{fa(helper.phone)}</span>
+          {helper.job_title && <span className="text-xs text-sky-700 mr-2">{helper.job_title}</span>}
+          {helper.years_experience != null && <span className="text-xs text-muted mr-1">({fa(helper.years_experience)} سال)</span>}
+          {helper.relationship && RELATIONSHIP_FA[helper.relationship] && <span className="badge bg-sky-50 text-sky-700 border-sky-200 mr-2">{RELATIONSHIP_FA[helper.relationship]}</span>}
+          {helper.referral_note && <span className="text-xs text-amber-700 mr-1" title="یادداشت معرف">📇 {helper.referral_note}</span>}
         </div>
         <div className="flex gap-1">
-          <button className={`badge ${helper.is_active ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-slate-600/30 text-slate-400 border-slate-600"}`} onClick={onToggle}>{helper.is_active ? "فعال" : "غیرفعال"}</button>
+          <button className={`badge ${helper.is_active ? "bg-brand-light text-brand border-brand/30" : "bg-slate-100 text-slate-600 border-slate-300"}`} onClick={onToggle}>{helper.is_active ? "فعال" : "غیرفعال"}</button>
           <button className="btn-danger text-xs" onClick={onDelete}>حذف</button>
         </div>
       </div>
       <div className="flex items-center gap-2 flex-wrap pr-2">
-        <span className="text-xs text-slate-400">اکانت‌های سرد ({fa(cold.length)}/{fa(MAX_COLD_PER_CONTACT)}):</span>
+        <span className="text-xs text-muted">اکانت‌های سرد ({fa(cold.length)}/{fa(MAX_COLD_PER_CONTACT)}):</span>
         {cold.map((c) => (
-          <span key={c.cold_instance_id} className="badge bg-slate-700 text-slate-200 border-slate-600 flex items-center gap-1">
+          <span key={c.cold_instance_id} className="badge bg-slate-100 text-slate-600 border-slate-300 flex items-center gap-1">
             {c.name || c.cold_instance_id}
-            <button className="text-red-300 hover:text-red-200" onClick={() => unassign(c.cold_instance_id)}>×</button>
+            <button className="text-red-700 hover:text-red-800" onClick={() => unassign(c.cold_instance_id)}>×</button>
           </span>
         ))}
         {canAssignCold(cold.length) ? (
@@ -335,7 +335,7 @@ function ContactRow({ helper, onDelete, onToggle }) {
             </select>
             <button className="btn-secondary text-xs" onClick={assign} disabled={!pick}>تخصیص</button>
           </span>
-        ) : <span className="text-xs text-amber-300/80">به سقف ۲ اکانت رسیده</span>}
+        ) : <span className="text-xs text-amber-700">به سقف ۲ اکانت رسیده</span>}
       </div>
     </div>
   );
@@ -362,19 +362,19 @@ function ColdAccountRoster() {
   return (
     <div className="card space-y-3">
       <h3 className="font-bold">اکانت‌های سرد (فهرست عضویت در همکاری تیمی)</h3>
-      <p className="text-xs text-slate-400">هر اکانت سرد را می‌توانید در چرخهٔ خودکار ۱۰ روزه عضو کنید. ارسال‌ها فقط پس از گذشت دورهٔ ۲۴ ساعتهٔ اولیهٔ آن اکانت آغاز می‌شود.</p>
+      <p className="text-xs text-muted">هر اکانت سرد را می‌توانید در چرخهٔ خودکار ۱۰ روزه عضو کنید. ارسال‌ها فقط پس از گذشت دورهٔ ۲۴ ساعتهٔ اولیهٔ آن اکانت آغاز می‌شود.</p>
       {accountsAsync.loading ? <Spinner /> : (
-        <div className="divide-y divide-slate-800">
+        <div className="divide-y divide-line">
           {accounts.map((a) => {
             const e = enrollBy[a.instance_id];
             const on = e && e.enabled;
             return (
               <div key={a.instance_id} className="flex items-center justify-between gap-2 py-2 text-sm">
                 <div>
-                  <span className={on ? "font-bold" : "text-slate-400"}>{a.name || a.instance_id}</span>
-                  {on && <span className="text-xs text-sky-300 mr-2">{dayInCycleLabel(e.day_index, e.cycle_days)}</span>}
+                  <span className={on ? "font-bold" : "text-muted"}>{a.name || a.instance_id}</span>
+                  {on && <span className="text-xs text-sky-700 mr-2">{dayInCycleLabel(e.day_index, e.cycle_days)}</span>}
                 </div>
-                <button className={`badge ${on ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-slate-600/30 text-slate-400 border-slate-600"}`} onClick={() => toggle(a)}>
+                <button className={`badge ${on ? "bg-brand-light text-brand border-brand/30" : "bg-slate-100 text-slate-600 border-slate-300"}`} onClick={() => toggle(a)}>
                   {on ? "عضو ✓" : "عضو کن"}
                 </button>
               </div>
@@ -399,16 +399,16 @@ function DashboardPanel() {
         {senders.length === 0 ? <Empty /> : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead><tr className="text-slate-400 text-xs">
+              <thead><tr className="text-muted text-xs">
                 <th className="text-right py-1">فرستنده</th><th>گرمی</th><th>مخاطبان</th><th className="text-right">خلاصهٔ فعال</th>
               </tr></thead>
               <tbody>
                 {senders.map((s) => (
-                  <tr key={s.instance_id} className="border-t border-slate-800">
-                    <td className="py-2">{s.name || s.instance_id}{!s.team_enabled && <span className="badge bg-slate-600/30 text-slate-400 border-slate-600 mr-2">خاموش</span>}</td>
+                  <tr key={s.instance_id} className="border-t border-line">
+                    <td className="py-2">{s.name || s.instance_id}{!s.team_enabled && <span className="badge bg-slate-100 text-slate-600 border-slate-300 mr-2">خاموش</span>}</td>
                     <td className="text-center"><WarmthBadge level={s.warmth_level} score={s.warmth_score} /></td>
                     <td className="text-center">{fa(s.contact_count)}</td>
-                    <td className="text-slate-400 text-xs">{s.current_brief || "—"}</td>
+                    <td className="text-muted text-xs">{s.current_brief || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -419,14 +419,14 @@ function DashboardPanel() {
       <div className="card">
         <h3 className="font-bold mb-2">اکانت‌های سرد</h3>
         {cold.length === 0 ? <Empty label="هنوز اکانت سردی عضو نشده." /> : (
-          <div className="divide-y divide-slate-800">
+          <div className="divide-y divide-line">
             {cold.map((c) => (
               <div key={c.cold_instance_id} className="flex items-center justify-between gap-2 py-2 text-sm">
                 <div>
-                  <span className={c.enabled ? "font-bold" : "text-slate-400"}>{c.cold_name || c.cold_instance_id}</span>
-                  {c.enabled && <span className="text-xs text-sky-300 mr-2">{dayInCycleLabel(c.day_index, c.cycle_days)}</span>}
+                  <span className={c.enabled ? "font-bold" : "text-muted"}>{c.cold_name || c.cold_instance_id}</span>
+                  {c.enabled && <span className="text-xs text-sky-700 mr-2">{dayInCycleLabel(c.day_index, c.cycle_days)}</span>}
                 </div>
-                <span className="text-xs text-slate-400">{threadStatusSummary(c)}</span>
+                <span className="text-xs text-muted">{threadStatusSummary(c)}</span>
               </div>
             ))}
           </div>
@@ -444,26 +444,35 @@ const EVENT_FA = { ask: "درخواست", reminder: "یادآوری", thank_you:
 // view (contacts who received an ask/reminder but have not completed the task).
 const UNRESPONDED = "__unresponded__";
 
+function eventTypeForLogQuery(eventType) {
+  return eventType && eventType !== UNRESPONDED ? eventType : "";
+}
+
 function LogPanel() {
-  const { data, loading, reload } = useAsync(() => WarmupHelpersApi.teamLog({ limit: 300 }), []);
+  const [eventType, setEventType] = React.useState("");
+  const [senderInstanceId, setSender] = React.useState("");
+  const logEventType = eventTypeForLogQuery(eventType);
+  const { data, loading, reload } = useAsync(() => WarmupHelpersApi.teamLog({
+    limit: 300,
+    ...(senderInstanceId ? { sender_instance_id: senderInstanceId } : {}),
+    ...(logEventType ? { event_type: logEventType } : {}),
+  }), [senderInstanceId, logEventType]);
+  const { data: senderData, reload: reloadSenders } = useAsync(() => WarmupHelpersApi.senders(), []);
   // Tasks power the «درخواست‌های بی‌پاسخ» view (authoritative status: asked/reminded/no_response).
   const { data: taskData, loading: tasksLoading, reload: reloadTasks } =
     useAsync(() => WarmupHelpersApi.tasks(), []);
-  const [eventType, setEventType] = React.useState("");
-  const [senderInstanceId, setSender] = React.useState("");
   const events = data?.events || [];
+  const senderRows = senderData?.senders || [];
   const tasks = taskData?.tasks || [];
   const unresponded = eventType === UNRESPONDED;
 
-  // Sender options come from whichever dataset is active, so the filter stays meaningful in both views.
-  const senders = React.useMemo(() => {
-    const m = {};
-    for (const e of events) if (e.sender_instance_id) m[e.sender_instance_id] = e.from_name || e.sender_instance_id;
-    for (const t of tasks) if (t.sender_instance_id) m[t.sender_instance_id] = t.sender_name || t.sender_instance_id;
-    return Object.entries(m);
-  }, [events, tasks]);
+  const senders = React.useMemo(() => logSenderOptions({
+    senders: senderRows,
+    events,
+    tasks,
+  }), [senderRows, events, tasks]);
 
-  const filtered = filterLogEvents(events, { eventType: eventType || undefined, senderInstanceId: senderInstanceId || undefined });
+  const filtered = filterLogEvents(events, { eventType: logEventType || undefined, senderInstanceId: senderInstanceId || undefined });
   const running = askRunningCounts(events);   // PART 7 — running per-contact ask number per event
 
   // Unresponded task rows (apply the same sender filter).
@@ -474,7 +483,16 @@ function LogPanel() {
   }, [tasks, senderInstanceId]);
 
   const busy = unresponded ? tasksLoading : loading;
-  const refresh = () => { reload(); reloadTasks(); };
+  const refresh = React.useCallback(() => {
+    reload();
+    reloadTasks();
+    reloadSenders();
+  }, [reload, reloadTasks, reloadSenders]);
+
+  React.useEffect(() => {
+    const id = setInterval(refresh, 15000);
+    return () => clearInterval(id);
+  }, [refresh]);
 
   return (
     <div className="card space-y-3">
@@ -488,7 +506,11 @@ function LogPanel() {
           </select>
           <select className="input text-xs py-1" value={senderInstanceId} onChange={(e) => setSender(e.target.value)}>
             <option value="">همهٔ فرستنده‌ها</option>
-            {senders.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            {senders.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}{s.team_enabled === false ? " (خاموش)" : ""}
+              </option>
+            ))}
           </select>
           <button className="btn-secondary text-xs" onClick={refresh}>تازه‌سازی</button>
         </div>
@@ -497,27 +519,27 @@ function LogPanel() {
       {busy ? <Spinner /> : unresponded ? (
         unrespondedRows.length === 0 ? <Empty label="درخواست بی‌پاسخی وجود ندارد." /> : (
           <>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted">
               مخاطبانی که درخواست (و شاید یادآوری) دریافت کرده‌اند اما هنوز کار را کامل نکرده‌اند
               (وضعیت: درخواست ارسال شد / یادآوری شد / بدون پاسخ).
             </p>
-            <div className="divide-y divide-slate-800 max-h-[70vh] overflow-y-auto">
+            <div className="divide-y divide-line max-h-[70vh] overflow-y-auto">
               {unrespondedRows.map((t) => (
                 <div key={t.id} className="py-2 text-sm">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="flex items-center gap-2 flex-wrap">
                       <span className={`badge ${
-                        t.status === "no_response" ? "bg-red-500/20 text-red-300 border-red-500/40"
-                        : t.status === "reminded" ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                        : "bg-sky-500/20 text-sky-300 border-sky-500/40"}`}>
+                        t.status === "no_response" ? "bg-red-50 text-red-700 border-red-200"
+                        : t.status === "reminded" ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : "bg-sky-50 text-sky-700 border-sky-200"}`}>
                         {taskStatusFa(t.status)}
                       </span>
                       <span>{t.sender_name || t.sender_instance_id || "—"} ← {t.helper_name || "—"}</span>
-                      {t.cold_name && <span className="text-xs text-slate-500">(اکانت سرد: {t.cold_name})</span>}
+                      {t.cold_name && <span className="text-xs text-muted">(اکانت سرد: {t.cold_name})</span>}
                     </span>
-                    <span className="text-xs text-slate-500">درخواست: {t.asked_shamsi || t.asked_at || "—"}</span>
+                    <span className="text-xs text-muted">درخواست: {t.asked_shamsi || t.asked_at || "—"}</span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-[11px] text-muted mt-0.5">
                     {t.reminded_shamsi
                       ? `یادآوری: ${t.reminded_shamsi}${t.reminder_count ? ` (${fa(t.reminder_count)} بار)` : ""}`
                       : "یادآوری: ارسال نشده"}
@@ -528,22 +550,22 @@ function LogPanel() {
           </>
         )
       ) : filtered.length === 0 ? <Empty label="رویدادی ثبت نشده." /> : (
-        <div className="divide-y divide-slate-800 max-h-[70vh] overflow-y-auto">
+        <div className="divide-y divide-line max-h-[70vh] overflow-y-auto">
           {filtered.map((e) => (
             <div key={e.id} className="py-2 text-sm">
               <div className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-2">
-                  <span className="badge bg-slate-700 text-slate-200 border-slate-600">{e.event_fa || EVENT_FA[e.event_type] || e.event_type}</span>
+                  <span className="badge bg-slate-100 text-slate-600 border-slate-300">{e.event_fa || EVENT_FA[e.event_type] || e.event_type}</span>
                   <span>{e.from_name || e.from_instance_id || "—"} ← {e.helper_name || e.to_phone || "—"}</span>
-                  {e.cold_name && <span className="text-xs text-slate-500">(اکانت سرد: {e.cold_name})</span>}
+                  {e.cold_name && <span className="text-xs text-muted">(اکانت سرد: {e.cold_name})</span>}
                 </span>
-                <span className="text-xs text-slate-500">{e.shamsi || e.created_at}</span>
+                <span className="text-xs text-muted">{e.shamsi || e.created_at}</span>
               </div>
               {(e.message_sent || e.message_received) && (
-                <p className="text-xs text-slate-400 mt-1 whitespace-pre-wrap">{e.message_sent || e.message_received}</p>
+                <p className="text-xs text-muted mt-1 whitespace-pre-wrap">{e.message_sent || e.message_received}</p>
               )}
               {e.event_type === "ask" && running[e.id] != null && (
-                <p className="text-[11px] text-sky-300/80 mt-0.5">{askCountSentence(fa(running[e.id]))}</p>
+                <p className="text-[11px] text-sky-700 mt-0.5">{askCountSentence(fa(running[e.id]))}</p>
               )}
             </div>
           ))}
@@ -569,16 +591,16 @@ function AlertsPanel() {
   return (
     <div className="card space-y-3">
       <h3 className="font-bold">هشدارهای ایمنی (گفتگوهای متوقف‌شده)</h3>
-      <p className="text-xs text-slate-400">اگر واژهٔ حساسی در یک گفتگو دیده شود، همان گفتگو متوقف و اینجا فهرست می‌شود. در صورت مثبت کاذب می‌توانید آن را دوباره فعال کنید.</p>
+      <p className="text-xs text-muted">اگر واژهٔ حساسی در یک گفتگو دیده شود، همان گفتگو متوقف و اینجا فهرست می‌شود. در صورت مثبت کاذب می‌توانید آن را دوباره فعال کنید.</p>
       {loading ? <Spinner /> : alerts.length === 0 ? <Empty label="هشدار بازی وجود ندارد." /> : (
-        <div className="divide-y divide-slate-800">
+        <div className="divide-y divide-line">
           {alerts.map((a) => (
             <div key={a.id} className="py-2 text-sm flex items-center justify-between gap-2 flex-wrap">
               <div>
-                <span className="badge bg-red-500/20 text-red-300 border-red-500/40 mr-2">{a.keyword || "واژهٔ حساس"}</span>
+                <span className="badge bg-red-50 text-red-700 border-red-200 mr-2">{a.keyword || "واژهٔ حساس"}</span>
                 <span>{a.helper_name || "—"}</span>
-                {a.cold_instance_id && <span className="text-xs text-slate-500 mr-2">اکانت سرد: {a.cold_instance_id}</span>}
-                {a.message_excerpt && <p className="text-xs text-slate-400 mt-1">{a.message_excerpt}</p>}
+                {a.cold_instance_id && <span className="text-xs text-muted mr-2">اکانت سرد: {a.cold_instance_id}</span>}
+                {a.message_excerpt && <p className="text-xs text-muted mt-1">{a.message_excerpt}</p>}
               </div>
               <div className="flex gap-1">
                 <button className="btn-secondary text-xs" onClick={() => ack(a)}>تأیید</button>
@@ -598,12 +620,12 @@ export default function TeamCollaboration() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold">🤝 همکاری تیمی</h1>
-        <p className="text-sm text-slate-400 mt-1">گرم‌سازی اکانت‌های سرد با کمک افراد واقعی — مدیریت فرستنده‌ها، مخاطبان، چرخهٔ ۱۰ روزه، لاگ و هشدارها.</p>
+        <p className="text-sm text-muted mt-1">گرم‌سازی اکانت‌های سرد با کمک افراد واقعی — مدیریت فرستنده‌ها، مخاطبان، چرخهٔ ۱۰ روزه، لاگ و هشدارها.</p>
       </div>
-      <div className="flex gap-1 border-b border-slate-800 flex-wrap">
+      <div className="flex gap-1 border-b border-line flex-wrap">
         {TABS.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`px-3 py-2 text-sm border-b-2 -mb-px ${tab === t.key ? "border-brand text-brand font-bold" : "border-transparent text-slate-400 hover:text-slate-200"}`}>
+            className={`px-3 py-2 text-sm border-b-2 -mb-px ${tab === t.key ? "border-brand text-brand font-bold" : "border-transparent text-muted hover:text-ink"}`}>
             {t.label}
           </button>
         ))}

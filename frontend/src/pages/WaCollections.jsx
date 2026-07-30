@@ -44,12 +44,12 @@ export default function WaCollections() {
         <button className="btn-primary" onClick={() => setEdit({})}>+ مجموعه جدید</button>
       </div>
 
-      <div className="card text-sm text-slate-300 bg-sky-500/10 border-sky-500/30">
+      <div className="card text-sm bg-sky-50 text-sky-700 border-sky-200">
         گروه‌های واتساپ خود را در مجموعه‌های دلخواه دسته‌بندی کنید تا ارسال پیام گروهی ساده‌تر شود.
       </div>
 
       {loading && <Spinner />}
-      {error && <div className="card text-red-400">{error}</div>}
+      {error && <div className="card bg-red-50 text-red-700 border-red-200">{error}</div>}
       {data && data.length === 0 && <Empty label="هیچ مجموعه‌ای وجود ندارد." />}
 
       {data && data.length > 0 && (
@@ -58,17 +58,17 @@ export default function WaCollections() {
             <div key={c.id} className="card space-y-3">
               <div className="flex items-center gap-2">
                 <span className="font-bold truncate">{c.name}</span>
-                <span className="badge bg-slate-500/20 text-slate-300 border-slate-500/40 mr-auto">
+                <span className="badge bg-slate-100 text-slate-600 border-slate-300 mr-auto">
                   {c.group_count ?? 0} گروه
                 </span>
               </div>
               {c.description && (
-                <p className="text-sm text-slate-400">{c.description}</p>
+                <p className="text-sm text-muted">{c.description}</p>
               )}
               <div className="flex gap-2 text-sm">
-                <button className="text-emerald-400 hover:underline" onClick={() => setGroups(c)}>مشاهده گروه‌ها</button>
-                <button className="text-sky-400 hover:underline" onClick={() => setEdit(c)}>ویرایش</button>
-                <button className="text-red-400 hover:underline" onClick={() => remove(c.id)}>حذف</button>
+                <button className="text-brand hover:underline" onClick={() => setGroups(c)}>مشاهده گروه‌ها</button>
+                <button className="text-sky-700 hover:underline" onClick={() => setEdit(c)}>ویرایش</button>
+                <button className="text-red-700 hover:underline" onClick={() => remove(c.id)}>حذف</button>
               </div>
               <button
                 className="btn-secondary text-xs w-full disabled:opacity-50"
@@ -214,22 +214,22 @@ function GroupsModal({ collection, onClose, onDone }) {
         <div>
           <h4 className="font-bold mb-2 text-sm">گروه‌های فعلی</h4>
           {loading && <Spinner />}
-          {error && <div className="text-red-400 text-sm">{error}</div>}
+          {error && <div className="text-red-700 text-sm">{error}</div>}
           {current && current.length === 0 && <Empty label="این مجموعه گروهی ندارد." />}
           {current && current.length > 0 && (
             <div className="space-y-1 max-h-52 overflow-y-auto">
               {current.map((g) => (
-                <div key={g.id} className="flex items-center gap-2 text-sm border-b border-slate-800 py-1">
+                <div key={g.id} className="flex items-center gap-2 text-sm border-b border-line py-1">
                   <span className="font-bold">{g.group_name || "بدون نام"}</span>
-                  <span className="text-slate-500 text-xs" dir="ltr">{g.group_chat_id}</span>
-                  <button className="text-red-400 hover:underline mr-auto" onClick={() => removeGroup(g.group_chat_id)}>حذف</button>
+                  <span className="text-muted text-xs" dir="ltr">{g.group_chat_id}</span>
+                  <button className="text-red-700 hover:underline mr-auto" onClick={() => removeGroup(g.group_chat_id)}>حذف</button>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="border-t border-slate-700 pt-4 space-y-2">
+        <div className="border-t border-line pt-4 space-y-2">
           <h4 className="font-bold text-sm">افزودن از واتساپ</h4>
 
           {/* Step 1: pick account + sync */}
@@ -246,20 +246,20 @@ function GroupsModal({ collection, onClose, onDone }) {
           </div>
 
           {/* Step 2: checkbox list of synced groups */}
-          {syncedGroups && syncedGroups.length === 0 && <p className="text-slate-500 text-sm">گروهی یافت نشد.</p>}
+          {syncedGroups && syncedGroups.length === 0 && <p className="text-muted text-sm">گروهی یافت نشد.</p>}
           {syncedGroups && syncedGroups.length > 0 && (
             <>
-              <div className="space-y-1 max-h-52 overflow-y-auto border border-slate-700 rounded-lg p-2">
+              <div className="space-y-1 max-h-52 overflow-y-auto border border-line rounded-lg p-2">
                 {syncedGroups.map((g) => (
-                  <label key={g.group_chat_id} className="flex items-center gap-2 cursor-pointer border-b border-slate-800 py-1 last:border-0">
+                  <label key={g.group_chat_id} className="flex items-center gap-2 cursor-pointer border-b border-line py-1 last:border-0">
                     <input
                       type="checkbox"
                       checked={selected.includes(g.group_chat_id)}
                       onChange={() => toggle(g.group_chat_id)}
                     />
                     <span>{g.name}</span>
-                    <span className="text-xs text-slate-400">{g.member_count} عضو</span>
-                    <span className="text-[10px] text-slate-500 font-mono mr-auto" dir="ltr">{g.group_chat_id}</span>
+                    <span className="text-xs text-muted">{g.member_count} عضو</span>
+                    <span className="text-[10px] text-muted font-mono mr-auto" dir="ltr">{g.group_chat_id}</span>
                   </label>
                 ))}
               </div>
@@ -270,9 +270,9 @@ function GroupsModal({ collection, onClose, onDone }) {
           )}
         </div>
 
-        <div className="border-t border-slate-700 pt-4 space-y-2">
+        <div className="border-t border-line pt-4 space-y-2">
           <h4 className="font-bold text-sm">افزودن دستی</h4>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               className="input"
               placeholder="شناسه گروه"

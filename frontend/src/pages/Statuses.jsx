@@ -38,7 +38,7 @@ function IncomingView({ data, loading, onRefresh, onAnalyzeToday, analyzingToday
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted">
           {data?.account ? `حساب: ${data.account}` : "استوری‌های دریافتی"}
           {data && data.count != null ? ` · ${Number(data.count).toLocaleString("fa-IR")} مورد` : ""}
         </p>
@@ -52,14 +52,14 @@ function IncomingView({ data, loading, onRefresh, onAnalyzeToday, analyzingToday
         </div>
       </div>
 
-      {loading && !data && <p className="text-slate-500 text-sm">در حال بارگذاری...</p>}
+      {loading && !data && <p className="text-muted text-sm">در حال بارگذاری...</p>}
 
       {data?.error && (
-        <div className="card bg-amber-500/10 border-amber-500/30 text-amber-200 text-sm">⚠️ {data.error}</div>
+        <div className="card bg-amber-50 text-amber-700 border-amber-200 text-sm">⚠️ {data.error}</div>
       )}
 
       {data && !data.error && (data.statuses || []).length === 0 && (
-        <p className="text-slate-500 text-sm">استوری دریافتی‌ای وجود ندارد.</p>
+        <p className="text-muted text-sm">استوری دریافتی‌ای وجود ندارد.</p>
       )}
 
       {data && (data.statuses || []).length > 0 && (
@@ -70,24 +70,24 @@ function IncomingView({ data, loading, onRefresh, onAnalyzeToday, analyzingToday
               <div key={s.idMessage || s.receiptId || i} className="card space-y-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-bold text-sm truncate">{statusSender(s)}</span>
-                  <span className="badge bg-slate-500/20 text-slate-300 border-slate-500/40 whitespace-nowrap">
+                  <span className="badge bg-slate-100 text-muted border-slate-300 whitespace-nowrap">
                     {statusType(s)}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500">{fmtTime(s.timestamp || s.time)}</p>
+                <p className="text-xs text-muted">{fmtTime(s.timestamp || s.time)}</p>
                 {content &&
                   (/^https?:\/\//.test(content) ? (
-                    <a href={content} target="_blank" rel="noreferrer" className="text-sky-400 text-xs underline break-all">
+                    <a href={content} target="_blank" rel="noreferrer" className="text-sky-700 text-xs underline break-all">
                       {content}
                     </a>
                   ) : (
-                    <p className="text-sm text-slate-200 whitespace-pre-line break-words">{content}</p>
+                    <p className="text-sm text-ink whitespace-pre-line break-words">{content}</p>
                   ))}
                 <div className="flex items-center gap-2 pt-1">
                   <button className="btn-secondary text-xs" onClick={() => onAnalyzeOne(s.row_id)}>
                     🤖 تحلیل با هوش مصنوعی
                   </button>
-                  {s.analyzed && <span className="text-emerald-400 text-xs">✓ تحلیل‌شده</span>}
+                  {s.analyzed && <span className="text-brand text-xs">✓ تحلیل‌شده</span>}
                 </div>
               </div>
             );
@@ -105,7 +105,7 @@ function AnalysisView({ data, loading, onRefresh, onAnalyzeToday, analyzingToday
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted">
           تحلیل محصولات استوری‌ها{data && data.count != null ? ` · ${Number(data.count).toLocaleString("fa-IR")} مورد` : ""}
         </p>
         <div className="flex items-center gap-2">
@@ -119,17 +119,17 @@ function AnalysisView({ data, loading, onRefresh, onAnalyzeToday, analyzingToday
       </div>
 
       {data?.error && (
-        <div className="card bg-amber-500/10 border-amber-500/30 text-amber-200 text-sm">⚠️ {data.error}</div>
+        <div className="card bg-amber-50 text-amber-700 border-amber-200 text-sm">⚠️ {data.error}</div>
       )}
       {!loading && items.length === 0 && !data?.error && (
-        <p className="text-slate-500 text-sm">هنوز استوری تحلیل‌شده‌ای وجود ندارد. از تب «استوری‌های دریافتی» تحلیل را اجرا کنید.</p>
+        <p className="text-muted text-sm">هنوز استوری تحلیل‌شده‌ای وجود ندارد. از تب «استوری‌های دریافتی» تحلیل را اجرا کنید.</p>
       )}
 
       {items.length > 0 && (
-        <div className="card overflow-x-auto">
+        <div className="card table-wrap">
           <table className="w-full text-sm text-right">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="p-2">همکار/مخاطب</th>
                 <th className="p-2">شماره/اکانت</th>
                 <th className="p-2">متن استاتوس</th>
@@ -142,33 +142,33 @@ function AnalysisView({ data, loading, onRefresh, onAnalyzeToday, analyzingToday
             </thead>
             <tbody>
               {items.map((r) => (
-                <tr key={r.id} className="border-b border-slate-800 align-top">
+                <tr key={r.id} className="border-b border-line align-top">
                   <td className="p-2 font-bold">{r.contact_name}</td>
-                  <td className="p-2 text-slate-300">{r.phone || "—"}</td>
-                  <td className="p-2 text-slate-300 max-w-xs truncate">{r.status_text || "—"}</td>
+                  <td className="p-2 text-ink">{r.phone || "—"}</td>
+                  <td className="p-2 text-ink max-w-xs truncate">{r.status_text || "—"}</td>
                   <td className="p-2">
                     {r.thumbnail_url ? (
                       <div className="space-y-1">
                         <img src={Api.mediaUrl(r.story_id)} alt="story"
-                          className="w-16 h-16 object-cover rounded border border-slate-700" />
+                          className="w-16 h-16 object-cover rounded border border-line" />
                         {r.detected_product && (
-                          <p className="text-[10px] text-slate-400">تشخیص AI: {r.detected_product}</p>
+                          <p className="text-[10px] text-muted">تشخیص AI: {r.detected_product}</p>
                         )}
                       </div>
                     ) : (
-                      <span className="text-slate-600 text-xs">—</span>
+                      <span className="text-muted text-xs">—</span>
                     )}
                   </td>
-                  <td className="p-2">{r.detected_product || <span className="text-slate-600">—</span>}</td>
+                  <td className="p-2">{r.detected_product || <span className="text-muted">—</span>}</td>
                   <td className="p-2">
-                    <span className={`badge text-xs ${r.in_assistant ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border-amber-500/40"}`}>
+                    <span className={`badge text-xs ${r.in_assistant ? "bg-brand-light text-brand border-brand/30" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
                       {r.assistant_status}
                     </span>
                   </td>
-                  <td className="p-2 text-slate-300">
+                  <td className="p-2 text-ink">
                     {r.ai_confidence != null ? `${Math.round(r.ai_confidence * 100)}%` : "—"}
                   </td>
-                  <td className="p-2 text-slate-400 text-xs whitespace-nowrap">{r.analyzed_shamsi || "—"}</td>
+                  <td className="p-2 text-muted text-xs whitespace-nowrap">{r.analyzed_shamsi || "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -188,7 +188,7 @@ function HistoryView({ data, loading, onRefresh }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted">
           {data?.account ? `حساب: ${data.account}` : "تاریخچه استوری"}
         </p>
         <button className="btn-secondary text-xs" disabled={loading} onClick={onRefresh}>
@@ -196,21 +196,21 @@ function HistoryView({ data, loading, onRefresh }) {
         </button>
       </div>
 
-      {loading && !data && <p className="text-slate-500 text-sm">در حال بارگذاری...</p>}
+      {loading && !data && <p className="text-muted text-sm">در حال بارگذاری...</p>}
 
       {data?.error && (
-        <div className="card bg-amber-500/10 border-amber-500/30 text-amber-200 text-sm">⚠️ {data.error}</div>
+        <div className="card bg-amber-50 text-amber-700 border-amber-200 text-sm">⚠️ {data.error}</div>
       )}
 
       {data && !data.error && statuses.length === 0 && (
-        <p className="text-slate-500 text-sm">استوری منتشرشده‌ای یافت نشد.</p>
+        <p className="text-muted text-sm">استوری منتشرشده‌ای یافت نشد.</p>
       )}
 
       {data && !data.error && statuses.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className="table-wrap">
           <table className="w-full text-sm text-right">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="py-2 px-2 font-medium whitespace-nowrap">زمان</th>
                 <th className="py-2 px-2 font-medium whitespace-nowrap">نوع</th>
                 <th className="py-2 px-2 font-medium">محتوا</th>
@@ -222,10 +222,10 @@ function HistoryView({ data, loading, onRefresh }) {
                 const content = s.textMessage || s.extendedTextMessage?.text || s.caption || "—";
                 const recipients = s.extendedTextMessage?.participants?.length ?? "—";
                 return (
-                  <tr key={s.idMessage || i} className="border-b border-slate-800">
-                    <td className="py-2 px-2 text-slate-400 whitespace-nowrap">{fmtTime(s.timestamp)}</td>
+                  <tr key={s.idMessage || i} className="border-b border-line">
+                    <td className="py-2 px-2 text-muted whitespace-nowrap">{fmtTime(s.timestamp)}</td>
                     <td className="py-2 px-2 whitespace-nowrap">{s.typeMessage || "—"}</td>
-                    <td className="py-2 px-2 text-slate-200 break-words">{truncate(content)}</td>
+                    <td className="py-2 px-2 text-ink break-words">{truncate(content)}</td>
                     <td className="py-2 px-2 whitespace-nowrap">{recipients === "—" ? "—" : fa(recipients)}</td>
                   </tr>
                 );
@@ -243,25 +243,25 @@ function RoadmapView({ data, loading, onRefresh }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <p className="text-sm text-slate-400">برنامه آینده استوری</p>
+        <p className="text-sm text-muted">برنامه آینده استوری</p>
         <button className="btn-secondary text-xs" disabled={loading} onClick={onRefresh}>
           {loading ? "در حال بارگذاری..." : "🔄 تازه‌سازی"}
         </button>
       </div>
 
-      {loading && data === null && <p className="text-slate-500 text-sm">در حال بارگذاری...</p>}
+      {loading && data === null && <p className="text-muted text-sm">در حال بارگذاری...</p>}
 
       {data !== null && rows.length === 0 && (
-        <div className="card bg-sky-500/10 border-sky-500/30 text-sky-200 text-sm">
+        <div className="card bg-sky-50 text-sky-700 border-sky-200 text-sm">
           هیچ برنامه استوری‌ای برای این حساب تنظیم نشده. از صفحه «برنامه استوری» می‌توانید اضافه کنید.
         </div>
       )}
 
       {rows.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className="table-wrap">
           <table className="w-full text-sm text-right">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="py-2 px-2 font-medium whitespace-nowrap">نام</th>
                 <th className="py-2 px-2 font-medium whitespace-nowrap">نوع</th>
                 <th className="py-2 px-2 font-medium whitespace-nowrap">اجرای بعدی (شمسی)</th>
@@ -281,17 +281,17 @@ function RoadmapView({ data, loading, onRefresh }) {
                 }
                 const times = (r.times && r.times.length) ? r.times.join("،") : "—";
                 return (
-                  <tr key={r.id || i} className="border-b border-slate-800">
+                  <tr key={r.id || i} className="border-b border-line">
                     <td className="py-2 px-2 whitespace-nowrap">{r.name || "—"}</td>
                     <td className="py-2 px-2 whitespace-nowrap">{typeLabel}</td>
-                    <td className="py-2 px-2 text-slate-400 whitespace-nowrap">{r.next_run_shamsi || "—"}</td>
-                    <td className="py-2 px-2 text-slate-200 break-words">{when}</td>
-                    <td className="py-2 px-2 text-slate-200 whitespace-nowrap">{times}</td>
+                    <td className="py-2 px-2 text-muted whitespace-nowrap">{r.next_run_shamsi || "—"}</td>
+                    <td className="py-2 px-2 text-ink break-words">{when}</td>
+                    <td className="py-2 px-2 text-ink whitespace-nowrap">{times}</td>
                     <td className="py-2 px-2 whitespace-nowrap">
                       {r.is_active ? (
-                        <span className="badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">فعال</span>
+                        <span className="badge bg-brand-light text-brand border-brand/30">فعال</span>
                       ) : (
-                        <span className="badge bg-slate-500/20 text-slate-300 border-slate-500/40">غیرفعال</span>
+                        <span className="badge bg-slate-100 text-muted border-slate-300">غیرفعال</span>
                       )}
                     </td>
                   </tr>
@@ -535,8 +535,8 @@ export default function Statuses() {
       {/* V47 PART 2 — live backlog-analysis progress (background job, polled). */}
       {backlogProg && (
         <div className={`card text-sm ${backlogProg.finished
-          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200"
-          : "bg-sky-500/10 border-sky-500/30 text-sky-200"}`}>
+          ? "bg-brand-light text-brand border-brand/30"
+          : "bg-sky-50 text-sky-700 border-sky-200"}`}>
           {backlogProg.finished ? (
             <span>
               ✅ تحلیل استوری‌ها کامل شد — {fa(backlogProg.analyzed)} تحلیل شد،
@@ -557,9 +557,9 @@ export default function Statuses() {
 
       {mainTab === "mine" ? (
         <>
-          <p className="text-sm text-slate-400">استوری روی همه حساب‌های فعال منتشر می‌شود.</p>
+          <p className="text-sm text-muted">استوری روی همه حساب‌های فعال منتشر می‌شود.</p>
 
-          <div className="card bg-amber-500/10 border-amber-500/30 text-amber-200 text-sm">
+          <div className="card bg-amber-50 text-amber-700 border-amber-200 text-sm">
             💡 استوری عکس‌دار معمولاً بازدید بیشتری از استوری متنی می‌گیرد. برای تبلیغات، «عکس با کپشن» را انتخاب کنید.
           </div>
 
@@ -588,7 +588,7 @@ export default function Statuses() {
           ) : tab === "voice" ? (
             <div className="card space-y-3">
               <div><label className="label">آدرس فایل صوتی (mp3/ogg)</label><input className="input" value={voiceUrl} onChange={(e) => setVoiceUrl(e.target.value)} placeholder="https://…/voice.mp3" /></div>
-              <p className="text-xs text-slate-500">فایل صوتی را ابتدا در «فایل‌ها» آپلود کنید و لینک آن را اینجا بگذارید.</p>
+              <p className="text-xs text-muted">فایل صوتی را ابتدا در «فایل‌ها» آپلود کنید و لینک آن را اینجا بگذارید.</p>
               <button className="btn-primary w-full" disabled={busy} onClick={sendVoice}>{busy ? "..." : "انتشار استوری صوتی"}</button>
             </div>
           ) : (
@@ -601,12 +601,12 @@ export default function Statuses() {
 
           {result && (
             <div className="card">
-              <p className="text-sm text-slate-400 mb-2">ارسال به {result.sent_to} حساب:</p>
+              <p className="text-sm text-muted mb-2">ارسال به {result.sent_to} حساب:</p>
               <ul className="text-sm space-y-1">
                 {result.results.map((r, i) => (
                   <li key={i} className="flex justify-between">
                     <span>{r.account}</span>
-                    <span className={r.error ? "text-red-400" : "text-emerald-400 font-mono text-xs"}>{r.error || r.message_id || "ok"}</span>
+                    <span className={r.error ? "text-red-700" : "text-brand font-mono text-xs"}>{r.error || r.message_id || "ok"}</span>
                   </li>
                 ))}
               </ul>

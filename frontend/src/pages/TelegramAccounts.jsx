@@ -22,7 +22,7 @@ export default function TelegramAccounts() {
         <button className="btn-primary" onClick={() => setCreating(true)}>+ افزودن اکانت تلگرام</button>
       </div>
 
-      <div className="card text-sm text-slate-300 bg-sky-500/10 border-sky-500/30 space-y-1">
+      <div className="card text-sm bg-sky-50 text-sky-700 border-sky-200 space-y-1">
         <div className="font-bold">نکات ضدمسدودی تلگرام (متفاوت با واتساپ):</div>
         <div>• در ۴۸ ساعت اول پس از اتصال، این اکانت به هیچ غریبه‌ای پیام نمی‌فرستد (محدودیت خودکار محافظتی).</div>
         <div>• فاصله‌ی هر ارسال حداقل ۱۰ تا ۱۵ ثانیه است.</div>
@@ -34,10 +34,10 @@ export default function TelegramAccounts() {
         <Empty label="هنوز اکانت تلگرامی اضافه نشده است." />
       )}
       {telegramAccounts.length > 0 && (
-        <div className="card overflow-x-auto">
+        <div className="card table-wrap">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-slate-400 border-b border-slate-700">
+              <tr className="text-muted border-b border-line">
                 <th className="text-right p-2">نام</th>
                 <th className="text-right p-2">شناسه</th>
                 <th className="text-right p-2">وضعیت</th>
@@ -46,12 +46,12 @@ export default function TelegramAccounts() {
             </thead>
             <tbody>
               {telegramAccounts.map((a) => (
-                <tr key={a.id} className="border-b border-slate-800">
+                <tr key={a.id} className="border-b border-line">
                   <td className="p-2 font-bold">{a.name}</td>
-                  <td className="p-2 text-slate-400">{a.instance_id}</td>
+                  <td className="p-2 text-muted">{a.instance_id}</td>
                   <td className="p-2">{STATUS_FA[a.status] || a.status}</td>
                   <td className="p-2 text-left">
-                    <button className="btn-ghost" onClick={() => setAuthFor(a)}>اتصال / QR</button>
+                    <button className="btn-secondary btn-sm" onClick={() => setAuthFor(a)}>اتصال / QR</button>
                   </td>
                 </tr>
               ))}
@@ -93,12 +93,12 @@ function CreateModal({ onClose, onDone }) {
     <Modal title="افزودن اکانت تلگرام" onClose={onClose}>
       <div className="space-y-3">
         <Field label="نام" value={f.name} onChange={(v) => setF({ ...f, name: v })} />
-        <Field label="شناسه instance (از پروژه تلگرام Green API)" value={f.instance_id}
+        <Field label="شناسه instance (از پروژه تلگرام سرویس)" value={f.instance_id}
                onChange={(v) => setF({ ...f, instance_id: v })} />
         <Field label="توکن API" value={f.api_token} onChange={(v) => setF({ ...f, api_token: v })} />
         <Field label="آدرس API (اختیاری — پیش‌فرض میزبان پارتنر تلگرام)" value={f.api_host}
                onChange={(v) => setF({ ...f, api_host: v })} />
-        <div className="text-xs text-amber-300">
+        <div className="text-xs text-amber-700">
           این اکانت با کلید پارتنر «تلگرام» ثبت می‌شود و هرگز با کلید واتساپ اشتباه نمی‌شود.
         </div>
         <button className="btn-primary w-full" disabled={busy} onClick={submit}>
@@ -141,7 +141,7 @@ function AuthModal({ account, onClose }) {
     <Modal title={`اتصال تلگرام: ${account.name}`} onClose={onClose} wide>
       <div className="space-y-3">
         {notice?.notice && (
-          <div className="card text-xs text-slate-300 bg-amber-500/10 border-amber-500/30 space-y-1">
+          <div className="card text-xs bg-amber-50 text-amber-700 border-amber-200 space-y-1">
             {notice.notice.map((n, i) => <div key={i}>{n}</div>)}
           </div>
         )}
@@ -160,16 +160,16 @@ function AuthModal({ account, onClose }) {
             {qr?.qr ? (
               <img src={`data:image/png;base64,${qr.qr}`} alt="QR" className="mx-auto w-56 h-56" />
             ) : (
-              <div className="text-slate-400 text-sm">{qr?.message || "QR در دسترس نیست"}</div>
+              <div className="text-muted text-sm">{qr?.message || "QR در دسترس نیست"}</div>
             )}
-            <div className="text-xs text-slate-400">{notice?.link_hint}</div>
+            <div className="text-xs text-muted">{notice?.link_hint}</div>
             <button className="btn-ghost" onClick={reloadQr}>بارگذاری مجدد QR</button>
           </div>
         )}
 
         {tab === "code" && (
           <div className="space-y-2">
-            <div className="text-xs text-amber-300">
+            <div className="text-xs text-amber-700">
               روش کد+رمز ممکن است طبق تلگرام ناپایدار باشد — در صورت امکان از QR استفاده کنید.
             </div>
             <Field label="شماره تلفن" value={phone} onChange={setPhone} />
@@ -190,8 +190,8 @@ function AuthModal({ account, onClose }) {
           </div>
         )}
 
-        <div className="flex items-center justify-between border-t border-slate-700 pt-2">
-          <span className="text-sm text-slate-400">وضعیت: {STATUS_FA[state] || state}</span>
+        <div className="flex items-center justify-between border-t border-line pt-2">
+          <span className="text-sm text-muted">وضعیت: {STATUS_FA[state] || state}</span>
           <button className="btn-primary" onClick={poll}>بررسی وضعیت اتصال</button>
         </div>
       </div>
@@ -202,7 +202,7 @@ function AuthModal({ account, onClose }) {
 function Field({ label, value, onChange }) {
   return (
     <div>
-      <label className="text-xs text-slate-400">{label}</label>
+      <label className="text-xs text-muted">{label}</label>
       <input className="input w-full" value={value} onChange={(e) => onChange(e.target.value)} />
     </div>
   );

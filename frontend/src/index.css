@@ -2,6 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── افراپیام — «هر پیام، یک فرصت فروش» ─────────────────────────────────────────
+   Central design tokens. The whole platform reads from these CSS variables +
+   the matching Tailwind tokens (tailwind.config.js). Light, professional, RTL. */
+:root {
+  --brand: #16A34A;
+  --brand-hover: #15803D;
+  --brand-active: #166534;
+  --brand-light: #F0FDF4;
+  --ink: #1F2937;      /* primary text   */
+  --muted: #6B7280;    /* secondary text */
+  --line: #E5E7EB;     /* borders        */
+  --canvas: #F8FAFC;   /* page bg        */
+  --surface: #FFFFFF;  /* cards / forms  */
+}
+
 html,
 body,
 #root {
@@ -10,47 +25,89 @@ body,
 
 body {
   @apply font-sans;
-  /* V14 PART H — dark theme: no pure black bg, slightly-muted (not pure white) text.
-     Persian needs more line height for descenders/dots. */
-  background-color: #0F1214;
-  color: #E6E8EA;
+  background-color: var(--canvas);
+  color: var(--ink);
+  /* Persian needs more line height for descenders/dots. */
   line-height: 1.7;
 }
 
-/* Visible focus ring for full keyboard navigation (WCAG 2.2). */
+/* Visible green focus ring for full keyboard navigation (WCAG 2.2). */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid #25D366;
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
-/* Reusable component classes */
+/* ── Reusable component classes (used app-wide; restyle here, not per page) ──── */
 @layer components {
+  /* Cards / surfaces */
   .card {
-    @apply bg-slate-800 border border-slate-700 rounded-xl p-4;
+    @apply bg-surface border border-line rounded-xl p-4 shadow-card;
   }
+
+  /* Buttons — base (default = medium / 40px). Size modifiers below override. */
   .btn {
-    @apply px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 h-10 px-4 rounded-btn
+           text-sm font-medium leading-none text-center align-middle select-none
+           transition-colors duration-150
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
   }
+  /* Variants — one green primary; secondary = white + green border; danger = red. */
   .btn-primary {
-    @apply btn bg-brand hover:bg-brand-dark text-white;
+    @apply btn bg-brand text-white hover:bg-brand-hover active:bg-brand-active;
   }
   .btn-secondary {
-    @apply btn bg-slate-700 hover:bg-slate-600 text-slate-100;
+    @apply btn bg-surface text-brand border border-brand hover:bg-brand-light active:bg-brand-light;
   }
   .btn-danger {
-    @apply btn bg-red-600 hover:bg-red-500 text-white;
+    @apply btn bg-red-600 text-white hover:bg-red-700 active:bg-red-800;
   }
+  .btn-ghost {
+    @apply btn bg-transparent text-ink hover:bg-slate-100 active:bg-slate-200;
+  }
+  /* Size modifiers — declared AFTER variants so height/padding win. */
+  .btn-sm { @apply h-8 px-3 text-sm; }    /* 32px — tables / row actions      */
+  .btn-md { @apply h-10 px-4 text-sm; }   /* 40px — forms / normal actions    */
+  .btn-lg { @apply h-12 px-6 text-base; } /* 48px — primary page action       */
+  /* Loading state — the React <Button> sets this + aria-busy to block re-clicks. */
+  .btn-loading { @apply opacity-70 cursor-wait pointer-events-none; }
+
+  /* Inputs / forms */
   .input {
-    @apply w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand;
+    @apply w-full bg-surface border border-line rounded-btn px-3 h-10 text-sm text-ink
+           placeholder:text-muted focus:outline-none focus:border-brand
+           focus:ring-2 focus:ring-brand/20;
   }
+  textarea.input { @apply h-auto py-2; }
+  select.input { @apply h-10; }
   .label {
-    @apply block text-sm text-slate-400 mb-1;
+    @apply block text-sm text-muted mb-1;
   }
+
+  /* Badges */
   .badge {
-    @apply inline-block px-2 py-0.5 rounded-full text-xs border;
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs border font-medium;
+  }
+
+  /* Tables — consistent header / row / hover on light surfaces */
+  .table {
+    @apply w-full text-sm text-ink border-collapse;
+  }
+  .table thead th {
+    @apply text-right text-xs font-bold text-muted bg-canvas px-3 py-2 border-b border-line whitespace-nowrap;
+  }
+  .table tbody td {
+    @apply px-3 py-2 border-b border-line align-middle;
+  }
+  .table tbody tr:hover {
+    @apply bg-canvas;
+  }
+  /* Wrap wide tables in .table-wrap so they scroll horizontally on small screens. */
+  .table-wrap {
+    @apply w-full overflow-x-auto rounded-xl border border-line bg-surface;
   }
 }

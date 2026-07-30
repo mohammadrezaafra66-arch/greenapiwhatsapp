@@ -85,7 +85,7 @@ export default function App() {
         <Route path="own-numbers" element={<OwnNumbers />} />
         <Route path="active-contacts" element={<ActiveContacts />} />
         <Route path="accounts-overview" element={<AccountsOverview />} />
-        <Route path="*" element={<div className="text-slate-400">صفحه یافت نشد</div>} />
+        <Route path="*" element={<div className="text-muted">صفحه یافت نشد</div>} />
       </Route>
       </Routes>
     </ErrorBoundary>

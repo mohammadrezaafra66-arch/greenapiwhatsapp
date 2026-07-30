@@ -143,24 +143,24 @@ export default function Contacts() {
       </div>
 
       {showCheckInfo && (
-        <div className="card text-xs text-slate-400">
+        <div className="card text-xs text-muted">
           این دکمه شماره‌های انتخاب‌شده را بررسی می‌کند که آیا واتساپ دارند یا خیر. شماره‌هایی که واتساپ ندارند از ارسال کمپین خودکار حذف می‌شوند.
         </div>
       )}
 
       <div className="card p-0 overflow-hidden">
         <button
-          className="w-full flex items-center justify-between p-3 text-sm text-slate-300 hover:bg-slate-800/50"
+          className="w-full flex items-center justify-between p-3 text-sm text-ink hover:bg-canvas"
           onClick={() => setShowGuide((v) => !v)}
         >
           <span className="flex items-center gap-2">
             <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand/20 text-brand text-xs font-bold">؟</span>
             راهنمای آپلود اکسل
           </span>
-          <span className="text-slate-500">{showGuide ? "▲" : "▼"}</span>
+          <span className="text-muted">{showGuide ? "▲" : "▼"}</span>
         </button>
         {showGuide && (
-          <div className="border-t border-slate-700 p-4 space-y-3 text-sm text-slate-300">
+          <div className="border-t border-line p-4 space-y-3 text-sm text-ink">
             <ul className="space-y-1.5 list-disc pr-5">
               <li><b>فرمت فایل:</b> xlsx یا xls</li>
               <li><b>ستون اجباری:</b> phone یا شماره یا موبایل</li>
@@ -169,32 +169,32 @@ export default function Contacts() {
               <li>شماره‌های تکراری خودکار حذف می‌شن</li>
             </ul>
             <div>
-              <p className="text-xs text-slate-500 mb-1">نمونه:</p>
+              <p className="text-xs text-muted mb-1">نمونه:</p>
               <div className="overflow-x-auto">
-                <table className="text-xs border border-slate-700 rounded">
-                  <thead className="text-slate-400 bg-slate-800/60">
+                <table className="text-xs border border-line rounded">
+                  <thead className="text-muted bg-canvas">
                     <tr>
-                      <th className="p-2 border border-slate-700 text-right">phone</th>
-                      <th className="p-2 border border-slate-700 text-right">first_name</th>
-                      <th className="p-2 border border-slate-700 text-right">last_name</th>
-                      <th className="p-2 border border-slate-700 text-right">province</th>
-                      <th className="p-2 border border-slate-700 text-right">city</th>
+                      <th className="p-2 border border-line text-right">phone</th>
+                      <th className="p-2 border border-line text-right">first_name</th>
+                      <th className="p-2 border border-line text-right">last_name</th>
+                      <th className="p-2 border border-line text-right">province</th>
+                      <th className="p-2 border border-line text-right">city</th>
                     </tr>
                   </thead>
-                  <tbody className="text-slate-300">
+                  <tbody className="text-ink">
                     <tr>
-                      <td className="p-2 border border-slate-700 font-mono">09121234567</td>
-                      <td className="p-2 border border-slate-700">علی</td>
-                      <td className="p-2 border border-slate-700">رضایی</td>
-                      <td className="p-2 border border-slate-700">تهران</td>
-                      <td className="p-2 border border-slate-700">تهران</td>
+                      <td className="p-2 border border-line font-mono">09121234567</td>
+                      <td className="p-2 border border-line">علی</td>
+                      <td className="p-2 border border-line">رضایی</td>
+                      <td className="p-2 border border-line">تهران</td>
+                      <td className="p-2 border border-line">تهران</td>
                     </tr>
                     <tr>
-                      <td className="p-2 border border-slate-700 font-mono">989351234567</td>
-                      <td className="p-2 border border-slate-700">مریم</td>
-                      <td className="p-2 border border-slate-700">احمدی</td>
-                      <td className="p-2 border border-slate-700">اصفهان</td>
-                      <td className="p-2 border border-slate-700">کاشان</td>
+                      <td className="p-2 border border-line font-mono">989351234567</td>
+                      <td className="p-2 border border-line">مریم</td>
+                      <td className="p-2 border border-line">احمدی</td>
+                      <td className="p-2 border border-line">اصفهان</td>
+                      <td className="p-2 border border-line">کاشان</td>
                     </tr>
                   </tbody>
                 </table>
@@ -207,7 +207,7 @@ export default function Contacts() {
       <input className="input" placeholder="جستجو بر اساس نام یا شماره..." value={search} onChange={(e) => setSearch(e.target.value)} />
 
       {data && (
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-muted">
           نمایش {fa(data.length)} از {fa(total)} مخاطب
         </p>
       )}
@@ -218,7 +218,7 @@ export default function Contacts() {
       {data && data.length > 0 && (
         <div className="card overflow-x-auto p-0">
           <table className="w-full text-sm">
-            <thead className="text-slate-400 border-b border-slate-700">
+            <thead className="text-muted border-b border-line">
               <tr>
                 <th className="p-3 w-12 text-center">ردیف</th>
                 <th className="p-3 text-right">
@@ -234,32 +234,32 @@ export default function Contacts() {
             </thead>
             <tbody>
               {data.map((c, i) => (
-                <tr key={c.id} className="border-b border-slate-800 hover:bg-slate-800/50">
+                <tr key={c.id} className="border-b border-line hover:bg-canvas">
                   {/* Continuous row number across pages — data is appended in order,
                       so index+1 is the absolute position (page 2 starts at 1001). */}
-                  <td className="p-3 text-center text-slate-500 text-xs">{fa(i + 1)}</td>
+                  <td className="p-3 text-center text-muted text-xs">{fa(i + 1)}</td>
                   <td className="p-3"><input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} /></td>
                   <td className="p-3">{c.name}</td>
                   <td className="p-3 font-mono text-xs">{c.phone}</td>
                   <td className="p-3">{c.province || "—"}</td>
                   <td className="p-3">
-                    {c.has_whatsapp === true ? <span className="text-emerald-400">✓</span> : c.has_whatsapp === false ? <span className="text-red-400">✗</span> : <span className="text-slate-500">?</span>}
+                    {c.has_whatsapp === true ? <span className="text-brand">✓</span> : c.has_whatsapp === false ? <span className="text-red-600">✗</span> : <span className="text-muted">?</span>}
                   </td>
-                  <td className="p-3 text-xs text-slate-500 max-w-[10rem] truncate" title={c.group_source || c.source || ""}>
+                  <td className="p-3 text-xs text-muted max-w-[10rem] truncate" title={c.group_source || c.source || ""}>
                     {c.group_source || c.source || "—"}
                   </td>
                   <td className="p-3">
                     <div className="flex gap-2 flex-wrap">
-                      <button className="text-sky-400 hover:underline text-xs" title="پیام ناپدیدشونده" onClick={() => setDisappearing(c)}>⏱️</button>
+                      <button className="text-sky-600 hover:underline text-xs" title="پیام ناپدیدشونده" onClick={() => setDisappearing(c)}>⏱️</button>
                       <button
-                        className="text-emerald-400 hover:underline text-xs disabled:opacity-50"
+                        className="text-brand hover:underline text-xs disabled:opacity-50"
                         title="افزودن به مخاطبین واتساپ"
                         disabled={phonebookBusy === c.id}
                         onClick={() => addToPhonebook(c.id)}
                       >
                         {phonebookBusy === c.id ? "⏳" : "📱"}
                       </button>
-                      <button className="text-red-400 hover:underline text-xs" onClick={async () => { if (await confirmDialog("این مخاطب مسدود شود؟")) { await Api.blacklist(c.id); load(); } }}>لیست سیاه</button>
+                      <button className="text-red-600 hover:underline text-xs" onClick={async () => { if (await confirmDialog("این مخاطب مسدود شود؟")) { await Api.blacklist(c.id); load(); } }}>لیست سیاه</button>
                     </div>
                   </td>
                 </tr>
@@ -292,7 +292,7 @@ export default function Contacts() {
               </button>
             ))}
           </div>
-          <p className="text-xs text-slate-400 mt-3">پیام‌های این چت پس از مدت انتخابی به‌طور خودکار حذف می‌شوند.</p>
+          <p className="text-xs text-muted mt-3">پیام‌های این چت پس از مدت انتخابی به‌طور خودکار حذف می‌شوند.</p>
         </Modal>
       )}
     </div>
@@ -331,11 +331,11 @@ function AddContactModal({ onClose, onDone }) {
           <label className="label">شماره موبایل *</label>
           <input className="input" value={f.phone} onChange={set("phone")} placeholder="09123456789" />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div><label className="label">نام</label><input className="input" value={f.first_name} onChange={set("first_name")} /></div>
           <div><label className="label">نام خانوادگی</label><input className="input" value={f.last_name} onChange={set("last_name")} /></div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div><label className="label">استان</label><input className="input" value={f.province} onChange={set("province")} /></div>
           <div><label className="label">شهر</label><input className="input" value={f.city} onChange={set("city")} /></div>
         </div>

@@ -1,6 +1,7 @@
 import React from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { IncidentsApi, Inbox as InboxApi, QueueApi } from "../api.js";
+import { BRAND_NAME, BRAND_SLOGAN } from "../brand.js";
 
 const fa = (n) => (n == null ? "" : String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]));
 
@@ -83,7 +84,7 @@ const NAV = [
       { to: "/ai-settings", label: "تنظیمات هوش مصنوعی" },
       { to: "/own-numbers", label: "شماره‌های خودی (حذف از رصد)" },
       { to: "/join-links", label: "لینک‌های گروه و کانال" },
-      { to: "/capabilities", label: "قابلیت‌های Green API" },
+      { to: "/capabilities", label: "قابلیت‌های سرویس" },
     ],
   },
 ];
@@ -133,7 +134,7 @@ const PAGES = [
   { to: "/products", label: "رصد محصولات", syn: "products محصول" },
   { to: "/ai-keys", label: "کلیدهای هوش مصنوعی", syn: "ai keys openai" },
   { to: "/ai-settings", label: "تنظیمات هوش مصنوعی", syn: "ai settings" },
-  { to: "/capabilities", label: "قابلیت‌های Green API", syn: "capabilities method support پشتیبانی" },
+  { to: "/capabilities", label: "قابلیت‌های سرویس", syn: "capabilities method support پشتیبانی green api زیرساخت" },
   { to: "/join-links", label: "لینک‌های گروه و کانال", syn: "join links دعوت" },
   { to: "/own-numbers", label: "شماره‌های خودی (حذف از رصد)", syn: "own numbers exclusion شماره خودی حذف رصد محصولات exclude" },
   { to: "/active-contacts", label: "مخاطبین فعال واتساپ", syn: "active contacts lead خرید سرنخ مخاطبین فعال harvested" },
@@ -153,15 +154,15 @@ const LS_GROUP = (label) => `afrakala.nav.open.${label}`;
 function leafClass({ isActive }) {
   return `group flex items-center gap-2 pl-3 pr-2 py-2 rounded-lg text-sm min-h-[40px] transition-[background,color] duration-150 ease-out ${
     isActive
-      ? "bg-brand/15 text-brand font-bold border-r-2 border-brand"
-      : "text-slate-300 hover:bg-slate-800 border-r-2 border-transparent"
+      ? "bg-brand-light text-brand font-bold border-r-2 border-brand"
+      : "text-ink hover:bg-canvas border-r-2 border-transparent"
   }`;
 }
 
 function Badge({ n, red }) {
   if (!n) return null;
   return (
-    <span className={`mr-auto badge text-xs ${red ? "bg-red-500/30 text-red-300 border-red-500/50" : "bg-amber-500/25 text-amber-200 border-amber-500/50"}`}>
+    <span className={`mr-auto badge text-xs ${red ? "bg-red-50 text-red-700 border-red-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
       {fa(n)}
     </span>
   );
@@ -186,7 +187,7 @@ function NavGroup({ item, badges, collapsed }) {
       <NavLink to={to} title={item.label} className={leafClass}>
         <span className="text-lg mx-auto relative">
           {item.icon}
-          {groupBadge > 0 && <span className={`absolute -top-1 -left-1 w-2 h-2 rounded-full ${groupRed ? "bg-red-400" : "bg-amber-400"}`} />}
+          {groupBadge > 0 && <span className={`absolute -top-1 -left-1 w-2 h-2 rounded-full ${groupRed ? "bg-red-500" : "bg-amber-500"}`} />}
         </span>
       </NavLink>
     );
@@ -195,18 +196,18 @@ function NavGroup({ item, badges, collapsed }) {
   return (
     <div>
       <button onClick={toggle} aria-expanded={open}
-        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm min-h-[40px] transition-colors duration-150 ease-out ${childActive ? "text-brand font-bold" : "text-slate-300 hover:bg-slate-800"}`}>
+        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm min-h-[40px] transition-colors duration-150 ease-out ${childActive ? "text-brand font-bold" : "text-ink hover:bg-canvas"}`}>
         <span className="flex items-center gap-2">
           <span className="text-base">{item.icon}</span>
           <span>{item.label}</span>
         </span>
         <span className="flex items-center gap-1">
-          {groupBadge > 0 && <span className={`badge text-xs ${groupRed ? "bg-red-500/30 text-red-300 border-red-500/50" : "bg-amber-500/25 text-amber-200 border-amber-500/50"}`}>{fa(groupBadge)}</span>}
+          {groupBadge > 0 && <span className={`badge text-xs ${groupRed ? "bg-red-50 text-red-700 border-red-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{fa(groupBadge)}</span>}
           <span className={`text-xs transition-transform duration-150 ease-out ${open ? "-rotate-90" : ""}`}>‹</span>
         </span>
       </button>
       {open && (
-        <div className="mr-4 mt-1 space-y-1 border-r border-slate-800 pr-2">
+        <div className="mr-4 mt-1 space-y-1 border-r border-line pr-2">
           {item.children.map((c) => (
             <NavLink key={c.label + c.to} to={c.to} className={leafClass}>
               <span className="text-xs opacity-60">•</span>
@@ -232,9 +233,9 @@ function CommandPalette({ open, onClose }) {
     : PAGES;
   const go = (to) => { navigate(to); onClose(); };
   return (
-    <div className="fixed inset-0 z-[60] bg-black/60 flex items-start justify-center pt-24 px-4" onClick={onClose}>
-      <div className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <input ref={inputRef} className="w-full bg-slate-900 px-4 py-3 text-sm outline-none border-b border-slate-800"
+    <div className="fixed inset-0 z-[60] bg-black/40 flex items-start justify-center pt-24 px-4" onClick={onClose}>
+      <div className="w-full max-w-lg bg-surface border border-line rounded-xl overflow-hidden shadow-pop" onClick={(e) => e.stopPropagation()}>
+        <input ref={inputRef} className="w-full bg-surface text-ink px-4 py-3 text-sm outline-none border-b border-line placeholder:text-muted"
           placeholder="جستجوی صفحه… (Enter برای رفتن، Esc برای بستن)"
           value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
@@ -243,12 +244,12 @@ function CommandPalette({ open, onClose }) {
           }} />
         <div className="max-h-80 overflow-y-auto">
           {results.length === 0 ? (
-            <p className="p-4 text-sm text-slate-500">موردی یافت نشد.</p>
+            <p className="p-4 text-sm text-muted">موردی یافت نشد.</p>
           ) : results.map((p) => (
             <button key={p.label + p.to} onClick={() => go(p.to)}
-              className="w-full text-right px-4 py-2 text-sm hover:bg-slate-800 flex items-center justify-between">
+              className="w-full text-right px-4 py-2 text-sm text-ink hover:bg-canvas flex items-center justify-between">
               <span>{p.label}</span>
-              <span className="text-xs text-slate-600 font-mono">{p.to}</span>
+              <span className="text-xs text-muted font-mono">{p.to}</span>
             </button>
           ))}
         </div>
@@ -296,11 +297,11 @@ export default function Layout() {
   return (
     <div className="flex h-full relative">
       {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-[#0F1214] border-b border-slate-800 flex items-center justify-between px-4">
-        <h1 className="text-base font-bold text-brand">افراکالا</h1>
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-surface border-b border-line flex items-center justify-between px-4">
+        <h1 className="text-base font-bold text-brand">{BRAND_NAME}</h1>
         <div className="flex items-center gap-3">
-          <button aria-label="جستجو" onClick={() => setPaletteOpen(true)} className="text-xl text-slate-300">⌕</button>
-          <button aria-label="منو" onClick={() => setMobileOpen(true)} className="text-2xl text-slate-300 leading-none">☰</button>
+          <button aria-label="جستجو" onClick={() => setPaletteOpen(true)} className="text-xl text-muted hover:text-ink">⌕</button>
+          <button aria-label="منو" onClick={() => setMobileOpen(true)} className="text-2xl text-muted hover:text-ink leading-none">☰</button>
         </div>
       </div>
 
@@ -308,28 +309,28 @@ export default function Layout() {
 
       {/* Sidebar (RTL → right side) */}
       <aside
-        className={`${collapsed ? "w-16" : "w-60"} shrink-0 bg-[#0F1214] border-l border-slate-800 flex flex-col
+        className={`${collapsed ? "w-16" : "w-60"} shrink-0 bg-surface border-l border-line flex flex-col
           fixed inset-y-0 right-0 z-50 transform transition-[transform,width] duration-200 ease-out md:static md:z-auto md:translate-x-0
           ${mobileOpen ? "translate-x-0" : "translate-x-full md:translate-x-0"}`}
         onClick={(e) => { if (e.target.closest("a")) setMobileOpen(false); }}
       >
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between gap-2">
+        <div className="p-4 border-b border-line flex items-center justify-between gap-2">
           {!collapsed && (
             <div className="min-w-0">
-              <h1 className="text-lg font-bold text-brand">افراکالا</h1>
-              <p className="text-xs text-slate-500 mt-0.5 truncate">پیام‌رسان افراکالا</p>
+              <h1 className="text-lg font-bold text-brand">{BRAND_NAME}</h1>
+              <p className="text-xs text-muted mt-0.5 truncate">{BRAND_SLOGAN}</p>
             </div>
           )}
           <div className="flex items-center gap-1">
-            {!collapsed && <button aria-label="جستجو (Ctrl+K)" title="جستجو (Ctrl+K)" onClick={() => setPaletteOpen(true)} className="text-slate-400 hover:text-white text-lg w-9 h-9 rounded-lg hover:bg-slate-800">⌕</button>}
-            <button aria-label={collapsed ? "باز کردن منو" : "جمع کردن منو"} title={collapsed ? "باز کردن" : "جمع کردن"} onClick={toggleCollapse} className="hidden md:flex text-slate-400 hover:text-white text-lg w-9 h-9 rounded-lg hover:bg-slate-800 items-center justify-center">{collapsed ? "»" : "«"}</button>
-            <button className="md:hidden text-slate-400 text-xl leading-none" aria-label="بستن" onClick={() => setMobileOpen(false)}>×</button>
+            {!collapsed && <button aria-label="جستجو (Ctrl+K)" title="جستجو (Ctrl+K)" onClick={() => setPaletteOpen(true)} className="text-muted hover:text-ink text-lg w-9 h-9 rounded-lg hover:bg-canvas">⌕</button>}
+            <button aria-label={collapsed ? "باز کردن منو" : "جمع کردن منو"} title={collapsed ? "باز کردن" : "جمع کردن"} onClick={toggleCollapse} className="hidden md:flex text-muted hover:text-ink text-lg w-9 h-9 rounded-lg hover:bg-canvas items-center justify-center">{collapsed ? "»" : "«"}</button>
+            <button className="md:hidden text-muted text-xl leading-none" aria-label="بستن" onClick={() => setMobileOpen(false)}>×</button>
           </div>
         </div>
 
         <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
           {/* ⭐ Pinned/favorites shortcut rail (also present in their real groups below). */}
-          {!collapsed && <p className="px-3 pt-1 pb-0.5 text-[11px] font-bold text-slate-500">⭐ میان‌بُرها</p>}
+          {!collapsed && <p className="px-3 pt-1 pb-0.5 text-[11px] font-bold text-muted">⭐ میان‌بُرها</p>}
           {PINNED.map((p) => (
             <NavLink key={`pin${p.to}`} to={p.to} end={p.end} title={p.label} className={leafClass}>
               <span className="text-base">{p.icon}</span>
@@ -337,10 +338,10 @@ export default function Layout() {
               {!collapsed && <Badge n={p.badgeKey ? badges[p.badgeKey] : 0} red={p.badgeRed} />}
             </NavLink>
           ))}
-          <div className="my-2 border-t border-slate-800" />
+          <div className="my-2 border-t border-line" />
           {NAV.map((n, i) =>
             n.separator ? (
-              <div key={`sep${i}`} className="my-2 border-t border-slate-800" />
+              <div key={`sep${i}`} className="my-2 border-t border-line" />
             ) : n.children ? (
               <NavGroup key={n.label} item={n} badges={badges} collapsed={collapsed} />
             ) : (
@@ -353,8 +354,8 @@ export default function Layout() {
         </nav>
 
         {!collapsed && (
-          <div className="p-3 text-xs text-slate-500 border-t border-slate-800 space-y-0.5">
-            <div className="flex items-center gap-1">متصل به سرور <span className="text-emerald-400">🟢</span></div>
+          <div className="p-3 text-xs text-muted border-t border-line space-y-0.5">
+            <div className="flex items-center gap-1">متصل به سرور <span className="text-brand">🟢</span></div>
             <div>آخرین همگام‌سازی: {syncAgo == null ? "…" : syncAgo === 0 ? "چند لحظه پیش" : `${fa(syncAgo)} دقیقه پیش`}</div>
           </div>
         )}
@@ -368,10 +369,10 @@ export default function Layout() {
       </main>
 
       {/* Mobile bottom bar — the 4 most-used */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 h-14 bg-[#0F1214] border-t border-slate-800 flex">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 h-14 bg-surface border-t border-line flex">
         {MOBILE_BAR.map((m) => (
           <NavLink key={m.to} to={m.to} end={m.end}
-            className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 text-xs ${isActive ? "text-brand font-bold" : "text-slate-400"}`}>
+            className={({ isActive }) => `flex-1 flex flex-col items-center justify-center gap-0.5 text-xs ${isActive ? "text-brand font-bold" : "text-muted"}`}>
             <span className="text-lg">{m.icon}</span>
             <span>{m.label}</span>
           </NavLink>

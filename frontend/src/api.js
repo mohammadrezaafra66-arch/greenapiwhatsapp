@@ -337,17 +337,25 @@ export const ReportingApi = {
   dailyLogs: (date) => http.get(`/reporting/daily-logs${date ? `?date=${date}` : ""}`).then((r) => r.data),
   productMentions: () => http.get("/dashboard/product-mentions/recent").then((r) => r.data),
   clearMentions: () => http.delete("/reporting/product-mentions").then((r) => r.data),
-  topProducts: (limit = 150, days = 30, source = "", search = "") =>
-    http.get(`/reporting/top-products?limit=${limit}&days=${days}${source ? `&source=${source}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`).then((r) => r.data),
+  topProducts: (limit = 150, days = 30, source = "", search = "", aiMerge = false) =>
+    http.get(`/reporting/top-products?limit=${limit}&days=${days}${source ? `&source=${source}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}${aiMerge ? "&ai_merge=true" : ""}`).then((r) => r.data),
   contactTrend: (phone, days = 90) =>
     http.get(`/reporting/contact-trend?phone=${encodeURIComponent(phone)}&days=${days}`).then((r) => r.data),
   bestHours: (days = 30) => http.get(`/reporting/best-hours?days=${days}`).then((r) => r.data),
   spotAlerts: (unreadOnly = false) =>
     http.get(`/reporting/spot-alerts?unread_only=${unreadOnly}`).then((r) => r.data),
   markSpotAlertRead: (id) => http.post(`/reporting/spot-alerts/${id}/read`).then((r) => r.data),
-  productSellers: (productName, days = 30, limit = 100) =>
+  productSellers: (productName, days = 30, limit = 100, canonicalKey = "", matchKeys = []) =>
     http
-      .get("/reporting/product-sellers", { params: { product_name: productName, days, limit } })
+      .get("/reporting/product-sellers", {
+        params: {
+          product_name: productName,
+          days,
+          limit,
+          ...(canonicalKey ? { canonical_key: canonicalKey } : {}),
+          ...(matchKeys.length ? { match_keys: matchKeys.join(",") } : {}),
+        },
+      })
       .then((r) => r.data),
 };
 

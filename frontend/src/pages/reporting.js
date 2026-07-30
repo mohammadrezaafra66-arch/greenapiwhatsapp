@@ -51,7 +51,8 @@ export function normalizeTopProductsFilters(raw = {}) {
   const limit = normalizeNumber(raw.limit, TOP_PRODUCTS_LIMIT_OPTIONS, TOP_PRODUCTS_DEFAULT_LIMIT);
   const source = SOURCE_OPTIONS.has(raw.source) ? raw.source : "";
   const search = typeof raw.search === "string" ? raw.search : "";
-  return { days, limit, source, search };
+  const aiMerge = raw.aiMerge === true;
+  return { days, limit, source, search, aiMerge };
 }
 
 export function loadTopProductsFilters(storage = globalThis?.localStorage) {
