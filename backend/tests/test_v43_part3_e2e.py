@@ -46,9 +46,12 @@ def _agg(name, **kw):
 async def test_rolling_window_max_limit_with_each_source(source, monkeypatch):
     captured = {}
     real = prs.top_products_rows
-    async def _spy(db, *, days, limit, source=None, search=None):   # V44 added `search`
+    # V44 added `search`; V52 added `ai_merge`. The double must track the real signature or
+    # every caller that passes a newer kwarg fails here with an unrelated TypeError.
+    async def _spy(db, *, days, limit, source=None, search=None, ai_merge=False):
         captured.update(days=days, limit=limit, source=source)
-        return await real(db, days=days, limit=limit, source=source, search=search)
+        return await real(db, days=days, limit=limit, source=source, search=search,
+                          ai_merge=ai_merge)
     monkeypatch.setattr(prs, "top_products_rows", _spy)
 
     rows = [_agg(f"محصول {i}") for i in range(MAX_LIMIT)]

@@ -19,7 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.reporting import ProductMentionLog
 from app.services.phone_extract import contacts_for
-from app.services.product_match import is_reportable_product_name, product_group_key
+from app.services.product_match import (
+    is_reportable_product_name,
+    product_canonical_key,
+    product_group_key,
+)
 
 
 def _cutoff(days: int) -> datetime:
@@ -52,9 +56,42 @@ def _split_sources(raw: str | None) -> list[str]:
     return sorted({s.strip() for s in raw.split(",") if s and s.strip()})
 
 
+def _collapse_by_alias(merged: dict[str, dict], alias: dict[str, str] | None) -> dict[str, dict]:
+    """Optional second-pass merge. `alias` maps old canonical_key -> final canonical_key.
+    Used by the AI-assisted path; deterministic grouping remains the default and fallback."""
+    if not alias:
+        return merged
+    out: dict[str, dict] = {}
+    for key, e in merged.items():
+        final = alias.get(key) or key
+        dst = out.get(final)
+        if dst is None:
+            dst = {**e, "sources": set(e["sources"]),
+                   "search_keys": set(e.get("search_keys", set())),
+                   "match_keys": set(e.get("match_keys", {key})),
+                   "canonical_key": final}
+            out[final] = dst
+            continue
+        dst["mention_count"] += e["mention_count"]
+        dst["group_count"] += e["group_count"]
+        dst["sender_count"] += e["sender_count"]
+        dst["sources"].update(e["sources"])
+        dst["search_keys"].update(e.get("search_keys", set()))
+        dst["match_keys"].update(e.get("match_keys", {key}))
+        lm = e.get("last_mention")
+        if lm is not None and (dst["last_mention"] is None or lm > dst["last_mention"]):
+            dst["last_mention"] = lm
+        if e["_top"] > dst["_top"]:
+            dst["_top"] = e["_top"]
+            dst["product_name"] = e["product_name"]
+        if dst["product_id"] is None and e.get("product_id"):
+            dst["product_id"] = e["product_id"]
+    return out
+
+
 async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
                             source: str | None = None, search: str | None = None,
-                            exclude_cores=None) -> list[dict]:
+                            exclude_cores=None, ai_merge: bool = False) -> list[dict]:
     """The exact top-products aggregation the tab uses: per product_name over the last `days`,
     mention_count (all rows), group_count (distinct group), sender_count (distinct sender), the
     distinct `sources` contributing (pv/group/status), and the last mention time. When `source` is
@@ -98,23 +135,31 @@ async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
         q = q.where(_own)
     rows = (await db.execute(q)).all()
 
-    # V44 — merge near-identical product-name spellings into ONE row by a normalized key (reusing the
-    # project's existing normalizers via product_match.product_group_key), so the same real product is
-    # not fragmented across spacing/digit-script/case/letter variants. mention_count (the ranking
-    # metric) and sources/last_mention are exact; group_count/sender_count are summed as an upper
-    # bound (the same group or sender using two spellings of one product is rare). The most-frequent
-    # spelling is shown, and any catalog match makes the merged row in-assistant.
+    # V44/V52 — merge product-name variants into ONE row. V44 handled spelling-only variants
+    # (spacing/digits/case). V52 adds a stronger canonical product key that understands category,
+    # brand-ish words and normalized model cores, so common ad shorthand such as
+    # SMS46NW01 ↔ 46NW01B also folds together without merging distinct model cores.
+    #
+    # The stronger key is GATED behind `ai_merge`. At the default ai_merge=False every caller
+    # gets V44's exact grouping, byte-for-byte — opting in is the only way to change what the
+    # report counts. Leaving it unconditional silently shifted mention_count/sender_count for
+    # every existing consumer of this function (see V45/V49 regressions).
     merged: dict[str, dict] = {}
     for r in rows:
         if not is_reportable_product_name(r.product_name):
             continue
-        key = product_group_key(r.product_name)
+        if ai_merge:
+            key = product_canonical_key(r.product_name) or product_group_key(r.product_name)
+        else:
+            key = product_group_key(r.product_name)
         e = merged.get(key)
         if e is None:
             e = {"product_name": r.product_name, "product_id": None, "mention_count": 0,
                  "group_count": 0, "sender_count": 0, "sources": set(),
-                 "last_mention": None, "_top": -1}
+                 "last_mention": None, "_top": -1, "canonical_key": key, "search_keys": set(),
+                 "match_keys": {key}}
             merged[key] = e
+        e["search_keys"].add(product_group_key(r.product_name))
         mc = int(r.mention_count or 0)
         e["mention_count"] += mc
         e["group_count"] += int(r.group_count or 0)
@@ -130,6 +175,15 @@ async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
         if e["product_id"] is None and r.product_id:   # any catalog match → in-assistant
             e["product_id"] = r.product_id
 
+    if ai_merge and len(merged) > 1:
+        try:
+            from app.services.product_ai_merge import ai_product_merge_aliases
+            merged = _collapse_by_alias(merged, await ai_product_merge_aliases(list(merged.values())))
+        except Exception as e:
+            # AI is an optional quality layer. A bad key, quota issue, malformed JSON, or timeout must
+            # never break the report or change the deterministic safety behavior.
+            print(f"[ProductMergeAI] skipped: {e}")
+
     # V44 — server-side search over the FULL merged set (not just the loaded page), tolerant of the
     # same normalization as the grouping: a search for one spelling («ال جی») matches every merged
     # variant («ال‌جی»). A term that normalizes to empty (only spaces/punctuation) is treated as no
@@ -137,7 +191,10 @@ async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
     items = merged.items()
     term = product_group_key(search) if search else ""
     if term:
-        items = [(k, e) for k, e in items if term in k]
+        items = [
+            (k, e) for k, e in items
+            if term in k or any(term in sk for sk in e.get("search_keys", set()))
+        ]
     ordered = sorted((e for _k, e in items),
                      key=lambda e: e["mention_count"], reverse=True)[:limit]
     return [
@@ -146,6 +203,8 @@ async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
             "product_name": e["product_name"],
             "product_id": e["product_id"],
             "in_assistant": bool(e["product_id"]),
+            "canonical_key": e["canonical_key"],
+            "match_keys": sorted(e.get("match_keys", {e["canonical_key"]})),
             "mention_count": e["mention_count"],
             "group_count": e["group_count"],
             "sender_count": e["sender_count"],
@@ -213,23 +272,32 @@ async def contact_trend_rows(db: AsyncSession, *, phone: str, days: int,
 
 
 async def product_mentioners_rows(db: AsyncSession, *, product_name: str, days: int,
-                                  limit: int) -> list[dict]:
+                                  limit: int, canonical_key: str | None = None,
+                                  match_keys: list[str] | None = None) -> list[dict]:
     """The exact drill-down the «مشاهده فروشندگان اخیر» modal shows: the recent mentions of one
     product (by name) over the last `days`, newest first, each with sender contact info + group +
     time. Contact numbers are derived the SAME way the modal does (`contacts_for`): the sender's own
     number first, then any additional numbers found in the message text. Returns raw rows (raw
     `mentioned_at` datetime) for the caller to format."""
-    limit = clamp_limit(limit)
+    output_limit = clamp_limit(limit)
+    # V52 — a top-products row may represent several raw product_name variants. Drill-down must show
+    # every seller for the merged product, not only rows whose stored product_name exactly equals the
+    # display spelling.
+    target_key = canonical_key or product_canonical_key(product_name) or product_group_key(product_name)
+    target_keys = {k for k in (match_keys or []) if k}
+    target_keys.add(target_key)
     rows = (await db.execute(
         select(ProductMentionLog)
-        .where(ProductMentionLog.product_name == product_name)
         .where(ProductMentionLog.mentioned_at >= _cutoff(days))
         .order_by(ProductMentionLog.mentioned_at.desc())
-        .limit(limit)
+        .limit(max(2000, min(output_limit * 25, 5000)))
     )).scalars().all()
 
     out = []
     for m in rows:
+        row_key = product_canonical_key(m.product_name or "") or product_group_key(m.product_name or "")
+        if row_key not in target_keys:
+            continue
         sender_display, phones_in_msg, all_contacts = contacts_for(
             m.sender_phone or "", m.message_text or "")
         # A «شماره کاری»-style secondary: the first DISTINCT extra number (not the sender's own,
@@ -245,4 +313,6 @@ async def product_mentioners_rows(db: AsyncSession, *, product_name: str, days: 
             "message_preview": (m.message_text or "")[:120],
             "product_id": m.product_id,                   # nullable; not the aggregation key
         })
+        if len(out) >= output_limit:
+            break
     return out

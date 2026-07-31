@@ -31,6 +31,20 @@ _PRODUCT_WORDS = {
     "پنکه", "بخاری", "آبگرمکن", "پکیج", "چیلر", "داکت", "داکت‌اسپلیت", "کاندیشنر",
     "کولرگازی", "air", "conditioner", "split", "inverter",
 }
+
+_CATEGORY_ALIASES = {
+    "dishwasher": {"ظرفشویی", "ماشین ظرفشویی"},
+    "washing_machine": {"لباسشویی", "ماشین لباسشویی"},
+    "vacuum": {"جاروبرقی"},
+    "fridge": {"یخچال", "فریزر", "ساید"},
+    "tv": {"تلویزیون"},
+    "air_conditioner": {"کولر", "کولرگازی", "گازی", "اسپلیت", "پنل"},
+    "microwave": {"مایکروفر", "مایکروویو"},
+}
+_CATEGORY_WORD_TO_KEY = {
+    word: key for key, words in _CATEGORY_ALIASES.items() for word in words
+}
+
 _AD_WORDS = {
     "تومان", "ریال", "قیمت", "فروش", "موجود", "موجودی", "ارسال", "گارانتی",
     "ضمانت", "تحویل", "نقد", "اقساط", "خرید", "پیشنهاد", "تخفیف", "همکار",
@@ -39,6 +53,11 @@ _MONEY_WORDS = {"تومان", "تومن", "ریال", "میلیون"}
 _FINANCE_ONLY_WORDS = {
     "واریز", "واریزی", "مبلغ", "فیش", "حساب", "حسابداری", "پذیرفته", "پرداخت",
     "کارت", "رسید", "بانک", "شبا", "تسویه", "مانده", "بدهی", "طلب",
+}
+_MERGE_STOPWORDS = _STOPWORDS | _PRODUCT_WORDS | _AD_WORDS | _MONEY_WORDS | _FINANCE_ONLY_WORDS | {
+    "ماشین", "اصل", "ترکیه", "ترک", "آلمان", "آلمانی", "چین", "چینی", "سری",
+    "مدل", "نفره", "قیمت", "موجود", "موجودی", "سفید", "مشکی", "استیل", "سیلور",
+    "نقره", "طلایی", "دودی", "زولیت", "zeolith", "عدد", "دستگاه",
 }
 _NOISE_WORDS = {
     "سلام", "درود", "وقت", "بخیر", "ممنون", "لطفا", "لطفاً", "تماس", "واتساپ",
@@ -106,6 +125,90 @@ def product_group_key(name: str) -> str:
     genuinely different products do not. Returns "" for an empty/None name."""
     from app.services.group_detection import normalize_fa
     return " ".join(_TOKEN_RE.findall(normalize_fa(name)))
+
+
+def _ordered_tokens(name: str) -> list[str]:
+    from app.services.group_detection import normalize_fa
+    return _TOKEN_RE.findall(normalize_fa(name))
+
+
+def _category_for_tokens(tokens: list[str]) -> str | None:
+    token_set = set(tokens)
+    compact = "".join(tokens)
+    for word, key in _CATEGORY_WORD_TO_KEY.items():
+        if word in token_set or word.replace(" ", "") in compact:
+            return key
+    return None
+
+
+def _normalize_model_code(token: str) -> str | None:
+    """Return a merge-safe model core.
+
+    Keeps genuinely different model families separate, while collapsing common ad/catalog
+    shorthand such as SMS46NW01 ↔ 46NW01B. The dropped SMS prefix is an appliance-series prefix
+    in local Bosch dishwasher listings; a trailing single letter is commonly a color/market suffix.
+    """
+    t = (token or "").translate(_DIGIT_TRANS).upper()
+    t = re.sub(r"[^0-9A-Z]", "", t)
+    if not (len(t) >= 4 and any(c.isalpha() for c in t) and any(c.isdigit() for c in t)):
+        return None
+    for prefix in ("SMS", "WAT", "ASW"):
+        if t.startswith(prefix) and len(t) > len(prefix) + 3:
+            t = t[len(prefix):]
+            break
+    if len(t) >= 6 and t[-1].isalpha() and any(c.isdigit() for c in t[:-1]):
+        # Color/market suffix: 46NW01B -> 46NW01. Does not alter SMS88TI46M because
+        # after removing no prefix its core does not end in a digit-bearing base model of this shape.
+        if re.match(r"^\d{2}[A-Z]{2}\d{2}[A-Z]$", t):
+            t = t[:-1]
+    return t
+
+
+def _model_codes(tokens: list[str]) -> list[str]:
+    seen, out = set(), []
+    for tok in tokens:
+        m = _normalize_model_code(tok)
+        if m and m not in seen:
+            seen.add(m)
+            out.append(m)
+    return out
+
+
+def product_canonical_key(name: str) -> str:
+    """A stronger product-identity key for report merging.
+
+    `product_group_key` intentionally only merges spelling variants. This key extracts product
+    identity: category + brand-like tokens + normalized model core when present. It is still
+    conservative: different capacities/model cores remain separate, but noisy ad wording and
+    shorthand model spellings collapse into one report row.
+    """
+    tokens = _ordered_tokens(name)
+    if not tokens:
+        return ""
+    category = _category_for_tokens(tokens)
+    models = _model_codes(tokens)
+    brandish = []
+    for t in tokens:
+        if t in _MERGE_STOPWORDS:
+            continue
+        if _normalize_model_code(t):
+            continue
+        if t.isdigit():
+            # Capacities are identity when no model exists; with a model they are usually noise.
+            if not models and len(t) >= 4:
+                brandish.append(t)
+            continue
+        if len(t) >= 3:
+            brandish.append(t)
+    # Preserve order but dedupe.
+    dedup_brandish = list(dict.fromkeys(brandish))
+    if models:
+        parts = [category or "product"] + dedup_brandish[:2] + models[:2]
+        return "|".join(parts)
+    if category:
+        parts = [category] + dedup_brandish[:4]
+        return "|".join(parts)
+    return product_group_key(name)
 
 
 def product_tokens(name: str):

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.services import product_reports as prs
-from app.services.product_match import product_group_key
+from app.services.product_match import product_canonical_key, product_group_key
 
 LAST = datetime(2026, 7, 23, 20, 0)
 
@@ -18,12 +18,20 @@ LAST = datetime(2026, 7, 23, 20, 0)
 class _FakeResult:
     def __init__(self, rows): self._rows = rows
     def all(self): return list(self._rows)
+    def scalars(self):
+        outer = self
+        class _S:
+            def all(s): return list(outer._rows)
+        return _S()
 
 
 class _FakeDB:
     """Returns per-RAW-name aggregate rows for the grouped top-products query (the SQL shape)."""
-    def __init__(self, agg_rows): self._agg = agg_rows
-    async def execute(self, q): return _FakeResult(self._agg)
+    def __init__(self, agg_rows, mention_rows=None):
+        self._agg = agg_rows
+        self._mentions = mention_rows if mention_rows is not None else agg_rows
+    async def execute(self, q):
+        return _FakeResult(self._agg if "group by" in str(q).lower() else self._mentions)
 
 
 def _agg(name, mention_count, *, product_id=None, group_count=1, sender_count=1,
@@ -31,6 +39,12 @@ def _agg(name, mention_count, *, product_id=None, group_count=1, sender_count=1,
     return SimpleNamespace(product_name=name, product_id=product_id, mention_count=mention_count,
                            group_count=group_count, sender_count=sender_count,
                            sources=sources, last_mention=last_mention)
+
+
+def _mention(name, *, sender_phone="989121112233", text="موجود", last_mention=LAST):
+    return SimpleNamespace(product_name=name, product_id=None, sender_phone=sender_phone,
+                           sender_name="seller", group_name="group", message_text=text,
+                           mentioned_at=last_mention)
 
 
 # ── the normalized key (reused existing normalizers) ─────────────────────────
@@ -41,6 +55,18 @@ def test_product_group_key_collapses_real_variants():
     assert product_group_key("باند پارتى باکس DENAY") == product_group_key("باند پارتی باکس DENAY")
     # ...but two genuinely different products keep different keys.
     assert product_group_key("یخچال ساید بای ساید ال‌جی") != product_group_key("مایکروویو سولاردام ال‌جی")
+
+
+def test_product_canonical_key_merges_model_shorthand_but_not_distinct_models():
+    assert (
+        product_canonical_key("ماشین ظرفشویی بوش مدل SMS46NW01")
+        == product_canonical_key("🎈 ظرفشویی بوش ترکیه سفید 46NW01B")
+        == product_canonical_key("🎈 ظرفشویی بوش سری 4 ترکیه سفید مدل 46nw01B")
+    )
+    assert product_canonical_key("ماشین ظرفشویی بوش مدل SMS46NW01") != product_canonical_key(
+        "ماشین ظرفشویی بوش مدل SMS46NI01")
+    assert product_canonical_key("ماشین ظرفشویی بوش مدل SMS46NW01") != product_canonical_key(
+        "SMS46DW01B ماشین ظرفشویی بوش سفید سری 4")
 
 
 # ── the LG fridge pair (real top product) now merges into ONE row, count 8+3=11 ──
@@ -97,3 +123,37 @@ async def test_does_not_over_merge_distinct_products():
     out = await prs.top_products_rows(db, days=30, limit=150)
     assert len(out) == 3
     assert {r["mention_count"] for r in out} == {5, 4, 3}
+
+
+@pytest.mark.asyncio
+async def test_bosch_dishwasher_shorthand_merges_keeps_other_models_distinct():
+    db = _FakeDB([
+        _agg("ماشین ظرفشویی بوش مدل SMS46NW01", 8, product_id="CAT-NW01", group_count=4, sender_count=2),
+        _agg("🎈 ظرفشویی بوش ترکیه سفید 46NW01B", 4, group_count=2, sender_count=1),
+        _agg("🎈 ظرفشویی بوش سری 4 ترکیه سفید مدل 46nw01B", 1, group_count=1, sender_count=1),
+        _agg("ماشین ظرفشویی بوش مدل SMS46NI01", 4, product_id="CAT-NI01", group_count=4, sender_count=1),
+        _agg("SMS46DW01B ماشین ظرفشویی بوش سفید سری 4", 1, group_count=0, sender_count=1),
+    ])
+    out = await prs.top_products_rows(db, days=7, limit=150)
+    by_name = {r["product_name"]: r for r in out}
+
+    assert by_name["ماشین ظرفشویی بوش مدل SMS46NW01"]["mention_count"] == 13
+    assert by_name["ماشین ظرفشویی بوش مدل SMS46NW01"]["in_assistant"] is True
+    assert by_name["ماشین ظرفشویی بوش مدل SMS46NI01"]["mention_count"] == 4
+    assert by_name["SMS46DW01B ماشین ظرفشویی بوش سفید سری 4"]["mention_count"] == 1
+    assert len(out) == 3
+
+
+@pytest.mark.asyncio
+async def test_mentioners_drilldown_includes_every_merged_variant():
+    db = _FakeDB([], [
+        _mention("ماشین ظرفشویی بوش مدل SMS46NW01", sender_phone="989121111111"),
+        _mention("🎈 ظرفشویی بوش ترکیه سفید 46NW01B", sender_phone="989122222222"),
+        _mention("ماشین ظرفشویی بوش مدل SMS46NI01", sender_phone="989123333333"),
+    ])
+
+    rows = await prs.product_mentioners_rows(
+        db, product_name="ماشین ظرفشویی بوش مدل SMS46NW01", days=7, limit=100)
+
+    assert len(rows) == 2
+    assert {r["sender_phone"] for r in rows} == {"09121111111", "09122222222"}

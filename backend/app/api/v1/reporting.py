@@ -166,7 +166,7 @@ async def clear_product_mentions(db: AsyncSession = Depends(get_db)):
 
 @router.get("/top-products")
 async def top_repeated_products(limit: int = 150, days: int = 30, source: str | None = None,
-                                search: str | None = None,
+                                search: str | None = None, ai_merge: bool = False,
                                 db: AsyncSession = Depends(get_db)):
     """Most-frequently-mentioned products across PV/groups/stories (from product_mention_logs).
     Optional `source` (pv|group|status) filters by where the mentions came from. Optional `search`
@@ -184,17 +184,21 @@ async def top_repeated_products(limit: int = 150, days: int = 30, source: str | 
     product_ids = {p.get("name"): p.get("id") for p in await get_products(500) if p.get("name")}
     # V45 PART 2.3 — top_products_rows fetches the own-number exclusion list itself and filters those
     # rows out of the report (defense in depth behind the detection-time guards).
-    rows = await pr.top_products_rows(db, days=days, limit=limit, source=source, search=search)
+    rows = await pr.top_products_rows(db, days=days, limit=limit, source=source, search=search,
+                                      ai_merge=ai_merge)
     return {
         "total_products": len(rows),
         "period_days": days,
         "source": source,
+        "ai_merge": ai_merge,
         "products": [
             {
                 **({"product_id": r["product_id"] or product_ids.get(r["product_name"]),
                     "in_assistant": bool(r["product_id"] or product_ids.get(r["product_name"])),
                     "assistant_status": "در دستیار داریم" if (r["product_id"] or product_ids.get(r["product_name"])) else "خارج از دستیار"}),
                 "rank": r["rank"],
+                "canonical_key": r.get("canonical_key"),
+                "match_keys": r.get("match_keys") or [],
                 "product_name": r["product_name"],
                 "mention_count": r["mention_count"],
                 "group_count": r["group_count"],
@@ -209,6 +213,8 @@ async def top_repeated_products(limit: int = 150, days: int = 30, source: str | 
 
 @router.get("/product-sellers")
 async def product_sellers(product_name: str, days: int = 30, limit: int = 100,
+                          canonical_key: str | None = None,
+                          match_keys: str | None = None,
                           db: AsyncSession = Depends(get_db)):
     """All sellers who advertised a given product: contact, time (Shamsi), group.
     Powers the 'مشاهده فروشندگان اخیر' modal in the top-products table. Delegates to the shared
@@ -218,7 +224,9 @@ async def product_sellers(product_name: str, days: int = 30, limit: int = 100,
     from app.services import product_reports as pr
     from app.workers.tasks import PRODUCT_MENTION_RETENTION_DAYS
     days = min(max(1, int(days)), PRODUCT_MENTION_RETENTION_DAYS)
-    rows = await pr.product_mentioners_rows(db, product_name=product_name, days=days, limit=limit)
+    keys = [k for k in (match_keys or "").split(",") if k]
+    rows = await pr.product_mentioners_rows(db, product_name=product_name, days=days, limit=limit,
+                                            canonical_key=canonical_key, match_keys=keys)
     sellers = [
         {
             "sender_name": r["sender_display_name"],
@@ -230,7 +238,8 @@ async def product_sellers(product_name: str, days: int = 30, limit: int = 100,
         }
         for r in rows
     ]
-    return {"product_name": product_name, "total_sellers": len(sellers), "sellers": sellers}
+    return {"product_name": product_name, "canonical_key": canonical_key, "match_keys": keys,
+            "total_sellers": len(sellers), "sellers": sellers}
 
 
 @router.get("/contact-trend")

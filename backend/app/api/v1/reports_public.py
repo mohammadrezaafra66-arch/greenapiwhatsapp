@@ -55,6 +55,7 @@ def cors_headers_for(origin: str | None, allowed: list[str],
 
 @router.get("/top-products")
 async def public_top_products(range: int = 30, limit: int = 30, source: str | None = None,
+                              ai_merge: bool = False,
                               db: AsyncSession = Depends(get_db)):
     """Top-N most-mentioned products over the last `range` DAYS — the exact rows the tab shows.
 
@@ -74,12 +75,14 @@ async def public_top_products(range: int = 30, limit: int = 30, source: str | No
     product_ids = {p.get("name"): p.get("id") for p in await get_products(500) if p.get("name")}
     # V45 PART 2.3 — top_products_rows fetches the own-number exclusion list itself and filters those
     # rows out of the shared aggregation (so the public report matches the in-app tab).
-    rows = await pr.top_products_rows(db, days=days, limit=limit, source=source)
+    rows = await pr.top_products_rows(db, days=days, limit=limit, source=source,
+                                      ai_merge=ai_merge)
     return {
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "range_days": days,
         "limit": limit,
         "source": source,
+        "ai_merge": ai_merge,
         "count": len(rows),
         "products": [
             {
@@ -87,6 +90,8 @@ async def public_top_products(range: int = 30, limit: int = 30, source: str | No
                     "in_assistant": bool(r["product_id"] or product_ids.get(r["product_name"])),
                     "assistant_status": "در دستیار داریم" if (r["product_id"] or product_ids.get(r["product_name"])) else "خارج از دستیار"}),
                 "rank": r["rank"],
+                "canonical_key": r.get("canonical_key"),
+                "match_keys": r.get("match_keys") or [],
                 "product_name": r["product_name"],
                 "mention_count": r["mention_count"],
                 "group_count": r["group_count"],
