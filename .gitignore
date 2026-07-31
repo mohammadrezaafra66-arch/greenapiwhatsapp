@@ -27,3 +27,15 @@ backups/
 # Real WhatsApp story images/videos: hundreds of MB, regenerable from Green API while the
 # source URLs are alive. Never belongs in git.
 backend/.media/
+
+# V52 — generated test/audit artifacts. Regenerable, and a stale copy committed by a
+# `git add -A` sweep is worse than no copy (a 1.1 MB project_structure.txt was committed
+# this way once already). audit.md is the exception: it is committed deliberately as the
+# checked-in output of deep_audit.py.
+test_results*.txt
+diagnostic_*.txt
+
+# Scratch: one-off dated diagnostics, UI prototypes, and archive drops.
+backend/scripts/diag_*_[0-9]*.py
+ui-research/
+*.zip
