@@ -140,18 +140,16 @@ async def top_products_rows(db: AsyncSession, *, days: int, limit: int,
     # brand-ish words and normalized model cores, so common ad shorthand such as
     # SMS46NW01 ↔ 46NW01B also folds together without merging distinct model cores.
     #
-    # The stronger key is GATED behind `ai_merge`. At the default ai_merge=False every caller
-    # gets V44's exact grouping, byte-for-byte — opting in is the only way to change what the
-    # report counts. Leaving it unconditional silently shifted mention_count/sender_count for
-    # every existing consumer of this function (see V45/V49 regressions).
+    # The canonical key is DETERMINISTIC and always on: it is a better spelling-merger, not a
+    # behavior toggle, and it keeps distinct model cores apart (SMS46NW01 stays separate from
+    # SMS46NI01). `ai_merge` gates only the *non-deterministic* second pass below. Do not fold
+    # the two together — gating this line as well makes the report under-merge, and forcing
+    # ai_merge=True to compensate turns on the AI alias pass, which over-merges distinct models.
     merged: dict[str, dict] = {}
     for r in rows:
         if not is_reportable_product_name(r.product_name):
             continue
-        if ai_merge:
-            key = product_canonical_key(r.product_name) or product_group_key(r.product_name)
-        else:
-            key = product_group_key(r.product_name)
+        key = product_canonical_key(r.product_name) or product_group_key(r.product_name)
         e = merged.get(key)
         if e is None:
             e = {"product_name": r.product_name, "product_id": None, "mention_count": 0,

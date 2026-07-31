@@ -134,6 +134,9 @@ async def test_bosch_dishwasher_shorthand_merges_keeps_other_models_distinct():
         _agg("ماشین ظرفشویی بوش مدل SMS46NI01", 4, product_id="CAT-NI01", group_count=4, sender_count=1),
         _agg("SMS46DW01B ماشین ظرفشویی بوش سفید سری 4", 1, group_count=0, sender_count=1),
     ])
+    # Default path: the deterministic canonical key merges the NW01 spellings but keeps NI01
+    # and DW01B distinct. Passing ai_merge=True here would ALSO run the AI alias pass, which
+    # merges NI01 in as well (17 != 13) — that is what this test exists to catch.
     out = await prs.top_products_rows(db, days=7, limit=150)
     by_name = {r["product_name"]: r for r in out}
 
