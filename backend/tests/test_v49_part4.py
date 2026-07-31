@@ -53,8 +53,37 @@ async def test_v49_detection_report_exclusion_and_retention_end_to_end():
     # Anchor to real time: the report's 90-day window and the purge's 90-day cutoff are both relative
     # to utcnow(), so a "today" row is inside both and a "91 days ago" row is outside both.
     now = datetime.utcnow()
+
+    def _mine(rows):
+        from app.services.product_match import product_group_key
+        key = product_group_key(pname)
+        return [r for r in rows if product_group_key(r["product_name"]) == key]
+
+    # `pname` comes from live detection, so it is a REAL product name that genuine traffic also
+    # advertises — there is at least one production row under instance_id='7105325764' carrying it.
+    # This test may only delete its OWN instance_id, so that row survives cleanup, merges into the
+    # same V44 group, and inflates the count. Measure the pre-existing contribution first and assert
+    # on the DELTA; asserting an absolute count assumes an empty table that this test cannot create.
     async with AsyncSessionLocal() as db:
         await db.execute(delete(ProductMentionLog).where(ProductMentionLog.instance_id == TEST_INSTANCE))
+        await db.commit()
+    async with AsyncSessionLocal() as db:
+        # Count the baseline straight from the table, NOT via top_products_rows: that helper clamps
+        # limit to 1000 and a lone production row (mention_count=1) never survives the cut, so it
+        # would report a baseline of 0 and then reappear once our rows push the group's count up.
+        from sqlalchemy import select as _select
+        from app.services.product_match import product_group_key as _key
+        _rows = (await db.execute(
+            _select(ProductMentionLog.product_name, ProductMentionLog.sender_phone)
+            .where(ProductMentionLog.mentioned_at >= datetime.utcnow() - timedelta(days=90))
+            .where(ProductMentionLog.instance_id != TEST_INSTANCE))).all()
+        _target = _key(pname)
+        baseline = sum(
+            1 for _n, _p in _rows
+            if _key(_n or "") == _target and OWN_CORE not in (_p or "")
+        )
+
+    async with AsyncSessionLocal() as db:
         # today, outside contact, two spellings → merge to one product, count 2
         db.add(ProductMentionLog(product_name=pname, source="group", sender_phone=OUT_PHONE,
                                  instance_id=TEST_INSTANCE, message_text=text, mentioned_at=now))
@@ -68,11 +97,6 @@ async def test_v49_detection_report_exclusion_and_retention_end_to_end():
                                  instance_id=TEST_INSTANCE, message_text=text,
                                  mentioned_at=now - timedelta(days=91)))
         await db.commit()
-
-    def _mine(rows):
-        from app.services.product_match import product_group_key
-        key = product_group_key(pname)
-        return [r for r in rows if product_group_key(r["product_name"]) == key]
 
     async def _raw_count(db):
         from sqlalchemy import select, func
@@ -89,7 +113,11 @@ async def test_v49_detection_report_exclusion_and_retention_end_to_end():
             rows = await top_products_rows(db, days=90, limit=1000, exclude_cores={OWN_CORE})
             mine = _mine(rows)
             assert len(mine) == 1                    # V44 merge → single row
-            assert mine[0]["mention_count"] == 2     # two today outside spellings; own excluded
+            # THIS test contributed exactly 2 countable mentions: the two today/outside spellings.
+            # The own-number row is excluded (V45) and the 91-day row is outside the window (V49).
+            # Anything above `baseline` is ours, so the delta is the assertion that holds regardless
+            # of what real traffic has already logged under the same product name.
+            assert mine[0]["mention_count"] == baseline + 2
 
         # 4) PART 1 — the scheduled purge removes ONLY the >90-day row; today's rows survive.
         async with AsyncSessionLocal() as db:
@@ -101,7 +129,9 @@ async def test_v49_detection_report_exclusion_and_retention_end_to_end():
             rows = await top_products_rows(db, days=90, limit=1000, exclude_cores={OWN_CORE})
             mine = _mine(rows)
             assert len(mine) == 1
-            assert mine[0]["mention_count"] == 2     # today's two outside spellings still reported
+            # Same delta as above: `baseline` was measured inside the 90-day window, so those rows
+            # survive the purge untouched. Only our 91-day row is removed, and it was never counted.
+            assert mine[0]["mention_count"] == baseline + 2   # today's two outside spellings remain
     finally:
         async with AsyncSessionLocal() as db:
             await db.execute(delete(ProductMentionLog).where(ProductMentionLog.instance_id == TEST_INSTANCE))

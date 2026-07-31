@@ -20,13 +20,18 @@ docker-compose exec -T backend python -m pytest tests/ -q --tb=no
 
 | | |
 |---|---|
-| Expected (as of 2026-07-31) | `2 failed, 1401 passed` |
-| Known failures | `test_v45_part2.py::test_report_filters_preexisting_own_number_rows`, `test_v49_part4.py::test_v49_detection_report_exclusion_and_retention_end_to_end` |
-| Alert if | The count changes, **or** a different test fails |
+| Expected (as of 2026-07-31, after the V45/V49 fix) | `1403 passed, 0 failed` |
+| Known failures | **None.** `main` is green |
+| Alert if | Any failure at all, **or** the collected count changes |
 
-⚠️ Those 2 are diagnosed, not mysterious — see `V17_ROADMAP_DECISION.md`. **They can flip to
-passing on their own** if live data volume drops below the V45 limit or the colliding V49 row ages
-out of the 90-day window. A change from 2 failed to 0 failed is therefore *not* proof of a fix.
+`main` is now a valid deployment gate. It was not before: until 2026-07-31 the suite reported
+`1401 passed / 2 failed`, and those 2 failures were data-dependent — they could have flipped to
+passing on their own without anything being fixed. Both are now genuinely fixed; see
+`V45_V49_ROOT_CAUSE_AND_FIX.md`.
+
+**Verify a green run more than once.** Both failures were tie-break dependent, so a single green
+run does not distinguish a healthy suite from a lucky one. The fix was accepted only after three
+consecutive clean runs.
 
 ### Container health
 

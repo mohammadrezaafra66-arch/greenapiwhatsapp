@@ -232,17 +232,27 @@ async def test_report_filters_preexisting_own_number_rows():
         await db.execute(delete(ProductMentionLog).where(ProductMentionLog.product_name == prod))
         db.add(ProductMentionLog(product_name=prod, source="group", sender_phone=OWN_PHONE,
                                  instance_id=TEST_INSTANCE, mentioned_at=now))
+        # TWO rows from the outside contact, not one. top_products_rows clamps `limit` to 1000 and
+        # orders by mention_count DESC, and the live table currently holds ~1,300 distinct products
+        # in a 2-day window. A product left with mention_count=1 after exclusion competes with the
+        # ~1,067 other single-mention products for the remaining slots and is dropped on an
+        # arbitrary tie-break — which is why this test failed intermittently. Only 237 products
+        # reach mention_count>=2, so keeping the count at 2 AFTER exclusion guarantees a slot.
+        # Both rows share OUT_PHONE, so sender_count stays 1 and still proves the exclusion.
+        db.add(ProductMentionLog(product_name=prod, source="group", sender_phone=OUT_PHONE,
+                                 instance_id=TEST_INSTANCE, mentioned_at=now))
         db.add(ProductMentionLog(product_name=prod, source="group", sender_phone=OUT_PHONE,
                                  instance_id=TEST_INSTANCE, mentioned_at=now))
         await db.commit()
     try:
         async with AsyncSessionLocal() as db:
-            base = await top_products_rows(db, days=2, limit=1000)              # no exclusion → both
+            base = await top_products_rows(db, days=2, limit=1000)              # no exclusion → all 3
             b = next((r for r in base if r["product_name"] == prod), None)
-            assert b is not None and b["mention_count"] == 2
+            assert b is not None and b["mention_count"] == 3
             filt = await top_products_rows(db, days=2, limit=1000, exclude_cores={OWN_CORE})
             f = next((r for r in filt if r["product_name"] == prod), None)
-            assert f is not None and f["mention_count"] == 1 and f["sender_count"] == 1
+            # The own-number row is gone (3 → 2) and only the outside sender remains.
+            assert f is not None and f["mention_count"] == 2 and f["sender_count"] == 1
     finally:
         async with AsyncSessionLocal() as db:
             await db.execute(delete(ProductMentionLog).where(ProductMentionLog.product_name == prod))

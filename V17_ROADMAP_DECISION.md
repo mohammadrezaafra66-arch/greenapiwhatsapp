@@ -45,7 +45,7 @@ Adding features on top of this increases the surface area of what cannot be veri
 
 | # | Action | Why first | Effort |
 |---|---|---|---|
-| 1 | Fix V45/V49 (see below — root cause is now known, not speculative) | `main` is red; a red baseline cannot gate anything | 1–2 h |
+| 1 | ~~Fix V45/V49~~ | ✅ **DONE 2026-07-31** — `main` is green at **1403/0**, verified over 3 runs. See `V45_V49_ROOT_CAUSE_AND_FIX.md` | — |
 | 2 | Reconstruct the V26 spec from its 5 commits and 25 marked files | Largest undocumented subsystem | 2–4 h |
 | 3 | Write specs for V51 and V52 | Recent enough to reconstruct accurately | 1–2 h |
 | 4 | Archive shipped prompts into `archive/` | `V16_MASTER_PROMPT.md` (V15 baseline, shipped 2026-07-15) is still in the root and was mistakenly targeted for execution twice today | 15 min |
