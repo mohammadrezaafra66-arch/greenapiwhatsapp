@@ -60,6 +60,13 @@ async def lifespan(app: FastAPI):
             "UPDATE product_mention_logs SET source = "
             "CASE WHEN group_chat_id LIKE '%@g.us' THEN 'group' ELSE 'pv' END "
             "WHERE source IS NULL"))
+        # V53 — «همکاری تیمی» log delivery truth: Green API's idMessage + whether the send really
+        # left the system. Deliberately NO default: pre-V53 rows stay NULL = "unknown", never a
+        # false claim that an old, possibly gate-blocked message was delivered.
+        await conn.execute(text(
+            "ALTER TABLE warmup_helper_log ADD COLUMN IF NOT EXISTS id_message varchar(200)"))
+        await conn.execute(text(
+            "ALTER TABLE warmup_helper_log ADD COLUMN IF NOT EXISTS delivery_ok boolean"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS is_deleted boolean DEFAULT false"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS edited_text text"))
         await conn.execute(text("ALTER TABLE inbox_messages ADD COLUMN IF NOT EXISTS original_message_id varchar(200)"))

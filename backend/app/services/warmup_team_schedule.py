@@ -245,10 +245,13 @@ async def run_team_schedule_tick(db, now: datetime | None = None, *, client_fact
             task.attempts = int(task.attempts or 0) + 1
         wt.advance_thread(thread, topic, now)
         from app.services import warmup_helper_log as tclog
+        # V53 — record what ACTUALLY happened, not merely that an ask-step was attempted. A send
+        # blocked by the eligibility/health gate returns no idMessage → delivery_ok=False.
         tclog.record(db, event_type=tclog.EVENT_ASK, from_instance_id=sender.instance_id,
                      to_phone=helper.phone, helper_id=helper.id,
                      sender_instance_id=sender.instance_id, cold_instance_id=te.cold_instance_id,
-                     thread_id=thread.id, message_sent=text)
+                     thread_id=thread.id, message_sent=text,
+                     id_message=mid, delivery_ok=bool(mid))
         if mid:
             peer_pacer.record_peer_send(sender.instance_id, pacer_now, r)
         await db.commit()

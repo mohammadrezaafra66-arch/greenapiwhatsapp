@@ -192,6 +192,13 @@ class WarmupHelperLog(Base):
     thread_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     message_sent: Mapped[str | None] = mapped_column(Text)
     message_received: Mapped[str | None] = mapped_column(Text)
+    # V53 — delivery truth. Before this, a row was written whether or not the send actually left the
+    # system: a gate-blocked send (e.g. `TC send blocked: sender ... fails eligibility`) produced a
+    # row identical to a delivered one, so the log overstated what real people received.
+    # `id_message` is Green API's idMessage (present ONLY on a genuine send); `delivery_ok` is
+    # True=sent / False=blocked-or-failed / NULL=unknown (pre-V53 rows and paths not yet wired).
+    id_message: Mapped[str | None] = mapped_column(String(200))
+    delivery_ok: Mapped[bool | None] = mapped_column(Boolean)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
 

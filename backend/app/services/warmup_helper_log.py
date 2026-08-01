@@ -45,14 +45,22 @@ EVENT_FA = {
 def record(db, *, event_type: str, from_instance_id: str | None = None, to_phone: str | None = None,
            helper_id=None, sender_instance_id: str | None = None, cold_instance_id: str | None = None,
            thread_id=None, message_sent: str | None = None,
-           message_received: str | None = None) -> WarmupHelperLog | None:
-    """Add ONE «همکاری تیمی» log row (best-effort, no commit). Returns the row or None on error."""
+           message_received: str | None = None, id_message: str | None = None,
+           delivery_ok: bool | None = None) -> WarmupHelperLog | None:
+    """Add ONE «همکاری تیمی» log row (best-effort, no commit). Returns the row or None on error.
+
+    V53 — outbound callers MUST pass the send result so the log records delivery, not intent:
+      • `id_message`  Green API's idMessage, ONLY when the send genuinely returned one;
+      • `delivery_ok` True = really sent, False = gate-blocked or failed, None = unknown.
+    Leaving both unset keeps a row honestly "unknown" (NULL) rather than implying delivery.
+    """
     try:
         row = WarmupHelperLog(
             event_type=event_type, from_instance_id=from_instance_id,
             to_phone=to_phone, helper_id=helper_id, sender_instance_id=sender_instance_id,
             cold_instance_id=cold_instance_id, thread_id=thread_id,
-            message_sent=message_sent, message_received=message_received)
+            message_sent=message_sent, message_received=message_received,
+            id_message=id_message, delivery_ok=delivery_ok)
         db.add(row)
         return row
     except Exception as e:  # pragma: no cover

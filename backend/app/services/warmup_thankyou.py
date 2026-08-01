@@ -177,10 +177,14 @@ async def run_thankyou_tick(db, now: datetime | None = None, *, client_factory=N
         thread.awaiting_thankyou = False
         thread.pending_thankyou_at = None
         from app.services import warmup_helper_log as tclog
+        # V53 — record what ACTUALLY happened. `_send_as_sender` returns None when the send was
+        # blocked before Green API was ever called (eligibility gate / health gate), so a row that
+        # used to look delivered is now explicitly delivery_ok=False with no idMessage.
         tclog.record(db, event_type=tclog.EVENT_THANK_YOU, from_instance_id=sender.instance_id,
                      to_phone=helper.phone, helper_id=helper.id,
                      sender_instance_id=getattr(sender, "instance_id", None),
-                     cold_instance_id=thread.cold_instance_id, thread_id=thread.id, message_sent=text)
+                     cold_instance_id=thread.cold_instance_id, thread_id=thread.id, message_sent=text,
+                     id_message=mid, delivery_ok=bool(mid))
         if mid:
             peer_pacer.record_thankyou(sender.instance_id, now, r)
         await db.commit()
