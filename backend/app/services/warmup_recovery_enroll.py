@@ -127,6 +127,13 @@ async def enroll_recovery_mode(db, target_instance_id: str = RECOVERY_TARGET_INS
     enr.day_index = 0
     enr.started_at = now
     enr.authorized_at = now
+    # V53 PART 2 — re-anchor last_activity_at too. It is the anchor `warmup_safety_scan` uses for
+    # erosion (>=14 idle days -> on_block_or_logout -> BLOCKED_RESET), and it was the ONLY day
+    # counter this function left stale. On 2026-07-30 that cost a real recovery: enrolled 22:00,
+    # killed 22:14 by the very next safety scan because last_activity_at still read 2026-07-16.
+    # A number being enrolled into recovery IS active as of now, so this is the truthful value,
+    # not a way of dodging the check — a genuinely idle number simply re-trips 14 days later.
+    enr.last_activity_at = now
     enr.sent_today = 0
     enr.received_today = 0
     enr.reply_ratio = 0.0
