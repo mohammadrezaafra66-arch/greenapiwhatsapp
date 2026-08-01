@@ -60,6 +60,10 @@ async def lifespan(app: FastAPI):
             "UPDATE product_mention_logs SET source = "
             "CASE WHEN group_chat_id LIKE '%@g.us' THEN 'group' ELSE 'pv' END "
             "WHERE source IS NULL"))
+        # V57 — when a Green API spam restriction lifts (getWaSettings.suspendedUntil, epoch).
+        # NULL = not suspended / unknown; never defaulted, so nothing is invented for old rows.
+        await conn.execute(text(
+            "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS suspended_until timestamp"))
         # V53 — «همکاری تیمی» log delivery truth: Green API's idMessage + whether the send really
         # left the system. Deliberately NO default: pre-V53 rows stay NULL = "unknown", never a
         # false claim that an old, possibly gate-blocked message was delivered.

@@ -10,7 +10,7 @@ import { Accounts } from "../api.js";
 import { useAsync, Spinner, Empty } from "../ui.jsx";
 import {
   warmthBadge, roleChips, eligibilityInfo, healthInfo, sortRows, filterRows,
-  ROLE_FILTERS, ELIG_FILTERS, LINK_TEAM, LINK_PROTECTION,
+  ROLE_FILTERS, ELIG_FILTERS, LINK_TEAM, LINK_PROTECTION, suspendedUntilFa,
 } from "./accountsOverview.js";
 import HelpTooltip from "../components/HelpTooltip.jsx";
 import { OVERVIEW_TIPS } from "./teamCollabHelp.js";
@@ -25,6 +25,7 @@ const STATUS_CLS = {
   active: "bg-brand-light text-brand border-brand/30",
   banned: "bg-red-50 text-red-700 border-red-200",
   disconnected: "bg-amber-50 text-amber-700 border-amber-200",
+  suspended: "bg-red-50 text-red-700 border-red-200",
   pending: "bg-slate-100 text-slate-600 border-slate-300",
 };
 
@@ -157,6 +158,12 @@ function Row({ row }) {
         <span className={`badge ${STATUS_CLS[row.status] || "bg-slate-100 text-slate-600 border-slate-300"}`}>
           {STATUS_FA[row.status] || row.status}
         </span>
+        {/* V57 — a spam restriction is temporary; show WHEN it lifts so «محدود» is actionable. */}
+        {row.suspended_until && (
+          <div className="text-[11px] text-red-700 mt-0.5">
+            آزاد می‌شود: {suspendedUntilFa(row.suspended_until)}
+          </div>
+        )}
       </td>
       {/* role chips (each links to its detail page) */}
       <td className="py-2 px-2">

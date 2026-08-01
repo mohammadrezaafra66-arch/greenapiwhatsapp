@@ -175,3 +175,24 @@ export function filterRows(rows, { role = "", elig = "", q = "" } = {}) {
   return (rows || []).filter(
     (r) => roleMatches(r, role) && eligMatches(r, elig) && textMatches(r, q));
 }
+
+// ── V57: when a Green API spam restriction lifts ─────────────────────────────
+// `suspended` reads like a dead end; the expiry is what makes it actionable ("wait N days",
+// not "rescan the QR"). Green API supplies it as getWaSettings.suspendedUntil.
+export function suspendedUntilFa(iso, now = new Date()) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const dateFa = d.toLocaleDateString("fa-IR", {
+    year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Tehran",
+  });
+  const timeFa = d.toLocaleTimeString("fa-IR", {
+    hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tehran",
+  });
+  const hours = (d.getTime() - now.getTime()) / 3600000;
+  if (hours <= 0) return `${dateFa} ${timeFa} (سپری شده)`;
+  const left = hours < 24
+    ? `${Math.round(hours)} ساعت دیگر`
+    : `${Math.round(hours / 24)} روز دیگر`;
+  return `${dateFa} ${timeFa} — ${left}`;
+}

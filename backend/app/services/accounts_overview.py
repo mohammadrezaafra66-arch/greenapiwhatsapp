@@ -104,6 +104,9 @@ async def build_overview(db, now: datetime | None = None) -> list[dict]:
             "platform": getattr(a, "platform", "whatsapp") or "whatsapp",
             "status": status_val,
             "green_api_deleted": snap["green_api_deleted"],
+            # V57 — when a Green API spam restriction lifts (ISO, UTC). NULL unless suspended.
+            "suspended_until": (a.suspended_until.isoformat()
+                                if getattr(a, "suspended_until", None) else None),
             # ── connection / activity (accounts source) ──
             "sent_today": a.sent_today,
             "received_today": a.received_today,

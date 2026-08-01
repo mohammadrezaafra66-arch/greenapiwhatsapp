@@ -34,9 +34,17 @@ logger = logging.getLogger("afrakala.send_gate")
 CONNECT_COOLDOWN_HOURS = 24
 
 # Live Green API states that must block sending immediately (lower-cased for comparison).
-BLOCKING_LIVE_STATES = {"yellowcard", "blocked", "notauthorized", "notauthorised", "starting"}
+# V57 — `suspended` added. It is Green API's spam-restriction state (it also returns a
+# `suspendedUntil` epoch in getWaSettings), and it was in NONE of these sets: an instance
+# reporting `suspended` was neither blocked from sending nor quarantined. On 2026-08-01
+# instance 770022695753 was suspended for 7 days one second after its first-ever outbound
+# message, and only an unrelated `notAuthorized` webhook happened to set its status away from
+# active — which is what actually stopped it. Without that coincidence the gate would have kept
+# sending from a restricted number.
+BLOCKING_LIVE_STATES = {"yellowcard", "blocked", "notauthorized", "notauthorised", "starting",
+                        "suspended"}
 # States we treat as a hard-danger signal that should ALSO trip the per-instance kill-switch.
-KILL_LIVE_STATES = {"yellowcard", "blocked", "notauthorized", "notauthorised"}
+KILL_LIVE_STATES = {"yellowcard", "blocked", "notauthorized", "notauthorised", "suspended"}
 
 # How fresh a cached live state must be to be trusted by the gate (matches PART 4's ~60s poll
 # cadence — a just-carded instance is caught within roughly a minute).

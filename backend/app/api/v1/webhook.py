@@ -372,6 +372,15 @@ async def handle_state_change(instance_id: str, payload: dict):
                 # V14 F23 — automatic incident response (commits internally).
                 from app.services.incident_handler import handle_yellow_card
                 await handle_yellow_card(account, "webhook", db)
+            elif state == "suspended":
+                # V57 — Green API spam restriction. Previously this fell through to the bare
+                # `else` and left `status` untouched, so an instance could stay `active` while
+                # actually restricted. Record the status AND the expiry so the UI can say when
+                # it lifts, instead of the operator having to call getWaSettings by hand.
+                account.status = AccountStatus.suspended
+                from app.services.state_monitor import refresh_suspended_until
+                await refresh_suspended_until(db, account)
+                await db.commit()
             else:
                 await db.commit()
     # V17 PART 5 — route the state signal into the mesh warm-up kill-switch (pause/rest on

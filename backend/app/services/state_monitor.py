@@ -19,7 +19,38 @@ from app.services import send_gate, governors
 logger = logging.getLogger("afrakala.state_monitor")
 
 # Live states that must immediately quarantine the instance.
-DANGER_STATES = {"yellowcard", "blocked", "notauthorized", "notauthorised", "logout"}
+# V57 — `suspended` (Green API's spam restriction) added; it was previously recorded but acted on
+# nowhere, so a restricted instance kept its throttle/cooldown untouched.
+DANGER_STATES = {"yellowcard", "blocked", "notauthorized", "notauthorised", "logout", "suspended"}
+
+
+def parse_suspended_until(wa_settings: dict) -> datetime | None:
+    """PURE. V57 — read `suspendedUntil` (UNIX epoch, UTC) out of a getWaSettings payload.
+    Green API returns it only while a spam restriction is in force; it is the single fact that
+    separates a TEMPORARY restriction from a permanent block. Anything unusable → None."""
+    raw = (wa_settings or {}).get("suspendedUntil")
+    if raw in (None, "", 0, "0"):
+        return None
+    try:
+        return datetime.utcfromtimestamp(int(raw))
+    except (TypeError, ValueError, OSError, OverflowError):
+        return None
+
+
+async def refresh_suspended_until(db, account, client=None) -> datetime | None:
+    """V57 — fetch and persist `accounts.suspended_until` for a suspended instance. Best-effort:
+    a network/permission failure must never break the poll or webhook path that called us."""
+    try:
+        if client is None:
+            from app.services.green_api import GreenAPIClient
+            client = GreenAPIClient(account.instance_id, account.api_token)
+        until = parse_suspended_until(await client.get_wa_settings())
+    except Exception as e:  # pragma: no cover - network best-effort
+        logger.warning("suspendedUntil lookup failed for %s: %s",
+                       getattr(account, "instance_id", "?"), e)
+        return None
+    account.suspended_until = until
+    return until
 
 
 async def apply_state(db, account, state: str, source: str,
@@ -30,6 +61,12 @@ async def apply_state(db, account, state: str, source: str,
     s = (state or "unknown").strip().lower()
     await send_gate.persist_live_state(db, account.instance_id, s, source, now)
     result = {"instance_id": account.instance_id, "state": s, "acted": None}
+    # V57 — keep `suspended_until` in step with the live state: fill it while suspended, clear it
+    # the moment the instance reports anything else, so a stale date can never linger in the UI.
+    if s == "suspended":
+        result["suspended_until"] = await refresh_suspended_until(db, account)
+    elif getattr(account, "suspended_until", None) is not None:
+        account.suspended_until = None
     if s not in DANGER_STATES:
         return result
     if s == "yellowcard":

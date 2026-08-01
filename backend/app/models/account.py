@@ -97,6 +97,11 @@ class Account(Base):
     auto_reply_message: Mapped[str | None] = mapped_column(Text)
     auto_reply_outside_hours: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[str | None] = mapped_column(Text)
+    # V57 — when a Green API spam restriction (stateInstance='suspended') lifts. Green API returns
+    # it as a UNIX epoch in getWaSettings.suspendedUntil; it is the ONE fact that tells a temporary
+    # restriction apart from a permanent block, and it was previously never stored, so the only way
+    # to see it was to call the API by hand. NULL = not suspended / unknown.
+    suspended_until: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
