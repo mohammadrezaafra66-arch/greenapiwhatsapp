@@ -104,6 +104,13 @@ def _connect_ts(account) -> datetime | None:
     return None
 
 
+def connect_anchor(account) -> datetime | None:
+    """V55 — the public form of `_connect_ts`. Other gates need to tell "this account has NO
+    datable connect instant" apart from "it has one and the cooldown has elapsed"; the boolean
+    `connect_cooldown_active` collapses both to False."""
+    return _connect_ts(account)
+
+
 def connect_cooldown_active(account, now: datetime | None = None,
                             hours: int = CONNECT_COOLDOWN_HOURS) -> bool:
     """True when `account` connected/reconnected within the last `hours` and must NOT send yet.

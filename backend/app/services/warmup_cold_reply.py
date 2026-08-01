@@ -56,12 +56,54 @@ def post_auth_cooldown_elapsed(enrollment, now: datetime | None = None) -> bool:
     return cooldown_elapsed(enrollment, now=now)
 
 
-def cold_account_ready(account, enrollment, now: datetime | None = None) -> tuple[bool, str]:
-    """PURE gate for a cold-account send: the V27 health gate AND the 24h post-auth cooldown.
-    Returns (ready, reason)."""
+def cold_intake_cooldown_elapsed(account, enrollment, now: datetime | None = None) -> bool:
+    """V55 — PURE. Has the cold account's mandatory 24h post-connect cooldown cleared?
+
+    `post_auth_cooldown_elapsed` reads the mesh enrollment ONLY, so a cold account that was never
+    enrolled in the mesh warm-up got `None` and returned False *forever* — not for 24 hours. That
+    silently killed both the 10-day ask cycle and the cold account's auto-reply for every
+    QR/partner number, which is exactly the population Team Collaboration warms.
+
+    V39 PART 1 already established `accounts.connected_at` as the UNIVERSAL 24h connect anchor
+    ("mesh, campaigns AND Team Collaboration"), on the same 24-hour clock, and it IS populated for
+    those numbers. So this consults BOTH anchors and requires BOTH to be clear — it can only ever
+    be as strict as before, never looser, for any account that has a mesh row.
+
+    Fails CLOSED when neither anchor exists: an account we cannot date at all is treated as still
+    cooling, preserving the conservative intent of the original check.
+
+    `now` must be UTC-naive (both anchors are stored in UTC).
+    """
+    from app.services.send_gate import connect_anchor, connect_cooldown_active
+    now = now or datetime.utcnow()
+    dated = False
+
+    if enrollment is not None and getattr(enrollment, "authorized_at", None) is not None:
+        dated = True
+        if not post_auth_cooldown_elapsed(enrollment, now):
+            return False
+
+    if connect_anchor(account) is not None:
+        dated = True
+        if connect_cooldown_active(account, now):
+            return False
+
+    return dated
+
+
+def cold_account_ready(account, enrollment, now: datetime | None = None,
+                       *, utc_now: datetime | None = None) -> tuple[bool, str]:
+    """PURE gate for a cold-account send: the V27 health gate AND the 24h post-connect cooldown.
+    Returns (ready, reason).
+
+    V55 — the cooldown now consults the account's connect anchor as well as the mesh enrollment
+    (see `cold_intake_cooldown_elapsed`). `utc_now` lets the caller pass the UTC instant for that
+    comparison while `now` keeps driving the existing health gate on its current clock; when
+    omitted it falls back to `now`, so every existing caller behaves exactly as before.
+    """
     from app.services.send_gate import can_send_now
     now = now or datetime.utcnow()
-    if not post_auth_cooldown_elapsed(enrollment, now):
+    if not cold_intake_cooldown_elapsed(account, enrollment, utc_now or now):
         return False, "cooldown_24h"
     allowed, reason = can_send_now(account, None, now)
     if not allowed:
@@ -180,8 +222,10 @@ async def run_cold_reply_tick(db, now: datetime | None = None, *, client_factory
             select(WarmupEnrollment).where(WarmupEnrollment.instance_id == thread.cold_instance_id)
         )).scalar_one_or_none()
 
-        ready, reason = cold_account_ready(cold, enr, now)
+        # V55 — the connect-anchor comparison needs the UTC instant (both anchors are stored in
+        # UTC); `now` here is Tehran-naive and still drives the health gate as before.
         pacer_now = _to_utc_naive(now)
+        ready, reason = cold_account_ready(cold, enr, now, utc_now=pacer_now)
         if not ready or not peer_pacer.peer_ready(cold.instance_id, pacer_now):
             # defer this one — leave it pending; a later tick retries once eligible.
             continue

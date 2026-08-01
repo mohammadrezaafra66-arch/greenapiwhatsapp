@@ -30,7 +30,7 @@ from app.services.warmup_helper_engine import (
     _to_utc_naive, _send_from_main, _send_as_sender, _resolve_cold_phone, resolve_task_sender,
     _enrollment_states, _default_client_factory,
 )
-from app.services.warmup_cold_reply import post_auth_cooldown_elapsed
+from app.services.warmup_cold_reply import cold_intake_cooldown_elapsed
 
 logger = logging.getLogger("afrakala.warmup.teamsched")
 
@@ -170,11 +170,17 @@ async def run_team_schedule_tick(db, now: datetime | None = None, *, client_fact
         cold = acc_by_id.get(te.cold_instance_id)
         if cold is None:
             continue
-        # Gate 1 — the cold account's EXISTING 24h post-authorization cooldown (mesh clock).
+        # Gate 1 — the cold account's mandatory 24h post-connect cooldown.
+        # V55 — this used to read the MESH enrollment only, so a cold account never enrolled in
+        # the mesh warm-up returned False forever (not for 24h) and this whole 10-day cycle could
+        # never fire for it — the normal case for QR/partner numbers. It now consults the mesh
+        # anchor AND V39's universal `accounts.connected_at`, requiring both to be clear, and
+        # fails closed when neither exists. Compared in UTC: both anchors are stored in UTC while
+        # `now` is Tehran-naive.
         mesh_enr = (await db.execute(
             select(WarmupEnrollment).where(WarmupEnrollment.instance_id == te.cold_instance_id)
         )).scalar_one_or_none()
-        if not post_auth_cooldown_elapsed(mesh_enr, now):
+        if not cold_intake_cooldown_elapsed(cold, mesh_enr, _to_utc_naive(now)):
             continue
 
         day_index = team_day_index(te.enrolled_at, now)
