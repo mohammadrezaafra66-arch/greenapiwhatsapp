@@ -68,12 +68,24 @@ def stepped_today(thread, now: datetime) -> bool:
     return _same_tehran_date(getattr(thread, "last_step_at", None), now)
 
 
-def select_thread_for_step(threads: list, now: datetime):
+def select_thread_for_step(threads: list, now: datetime,
+                           usable_helper_ids: set | None = None):
     """PURE. Pick the ONE thread to advance this tick: an ACTIVE thread not already stepped today,
-    preferring the least-progressed (lowest step_count) then the longest-idle. None when none due."""
+    preferring the least-progressed (lowest step_count) then the longest-idle. None when none due.
+
+    V53 PART 5 — `usable_helper_ids` restricts candidates to threads whose (contact, sender) pair
+    can actually be acted on. Without it the caller picked the single least-progressed thread and
+    then abandoned the WHOLE enrollment when that thread turned out to be unusable (deactivated
+    contact, disabled sender, unresolvable sender). Because this ordering is deterministic, the
+    same dead thread was re-picked on every tick, so ONE deactivated contact permanently starved
+    every other healthy contact assigned to that cold account — an unrecoverable lock-up, not a
+    delay. Passing None keeps the original behaviour (no restriction).
+    """
     eligible = [t for t in threads
                 if getattr(t, "status", wt.STATUS_ACTIVE) == wt.STATUS_ACTIVE
-                and not stepped_today(t, now)]
+                and not stepped_today(t, now)
+                and (usable_helper_ids is None
+                     or getattr(t, "helper_id", None) in usable_helper_ids)]
     if not eligible:
         return None
     eligible.sort(key=lambda t: (int(getattr(t, "step_count", 0) or 0),
@@ -190,14 +202,33 @@ async def run_team_schedule_tick(db, now: datetime | None = None, *, client_fact
 
         if steps_done_today(threads, now) >= budget:
             continue
-        thread = select_thread_for_step(threads, now)
+
+        # V53 PART 5 — decide which threads are actually actionable BEFORE choosing one, so a
+        # single unusable pairing can no longer starve the rest. These three conditions are
+        # properties of the (contact, sender) pair that do not change within a tick, so a thread
+        # failing any of them would be re-picked forever under the old select-then-skip order.
+        usable_helper_ids = set()
+        for hid in helper_ids:
+            h = await db.get(WarmupHelper, hid)
+            if h is None or not h.is_active:
+                continue                                   # contact deactivated
+            if not await hs.is_sender_enabled(db, h.sender_instance_id):
+                continue                                   # per-sender toggle off (V29 PART 1)
+            if resolve_task_sender(accounts, h, enr_map) is None:
+                continue                                   # sender account not currently active
+            usable_helper_ids.add(hid)
+        if not usable_helper_ids:
+            continue
+
+        thread = select_thread_for_step(threads, now, usable_helper_ids=usable_helper_ids)
         if thread is None:
             continue
 
+        # The three checks below are now backstops — the filter above already excluded these
+        # cases — but they stay so this path is safe if called with an unfiltered selection.
         helper = await db.get(WarmupHelper, thread.helper_id)
         if helper is None or not helper.is_active:
             continue
-        # per-sender toggle (V29 PART 1) — a disabled sender is skipped.
         if not await hs.is_sender_enabled(db, helper.sender_instance_id):
             continue
 
