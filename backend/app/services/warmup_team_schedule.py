@@ -96,8 +96,17 @@ async def get_team_enrollment(db, cold_instance_id: str) -> WarmupTeamEnrollment
 
 async def set_team_enrolled(db, cold_instance_id: str, enabled: bool,
                             now: datetime | None = None) -> WarmupTeamEnrollment:
-    """Enroll/unenroll a cold account in «همکاری تیمی». Enrolling stamps enrolled_at (starting the
-    10-day clock) if not already set; unenrolling keeps the row (history) but disables it. Commits."""
+    """Enroll/unenroll a cold account in «همکاری تیمی». ENROLLING ALWAYS STARTS A FRESH 10-day
+    cycle (enrolled_at=now, day_index=0); unenrolling keeps the row (history) but disables it.
+    Commits.
+
+    V53 PART 3 — enrolling used to stamp enrolled_at only when it was NULL, so pressing «enroll»
+    on an account that had already completed a cycle was a silent no-op: the clock stayed on the
+    old date, `daily_step_budget` returned 0 for a day-13-of-10 account, and `run_team_schedule_tick`
+    immediately set is_enabled=False again. The button appeared to work and produced nothing.
+    Re-enrolling is an explicit operator decision to run the cycle again, so it now resets the
+    clock. Unenrolling still preserves enrolled_at as history.
+    """
     now = now or datetime.utcnow()
     enr = await get_team_enrollment(db, cold_instance_id)
     if enr is None:
@@ -106,7 +115,7 @@ async def set_team_enrolled(db, cold_instance_id: str, enabled: bool,
         db.add(enr)
     else:
         enr.is_enabled = bool(enabled)
-        if enabled and enr.enrolled_at is None:
+        if enabled:
             enr.enrolled_at = now
             enr.day_index = 0
     await db.commit()
