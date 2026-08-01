@@ -547,11 +547,15 @@ async def run_helper_tick(db, now: datetime | None = None, *, client_factory=Non
     task.attempts = int(task.attempts or 0) + 1
 
     # V29 PART 9 — record the ask/reminder in the dedicated «همکاری تیمی» log.
+    # V56 — carry the real send result (V53 PART 1's contract). `mid` is None exactly when the
+    # send was blocked before Green API was reached, so a blocked ask is no longer written as
+    # though the contact received it.
     from app.services import warmup_helper_log as tclog
     tclog.record(db, event_type=(tclog.EVENT_REMINDER if kind == "remind" else tclog.EVENT_ASK),
                  from_instance_id=task_sender.instance_id, to_phone=helper.phone,
                  helper_id=helper.id, sender_instance_id=task_sender.instance_id,
-                 cold_instance_id=task.cold_instance_id, message_sent=text)
+                 cold_instance_id=task.cold_instance_id, message_sent=text,
+                 id_message=mid, delivery_ok=bool(mid))
 
     # Re-arm BOTH gates: the slow jittered ask-gate AND the shared per-instance pacer.
     conf.next_ask_at = hs.next_ask_at(now, r)
@@ -682,10 +686,12 @@ async def handle_helper_incoming(db, cold_instance_id: str, sender_phone: str,
             sent = bool(mid)
             if mid:
                 peer_pacer.record_thankyou(sender.instance_id, now)
+            # V56 — record what actually happened, not just that a thank-you was composed.
             tclog.record(db, event_type=tclog.EVENT_THANK_YOU, from_instance_id=sender.instance_id,
                          to_phone=helper.phone, helper_id=helper.id,
                          sender_instance_id=getattr(sender, "instance_id", None),
-                         cold_instance_id=cold_instance_id, thread_id=thread.id, message_sent=ty_text)
+                         cold_instance_id=cold_instance_id, thread_id=thread.id,
+                         message_sent=ty_text, id_message=mid, delivery_ok=bool(mid))
         else:
             thread.awaiting_thankyou = True
             thread.pending_thankyou_at = thankyou_due_at(now)

@@ -246,11 +246,13 @@ async def run_cold_reply_tick(db, now: datetime | None = None, *, client_factory
         thread.pending_reply_at = None
         wt.advance_thread(thread, topic, now)      # count the cold reply as a step; keep topic
         from app.services import warmup_helper_log as tclog
+        # V56 — carry the real send result; the cold account's own health gate inside
+        # _send_from_main can block this reply, and that must be visible in the log.
         tclog.record(db, event_type=tclog.EVENT_COLD_REPLY, from_instance_id=cold.instance_id,
                      to_phone=helper.phone, helper_id=helper.id,
                      sender_instance_id=helper.sender_instance_id,
                      cold_instance_id=thread.cold_instance_id, thread_id=thread.id,
-                     message_sent=text)
+                     message_sent=text, id_message=mid, delivery_ok=bool(mid))
         if mid:
             peer_pacer.record_peer_send(cold.instance_id, pacer_now, r)
         await db.commit()
