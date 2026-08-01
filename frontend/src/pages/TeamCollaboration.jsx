@@ -7,6 +7,8 @@ import React from "react";
 import { WarmupHelpersApi, Accounts } from "../api.js";
 import { useAsync, Spinner, Empty } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
+import HelpTooltip from "../components/HelpTooltip.jsx";
+import { TC_TIPS, TC_OVERVIEW_HELP } from "./teamCollabHelp.js";
 import {
   warmthBadge, canAssignCold, filterLogEvents, threadStatusSummary,
   dayInCycleLabel, askRunningCounts, askCountSentence, MAX_COLD_PER_CONTACT,
@@ -19,10 +21,10 @@ import {
 const fa = (n) => (n == null ? "" : String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]));
 
 const TABS = [
-  { key: "manage", label: "مدیریت فرستنده و مخاطبان" },
-  { key: "dashboard", label: "داشبورد" },
-  { key: "log", label: "لاگ رویدادها" },
-  { key: "alerts", label: "هشدارهای ایمنی" },
+  { key: "manage", label: "مدیریت فرستنده و مخاطبان", help: TC_TIPS.tabManage },
+  { key: "dashboard", label: "داشبورد", help: TC_TIPS.tabDashboard },
+  { key: "log", label: "لاگ رویدادها", help: TC_TIPS.tabLog },
+  { key: "alerts", label: "هشدارهای ایمنی", help: TC_TIPS.tabAlerts },
 ];
 
 const EMPTY_CONTACT = {
@@ -46,6 +48,16 @@ const RELATIONSHIP_FA = { friend: "دوست", colleague: "همکار", employee:
 function WarmthBadge({ level, score }) {
   const b = warmthBadge({ level, score });
   return <span className={`badge ${b.cls}`} title="امتیاز گرمی فرستنده">{fa(b.label)}</span>;
+}
+
+// V54 — a section heading with its help icon. Keeps every card title consistent.
+function SectionTitle({ children, help }) {
+  return (
+    <h3 className="font-bold flex items-center">
+      <span>{children}</span>
+      {help && <HelpTooltip text={help} />}
+    </h3>
+  );
 }
 
 // ── Panel 1: sender + contacts + cold-account assignment ─────────────────────
@@ -77,10 +89,13 @@ function ManagePanel() {
   return (
     <div className="space-y-4">
       <div className="card space-y-3">
-        <h3 className="font-bold">انتخاب فرستنده</h3>
-        <p className="text-xs text-muted">
-          هر فرستنده مجموعهٔ مخاطبان و برنامهٔ گرم‌سازی مخصوص خود را دارد. امتیاز گرمی نشان می‌دهد
-          این اکانت چقدر برای ارسال امن است (کم/متوسط/بالا).
+        <SectionTitle help={TC_TIPS.senderSection}>انتخاب فرستنده</SectionTitle>
+        <p className="text-xs text-muted flex items-center flex-wrap">
+          <span>
+            هر فرستنده مجموعهٔ مخاطبان و برنامهٔ گرم‌سازی مخصوص خود را دارد. امتیاز گرمی نشان می‌دهد
+            این اکانت چقدر برای ارسال امن است (کم/متوسط/بالا).
+          </span>
+          <HelpTooltip text={TC_TIPS.warmthBadge} />
         </p>
         {sendersAsync.loading ? <Spinner /> : (
           <div className="flex flex-wrap gap-2">
@@ -109,6 +124,16 @@ function ManagePanel() {
             })}
           </div>
         )}
+        {/* V54 — the chips above are <button>s, so their help icons live here as a legend
+            (a <button> inside a <button> is invalid HTML). */}
+        <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
+          <span className="flex items-center">راهنمای نشانه‌ها:</span>
+          <span className="flex items-center">تعداد مخاطب<HelpTooltip text={TC_TIPS.contactCount} /></span>
+          <span className="flex items-center">امتیاز گرمی<HelpTooltip text={TC_TIPS.warmthBadge} /></span>
+          <span className="flex items-center">{OVERRIDE_BADGE_FA}<HelpTooltip text={TC_TIPS.overrideBadge} /></span>
+          <span className="flex items-center">{RECOVERY_BADGE_FA}<HelpTooltip text={TC_TIPS.recoveryBadge} /></span>
+          <span className="flex items-center">خاموش<HelpTooltip text={TC_TIPS.senderToggle} /></span>
+        </div>
         {current && (
           <div className="flex items-center gap-2">
             <button className={`text-sm px-3 py-1.5 rounded font-bold border ${current.team_enabled
@@ -116,6 +141,7 @@ function ManagePanel() {
               : "bg-slate-100 text-slate-600 border-slate-300"}`} onClick={() => toggleSender(current)}>
               {current.team_enabled ? "همکاری تیمی این فرستنده: روشن ✓" : "همکاری تیمی این فرستنده: خاموش"}
             </button>
+            <HelpTooltip text={TC_TIPS.senderToggleStatus} />
           </div>
         )}
       </div>
@@ -137,12 +163,13 @@ function BriefEditor({ senderInstanceId }) {
   }
   return (
     <div className="card space-y-2">
-      <h3 className="font-bold">خلاصهٔ فعال (Brief) این فرستنده</h3>
+      <SectionTitle help={TC_TIPS.briefSection}>خلاصهٔ فعال (Brief) این فرستنده</SectionTitle>
       <p className="text-xs text-muted">یک جملهٔ کوتاه که به هوش مصنوعی جهت می‌دهد چه پیامی برای مخاطبان ساخته شود.</p>
-      <div className="flex gap-2">
+      <div className="flex gap-2 items-center">
         <input className="input flex-1" placeholder="مثلاً: به شماره‌های جدید ما یک سلام دوستانه بده" value={text}
           onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} />
         <button className="btn-primary" onClick={save}>ذخیره</button>
+        <HelpTooltip text={TC_TIPS.briefSave} />
       </div>
     </div>
   );
@@ -212,36 +239,70 @@ function ContactsEditor({ senderInstanceId, onChange }) {
   return (
     <div className="card space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-bold">مخاطبان این فرستنده</h3>
-        <span className="badge bg-slate-100 text-slate-600 border-slate-300">{fa(helpers.filter((h) => h.is_active).length)} فعال</span>
+        <SectionTitle help={TC_TIPS.contactsSection}>مخاطبان این فرستنده</SectionTitle>
+        <span className="flex items-center">
+          <span className="badge bg-slate-100 text-slate-600 border-slate-300">{fa(helpers.filter((h) => h.is_active).length)} فعال</span>
+          <HelpTooltip text={TC_TIPS.activeCountBadge} />
+        </span>
       </div>
-      {softWarning && <p className="text-xs text-amber-700">{softWarning}</p>}
+      {softWarning && (
+        <p className="text-xs text-amber-700 flex items-center flex-wrap">
+          <span>{softWarning}</span>
+          <HelpTooltip text={TC_TIPS.softWarning} />
+        </p>
+      )}
 
       <div className="space-y-2">
-        <div className="flex gap-2 flex-wrap">
-          <input className="input flex-1 min-w-[140px]" placeholder="نام و نام خانوادگی (اجباری)" value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <input className="input flex-1 min-w-[140px]" placeholder="شماره (مثل ۹۸۹۱۲…)" value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: e.target.value })} onKeyDown={(e) => e.key === "Enter" && add()} />
+        <div className="flex gap-2 flex-wrap items-center">
+          <span className="flex items-center flex-1 min-w-[140px]">
+            <input className="input w-full" placeholder="نام و نام خانوادگی (اجباری)" value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <HelpTooltip text={TC_TIPS.fieldName} />
+          </span>
+          <span className="flex items-center flex-1 min-w-[140px]">
+            <input className="input w-full" placeholder="شماره (مثل ۹۸۹۱۲…)" value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })} onKeyDown={(e) => e.key === "Enter" && add()} />
+            <HelpTooltip text={TC_TIPS.fieldPhone} />
+          </span>
           <button className="btn-secondary text-xs" onClick={() => setShowProfile((s) => !s)}>{showProfile ? "بستن مشخصات" : "مشخصات بیشتر"}</button>
+          <HelpTooltip text={TC_TIPS.btnMoreProfile} />
           <button className="btn-primary" onClick={add}>افزودن</button>
+          <HelpTooltip text={TC_TIPS.btnAdd} />
         </div>
         {showProfile && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <input className="input" placeholder="سمت شغلی" value={form.job_title}
-              onChange={(e) => setForm({ ...form, job_title: e.target.value })} />
-            <input className="input" placeholder="سابقهٔ تخصصی (سال)" value={form.years_experience}
-              onChange={(e) => setForm({ ...form, years_experience: e.target.value.replace(/[^0-9۰-۹]/g, "") })} />
-            <input className="input" placeholder="شماره کاری (اختیاری)" value={form.phone_secondary}
-              onChange={(e) => setForm({ ...form, phone_secondary: e.target.value })} />
-            <input className="input" placeholder="این سیستم چه سودی برای او دارد؟" value={form.personal_benefit_note}
-              onChange={(e) => setForm({ ...form, personal_benefit_note: e.target.value })} />
-            <select className="input" value={form.relationship}
-              onChange={(e) => setForm({ ...form, relationship: e.target.value })}>
-              {RELATIONSHIP_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            <input className="input" placeholder="یادداشت معرف (مثلاً: شماره شما را آقای X داده)" value={form.referral_note}
-              onChange={(e) => setForm({ ...form, referral_note: e.target.value })} />
+            <span className="flex items-center">
+              <input className="input w-full" placeholder="سمت شغلی" value={form.job_title}
+                onChange={(e) => setForm({ ...form, job_title: e.target.value })} />
+              <HelpTooltip text={TC_TIPS.fieldJobTitle} />
+            </span>
+            <span className="flex items-center">
+              <input className="input w-full" placeholder="سابقهٔ تخصصی (سال)" value={form.years_experience}
+                onChange={(e) => setForm({ ...form, years_experience: e.target.value.replace(/[^0-9۰-۹]/g, "") })} />
+              <HelpTooltip text={TC_TIPS.fieldYears} />
+            </span>
+            <span className="flex items-center">
+              <input className="input w-full" placeholder="شماره کاری (اختیاری)" value={form.phone_secondary}
+                onChange={(e) => setForm({ ...form, phone_secondary: e.target.value })} />
+              <HelpTooltip text={TC_TIPS.fieldPhoneSecondary} />
+            </span>
+            <span className="flex items-center">
+              <input className="input w-full" placeholder="این سیستم چه سودی برای او دارد؟" value={form.personal_benefit_note}
+                onChange={(e) => setForm({ ...form, personal_benefit_note: e.target.value })} />
+              <HelpTooltip text={TC_TIPS.fieldBenefit} />
+            </span>
+            <span className="flex items-center">
+              <select className="input w-full" value={form.relationship}
+                onChange={(e) => setForm({ ...form, relationship: e.target.value })}>
+                {RELATIONSHIP_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              <HelpTooltip text={TC_TIPS.fieldRelationship} />
+            </span>
+            <span className="flex items-center">
+              <input className="input w-full" placeholder="یادداشت معرف (مثلاً: شماره شما را آقای X داده)" value={form.referral_note}
+                onChange={(e) => setForm({ ...form, referral_note: e.target.value })} />
+              <HelpTooltip text={TC_TIPS.fieldReferral} />
+            </span>
           </div>
         )}
       </div>
@@ -314,13 +375,18 @@ function ContactRow({ helper, onDelete, onToggle }) {
           {helper.relationship && RELATIONSHIP_FA[helper.relationship] && <span className="badge bg-sky-50 text-sky-700 border-sky-200 mr-2">{RELATIONSHIP_FA[helper.relationship]}</span>}
           {helper.referral_note && <span className="text-xs text-amber-700 mr-1" title="یادداشت معرف">📇 {helper.referral_note}</span>}
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 items-center">
           <button className={`badge ${helper.is_active ? "bg-brand-light text-brand border-brand/30" : "bg-slate-100 text-slate-600 border-slate-300"}`} onClick={onToggle}>{helper.is_active ? "فعال" : "غیرفعال"}</button>
+          <HelpTooltip text={TC_TIPS.btnActiveToggle} />
           <button className="btn-danger text-xs" onClick={onDelete}>حذف</button>
+          <HelpTooltip text={TC_TIPS.btnDelete} />
         </div>
       </div>
       <div className="flex items-center gap-2 flex-wrap pr-2">
-        <span className="text-xs text-muted">اکانت‌های سرد ({fa(cold.length)}/{fa(MAX_COLD_PER_CONTACT)}):</span>
+        <span className="text-xs text-muted flex items-center">
+          اکانت‌های سرد ({fa(cold.length)}/{fa(MAX_COLD_PER_CONTACT)}):
+          <HelpTooltip text={TC_TIPS.coldDropdown} />
+        </span>
         {cold.map((c) => (
           <span key={c.cold_instance_id} className="badge bg-slate-100 text-slate-600 border-slate-300 flex items-center gap-1">
             {c.name || c.cold_instance_id}
@@ -334,8 +400,14 @@ function ContactRow({ helper, onDelete, onToggle }) {
               {candidates.map((a) => <option key={a.instance_id} value={a.instance_id}>{a.name || a.instance_id}</option>)}
             </select>
             <button className="btn-secondary text-xs" onClick={assign} disabled={!pick}>تخصیص</button>
+            <HelpTooltip text={TC_TIPS.btnAssign} />
           </span>
-        ) : <span className="text-xs text-amber-700">به سقف ۲ اکانت رسیده</span>}
+        ) : (
+          <span className="text-xs text-amber-700 flex items-center">
+            به سقف ۲ اکانت رسیده
+            <HelpTooltip text={TC_TIPS.coldCeiling} />
+          </span>
+        )}
       </div>
     </div>
   );
@@ -361,8 +433,13 @@ function ColdAccountRoster() {
 
   return (
     <div className="card space-y-3">
-      <h3 className="font-bold">اکانت‌های سرد (فهرست عضویت در همکاری تیمی)</h3>
-      <p className="text-xs text-muted">هر اکانت سرد را می‌توانید در چرخهٔ خودکار ۱۰ روزه عضو کنید. ارسال‌ها فقط پس از گذشت دورهٔ ۲۴ ساعتهٔ اولیهٔ آن اکانت آغاز می‌شود.</p>
+      <SectionTitle help={TC_TIPS.coldRosterSection}>اکانت‌های سرد (فهرست عضویت در همکاری تیمی)</SectionTitle>
+      <p className="text-xs text-muted flex items-center flex-wrap">
+        <span>هر اکانت سرد را می‌توانید در چرخهٔ خودکار ۱۰ روزه عضو کنید.</span>
+        <HelpTooltip text={TC_TIPS.coldRosterCycle} />
+        <span>ارسال‌ها فقط پس از گذشت دورهٔ ۲۴ ساعتهٔ اولیهٔ آن اکانت آغاز می‌شود.</span>
+        <HelpTooltip text={TC_TIPS.coldRoster24h} />
+      </p>
       {accountsAsync.loading ? <Spinner /> : (
         <div className="divide-y divide-line">
           {accounts.map((a) => {
@@ -370,13 +447,21 @@ function ColdAccountRoster() {
             const on = e && e.enabled;
             return (
               <div key={a.instance_id} className="flex items-center justify-between gap-2 py-2 text-sm">
-                <div>
+                <div className="flex items-center">
                   <span className={on ? "font-bold" : "text-muted"}>{a.name || a.instance_id}</span>
-                  {on && <span className="text-xs text-sky-700 mr-2">{dayInCycleLabel(e.day_index, e.cycle_days)}</span>}
+                  {on && (
+                    <span className="text-xs text-sky-700 mr-2 flex items-center">
+                      {dayInCycleLabel(e.day_index, e.cycle_days)}
+                      <HelpTooltip text={TC_TIPS.dayInCycle} />
+                    </span>
+                  )}
                 </div>
-                <button className={`badge ${on ? "bg-brand-light text-brand border-brand/30" : "bg-slate-100 text-slate-600 border-slate-300"}`} onClick={() => toggle(a)}>
-                  {on ? "عضو ✓" : "عضو کن"}
-                </button>
+                <span className="flex items-center">
+                  <button className={`badge ${on ? "bg-brand-light text-brand border-brand/30" : "bg-slate-100 text-slate-600 border-slate-300"}`} onClick={() => toggle(a)}>
+                    {on ? "عضو ✓" : "عضو کن"}
+                  </button>
+                  <HelpTooltip text={TC_TIPS.btnEnroll} />
+                </span>
               </div>
             );
           })}
@@ -395,12 +480,15 @@ function DashboardPanel() {
   return (
     <div className="space-y-4">
       <div className="card">
-        <h3 className="font-bold mb-2">فرستنده‌ها</h3>
+        <div className="mb-2"><SectionTitle help={TC_TIPS.dashSenders}>فرستنده‌ها</SectionTitle></div>
         {senders.length === 0 ? <Empty /> : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="text-muted text-xs">
-                <th className="text-right py-1">فرستنده</th><th>گرمی</th><th>مخاطبان</th><th className="text-right">خلاصهٔ فعال</th>
+                <th className="text-right py-1">فرستنده</th>
+                <th><span className="inline-flex items-center">گرمی<HelpTooltip text={TC_TIPS.warmthBadge} /></span></th>
+                <th><span className="inline-flex items-center">مخاطبان<HelpTooltip text={TC_TIPS.contactCount} /></span></th>
+                <th className="text-right"><span className="inline-flex items-center">خلاصهٔ فعال<HelpTooltip text={TC_TIPS.dashBriefCol} /></span></th>
               </tr></thead>
               <tbody>
                 {senders.map((s) => (
@@ -417,14 +505,19 @@ function DashboardPanel() {
         )}
       </div>
       <div className="card">
-        <h3 className="font-bold mb-2">اکانت‌های سرد</h3>
+        <div className="mb-2"><SectionTitle help={TC_TIPS.dashColdAccounts}>اکانت‌های سرد</SectionTitle></div>
         {cold.length === 0 ? <Empty label="هنوز اکانت سردی عضو نشده." /> : (
           <div className="divide-y divide-line">
             {cold.map((c) => (
               <div key={c.cold_instance_id} className="flex items-center justify-between gap-2 py-2 text-sm">
-                <div>
+                <div className="flex items-center">
                   <span className={c.enabled ? "font-bold" : "text-muted"}>{c.cold_name || c.cold_instance_id}</span>
-                  {c.enabled && <span className="text-xs text-sky-700 mr-2">{dayInCycleLabel(c.day_index, c.cycle_days)}</span>}
+                  {c.enabled && (
+                    <span className="text-xs text-sky-700 mr-2 flex items-center">
+                      {dayInCycleLabel(c.day_index, c.cycle_days)}
+                      <HelpTooltip text={TC_TIPS.dayInCycle} />
+                    </span>
+                  )}
                 </div>
                 <span className="text-xs text-muted">{threadStatusSummary(c)}</span>
               </div>
@@ -497,13 +590,14 @@ function LogPanel() {
   return (
     <div className="card space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h3 className="font-bold">لاگ رویدادهای همکاری تیمی</h3>
-        <div className="flex gap-2 flex-wrap">
+        <SectionTitle help={TC_TIPS.tabLog}>لاگ رویدادهای همکاری تیمی</SectionTitle>
+        <div className="flex gap-2 flex-wrap items-center">
           <select className="input text-xs py-1" value={eventType} onChange={(e) => setEventType(e.target.value)}>
             <option value="">همهٔ رویدادها</option>
             {Object.entries(EVENT_FA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             <option value={UNRESPONDED}>درخواست‌های بی‌پاسخ</option>
           </select>
+          <HelpTooltip text={TC_TIPS.logEventFilter} />
           <select className="input text-xs py-1" value={senderInstanceId} onChange={(e) => setSender(e.target.value)}>
             <option value="">همهٔ فرستنده‌ها</option>
             {senders.map((s) => (
@@ -512,7 +606,9 @@ function LogPanel() {
               </option>
             ))}
           </select>
+          <HelpTooltip text={TC_TIPS.logSenderFilter} />
           <button className="btn-secondary text-xs" onClick={refresh}>تازه‌سازی</button>
+          <HelpTooltip text={TC_TIPS.logRefresh} />
         </div>
       </div>
 
@@ -590,7 +686,7 @@ function AlertsPanel() {
   }
   return (
     <div className="card space-y-3">
-      <h3 className="font-bold">هشدارهای ایمنی (گفتگوهای متوقف‌شده)</h3>
+      <SectionTitle help={TC_TIPS.tabAlerts}>هشدارهای ایمنی (گفتگوهای متوقف‌شده)</SectionTitle>
       <p className="text-xs text-muted">اگر واژهٔ حساسی در یک گفتگو دیده شود، همان گفتگو متوقف و اینجا فهرست می‌شود. در صورت مثبت کاذب می‌توانید آن را دوباره فعال کنید.</p>
       {loading ? <Spinner /> : alerts.length === 0 ? <Empty label="هشدار بازی وجود ندارد." /> : (
         <div className="divide-y divide-line">
@@ -602,9 +698,11 @@ function AlertsPanel() {
                 {a.cold_instance_id && <span className="text-xs text-muted mr-2">اکانت سرد: {a.cold_instance_id}</span>}
                 {a.message_excerpt && <p className="text-xs text-muted mt-1">{a.message_excerpt}</p>}
               </div>
-              <div className="flex gap-1">
+              <div className="flex gap-1 items-center">
                 <button className="btn-secondary text-xs" onClick={() => ack(a)}>تأیید</button>
+                <HelpTooltip text={TC_TIPS.alertAck} />
                 <button className="btn-primary text-xs" onClick={() => resume(a)}>فعال‌سازی مجدد</button>
+                <HelpTooltip text={TC_TIPS.alertResume} />
               </div>
             </div>
           ))}
@@ -614,20 +712,78 @@ function AlertsPanel() {
   );
 }
 
+// V54 PART C — the page-level «راهنما» summary, opened from the header button.
+function OverviewHelpModal({ onClose }) {
+  const h = TC_OVERVIEW_HELP;
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4" dir="rtl"
+      onClick={onClose}>
+      <div className="card max-w-lg w-full space-y-3 max-h-[85vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="font-bold text-lg">{h.title}</h3>
+          <button className="btn-secondary text-xs" onClick={onClose}>بستن</button>
+        </div>
+        <p className="text-sm text-ink">{h.goal}</p>
+
+        <div>
+          <p className="font-bold text-sm mb-1">سه نقش:</p>
+          <ul className="text-sm text-muted space-y-1 pr-4 list-disc">
+            {h.roles.map((r) => <li key={r}>{r}</li>)}
+          </ul>
+        </div>
+
+        <div>
+          <p className="font-bold text-sm mb-1">پنج کار که یک‌بار می‌کنید:</p>
+          <ol className="text-sm text-muted space-y-1 pr-4 list-decimal">
+            {h.onceSteps.map((s) => <li key={s}>{s}</li>)}
+          </ol>
+        </div>
+
+        <div>
+          <p className="font-bold text-sm mb-1">بعد سیستم خودکار کار می‌کند:</p>
+          <ol className="text-sm text-muted space-y-1 pr-4 list-decimal" start={6}>
+            {h.autoSteps.map((s) => <li key={s}>{s}</li>)}
+          </ol>
+        </div>
+
+        <div>
+          <p className="font-bold text-sm mb-1 text-amber-700">سه اشتباه رایج:</p>
+          <ul className="text-sm text-amber-700 space-y-1 pr-4 list-disc">
+            {h.mistakes.map((m) => <li key={m}>{m}</li>)}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TeamCollaboration() {
   const [tab, setTab] = React.useState("manage");
+  const [helpOpen, setHelpOpen] = React.useState(false);
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">🤝 همکاری تیمی</h1>
-        <p className="text-sm text-muted mt-1">گرم‌سازی اکانت‌های سرد با کمک افراد واقعی — مدیریت فرستنده‌ها، مخاطبان، چرخهٔ ۱۰ روزه، لاگ و هشدارها.</p>
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold">🤝 همکاری تیمی</h1>
+          <p className="text-sm text-muted mt-1">گرم‌سازی اکانت‌های سرد با کمک افراد واقعی — مدیریت فرستنده‌ها، مخاطبان، چرخهٔ ۱۰ روزه، لاگ و هشدارها.</p>
+        </div>
+        <button className="btn-secondary text-sm shrink-0 flex items-center gap-1"
+          onClick={() => setHelpOpen(true)}>
+          <span className="w-5 h-5 rounded-full bg-brand-light text-brand text-xs leading-5 text-center">؟</span>
+          راهنما
+        </button>
       </div>
-      <div className="flex gap-1 border-b border-line flex-wrap">
+      {helpOpen && <OverviewHelpModal onClose={() => setHelpOpen(false)} />}
+      <div className="flex gap-1 border-b border-line flex-wrap items-end">
         {TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)}
-            className={`px-3 py-2 text-sm border-b-2 -mb-px ${tab === t.key ? "border-brand text-brand font-bold" : "border-transparent text-muted hover:text-ink"}`}>
-            {t.label}
-          </button>
+          <span key={t.key} className="inline-flex items-center">
+            <button onClick={() => setTab(t.key)}
+              className={`px-3 py-2 text-sm border-b-2 -mb-px ${tab === t.key ? "border-brand text-brand font-bold" : "border-transparent text-muted hover:text-ink"}`}>
+              {t.label}
+            </button>
+            <HelpTooltip text={t.help} className="mb-1" />
+          </span>
         ))}
       </div>
       {tab === "manage" && <ManagePanel />}

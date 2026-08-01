@@ -12,6 +12,8 @@ import {
   warmthBadge, roleChips, eligibilityInfo, healthInfo, sortRows, filterRows,
   ROLE_FILTERS, ELIG_FILTERS, LINK_TEAM, LINK_PROTECTION,
 } from "./accountsOverview.js";
+import HelpTooltip from "../components/HelpTooltip.jsx";
+import { OVERVIEW_TIPS } from "./teamCollabHelp.js";
 
 const fa = (n) => (n == null ? "" : String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]));
 
@@ -27,11 +29,11 @@ const STATUS_CLS = {
 };
 
 const SORT_COLS = [
-  { key: "name", label: "حساب" },
-  { key: "warmth", label: "گرمی" },
-  { key: "days_connected", label: "روزهای اتصال" },
-  { key: "health", label: "سلامت" },
-  { key: "incidents", label: "حوادث" },
+  { key: "name", label: "حساب", help: OVERVIEW_TIPS.account },
+  { key: "warmth", label: "گرمی", help: OVERVIEW_TIPS.warmth },
+  { key: "days_connected", label: "روزهای اتصال", help: OVERVIEW_TIPS.days_connected },
+  { key: "health", label: "سلامت", help: OVERVIEW_TIPS.health },
+  { key: "incidents", label: "حوادث", help: OVERVIEW_TIPS.incidents },
 ];
 
 function Th({ col, sort, setSort }) {
@@ -43,6 +45,8 @@ function Th({ col, sort, setSort }) {
       onClick={() => setSort({ key: col.key, dir: active && sort.dir === "desc" ? "asc" : "desc" })}
       title="برای مرتب‌سازی کلیک کنید">
       {col.label}{arrow}
+      {/* V54 — the icon stops its own click, so tapping «؟» never re-sorts the table. */}
+      {col.help && <HelpTooltip text={col.help} />}
     </th>
   );
 }
@@ -93,10 +97,10 @@ export default function AccountsOverview() {
               <thead>
                 <tr className="text-xs border-b border-line">
                   {SORT_COLS.map((c) => <Th key={c.key} col={c} sort={sort} setSort={setSort} />)}
-                  <th className="py-2 px-2 text-muted whitespace-nowrap">اتصال</th>
-                  <th className="py-2 px-2 text-muted whitespace-nowrap">نقش</th>
-                  <th className="py-2 px-2 text-muted whitespace-nowrap">واجد شرایط فرستنده</th>
-                  <th className="py-2 px-2 text-muted whitespace-nowrap">فعالیت امروز</th>
+                  <th className="py-2 px-2 text-muted whitespace-nowrap">اتصال<HelpTooltip text={OVERVIEW_TIPS.connection} /></th>
+                  <th className="py-2 px-2 text-muted whitespace-nowrap">نقش<HelpTooltip text={OVERVIEW_TIPS.role} /></th>
+                  <th className="py-2 px-2 text-muted whitespace-nowrap">واجد شرایط فرستنده<HelpTooltip text={OVERVIEW_TIPS.eligible} /></th>
+                  <th className="py-2 px-2 text-muted whitespace-nowrap">فعالیت امروز<HelpTooltip text={OVERVIEW_TIPS.activity_today} /></th>
                 </tr>
               </thead>
               <tbody>
