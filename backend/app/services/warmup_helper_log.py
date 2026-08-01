@@ -27,9 +27,14 @@ EVENT_INCOMING = "incoming"
 EVENT_SAFETY = "safety_flag"
 # V39 PART 2 — an auditable record that the hard sender-eligibility gate was deliberately overridden.
 EVENT_ELIGIBILITY_OVERRIDE = "eligibility_override"
+# V53 PART 4 — a per-sender «همکاری تیمی» toggle flip. This switch silently decides whether a
+# sender may send at all, and nothing recorded it: warmup_sender_config carries only is_enabled +
+# an auto-bumped updated_at, so a sender found switched off could be dated but never explained.
+# record_override right next door already logs properly; this closes the same gap for the toggle.
+EVENT_SENDER_TOGGLE = "sender_toggle"
 
 EVENT_TYPES = (EVENT_ASK, EVENT_REMINDER, EVENT_THANK_YOU, EVENT_COLD_REPLY,
-               EVENT_INCOMING, EVENT_SAFETY, EVENT_ELIGIBILITY_OVERRIDE)
+               EVENT_INCOMING, EVENT_SAFETY, EVENT_ELIGIBILITY_OVERRIDE, EVENT_SENDER_TOGGLE)
 
 EVENT_FA = {
     EVENT_ASK: "درخواست",
@@ -39,6 +44,7 @@ EVENT_FA = {
     EVENT_INCOMING: "پیام دریافتی",
     EVENT_SAFETY: "هشدار ایمنی",
     EVENT_ELIGIBILITY_OVERRIDE: "رد شرط واجد شرایط بودن",
+    EVENT_SENDER_TOGGLE: "تغییر کلید فرستنده",
 }
 
 

@@ -247,10 +247,24 @@ async def get_sender_config(db, sender_instance_id: str) -> WarmupSenderConfig:
     return cfg
 
 
-async def set_sender_enabled(db, sender_instance_id: str, enabled: bool) -> WarmupSenderConfig:
-    """Flip ONE sender's «همکاری تیمی» toggle without touching the global master toggle. Commits."""
+async def set_sender_enabled(db, sender_instance_id: str, enabled: bool,
+                             now: datetime | None = None) -> WarmupSenderConfig:
+    """Flip ONE sender's «همکاری تیمی» toggle without touching the global master toggle. Commits.
+
+    V53 PART 4 — the flip is now auditable. This switch alone decides whether a sender may send,
+    but nothing recorded a change: warmup_sender_config holds only is_enabled plus an auto-bumped
+    updated_at, so a sender discovered switched off could be dated and never explained. Writing a
+    log row makes «who/what changed and when» answerable, matching what record_override already
+    does for the eligibility gate. Best-effort: a log failure never blocks the toggle itself.
+    """
+    now = now or datetime.utcnow()
     cfg = await get_sender_config(db, sender_instance_id)
+    was = bool(cfg.is_enabled)
     cfg.is_enabled = bool(enabled)
+    from app.services import warmup_helper_log as tclog
+    tclog.record(db, event_type=tclog.EVENT_SENDER_TOGGLE,
+                 from_instance_id=sender_instance_id, sender_instance_id=sender_instance_id,
+                 message_sent=f"[sender_toggle] {was} -> {bool(enabled)} at {now.isoformat()}")
     await db.commit()
     return cfg
 
