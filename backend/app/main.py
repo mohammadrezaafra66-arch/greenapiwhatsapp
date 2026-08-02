@@ -279,6 +279,9 @@ async def lifespan(app: FastAPI):
             # Feature 37: parallel account sending
             "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS parallel_accounts boolean DEFAULT false",
             "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS max_parallel_accounts integer DEFAULT 1",
+            # V60 PART A — the explicit set of accounts a campaign may send from. NULL/empty
+            # preserves the legacy behaviour (one account, or all of them in parallel mode).
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS selected_account_ids jsonb",
             # Feature 39: per-account send limits with Meta standards
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS max_daily_absolute integer DEFAULT 200",
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS incoming_ratio_multiplier numeric DEFAULT 0.5",

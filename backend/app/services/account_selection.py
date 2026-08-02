@@ -29,16 +29,35 @@ class FanOutGuardError(RuntimeError):
     """
 
 
-def selected_account_ids(campaign) -> set | None:
-    """The set of account UUIDs the user explicitly restricted the campaign to, or None
-    when the user chose "all / parallel" (no single-account restriction).
+def _key(value) -> str:
+    """Normalise an account id for comparison.
 
-    - parallel/all mode  → None  (multiple accounts allowed, by explicit choice)
-    - one account picked  → {that id}
-    - nothing picked, not parallel → None (legacy default: any eligible account)
-
-    Note: picking one account yields a 1-element set; it can never expand to many.
+    Ids reach us in two shapes: real UUID objects (the `selected_account_id` column, ORM rows)
+    and plain strings (the V60 `selected_account_ids` JSONB array, and anything that came in
+    over JSON). Comparing them directly would silently miss every match — the campaign would
+    look like it had no eligible account and abort. Comparing on the string form makes the two
+    interchangeable.
     """
+    return str(value)
+
+
+def selected_account_ids(campaign) -> set | None:
+    """The set of account ids the user explicitly restricted the campaign to, or None when
+    the user placed no restriction (legacy "any eligible account" behaviour).
+
+    - explicit multi-selection (V60)   → that set, in ANY mode
+    - parallel/all with no selection   → None  (unchanged legacy behaviour)
+    - one account picked, not parallel → {that id}
+    - nothing picked, not parallel     → None
+
+    V60: `selected_account_ids` is the authority when present. It is honoured even with
+    `parallel_accounts=True`, which is the whole point — "send concurrently from THESE three"
+    used to be impossible to express, so parallel mode meant every active account.
+    A selection can only ever narrow the sending set; it can never expand it.
+    """
+    multi = getattr(campaign, "selected_account_ids", None)
+    if multi:
+        return {_key(x) for x in multi}
     if getattr(campaign, "parallel_accounts", False):
         return None
     sel = getattr(campaign, "selected_account_id", None)
@@ -50,7 +69,8 @@ def filter_to_selection(eligible, selected_ids) -> list:
     None (all/parallel), every eligible account is allowed."""
     if selected_ids is None:
         return list(eligible)
-    return [a for a in eligible if getattr(a, "id", None) in selected_ids]
+    wanted = {_key(s) for s in selected_ids}
+    return [a for a in eligible if _key(getattr(a, "id", None)) in wanted]
 
 
 def assert_sending_subset(accounts, selected_ids):
@@ -58,7 +78,8 @@ def assert_sending_subset(accounts, selected_ids):
     Returns accounts unchanged, or raises FanOutGuardError if anything escaped."""
     if selected_ids is None:
         return accounts
-    bad = [a for a in accounts if getattr(a, "id", None) not in selected_ids]
+    wanted = {_key(s) for s in selected_ids}
+    bad = [a for a in accounts if _key(getattr(a, "id", None)) not in wanted]
     if bad:
         raise FanOutGuardError(
             "fan-out guard tripped: sending set includes non-selected accounts "

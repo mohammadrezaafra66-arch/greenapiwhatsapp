@@ -106,6 +106,12 @@ class Campaign(Base):
     # V15 — product detail level (Item 8) + chosen account when parallel is off (Item 11)
     product_detail_level: Mapped[str] = mapped_column(String(20), default="medium")  # minimal|medium|detailed
     selected_account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    # V60 PART A — the accounts this campaign may send from, as a list of account UUID strings.
+    # Before this, the only choices were ONE account (`selected_account_id`) or, with
+    # `parallel_accounts`, EVERY active account — "these three and no others" was impossible to
+    # express, so an operator wanting three ended up blasting from all of them. Empty/NULL keeps
+    # the legacy behaviour exactly, so existing campaigns are untouched.
+    selected_account_ids: Mapped[list | None] = mapped_column(JSONB)
     # V16 PART 3 — append advertising links to the message
     append_links: Mapped[bool] = mapped_column(Boolean, default=False)
     links_count: Mapped[int] = mapped_column(Integer, default=1)

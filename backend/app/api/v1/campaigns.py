@@ -79,6 +79,10 @@ class CampaignCreateBody(BaseModel):
     # V15 — product detail level (Item 8) + chosen account when parallel off (Item 11)
     product_detail_level: str = "medium"
     selected_account_id: str | None = None
+    # V60 PART A — send from exactly these accounts (list of account UUID strings). Empty/None
+    # keeps the legacy behaviour; when set it narrows the sending set in EVERY mode, including
+    # parallel, which previously always meant "every active account".
+    selected_account_ids: list[str] | None = None
     # V16 PART 3 — append advertising links
     append_links: bool = False
     links_count: int = 1
@@ -145,6 +149,29 @@ async def list_campaigns(db: AsyncSession = Depends(get_db)):
     ]
 
 
+def _clean_account_ids(raw) -> list[str] | None:
+    """V60 PART A — normalise the explicit account selection to a de-duplicated list of UUID
+    strings, or None when nothing was chosen.
+
+    Stored as strings (not UUID objects) because the column is JSONB. Invalid entries are
+    dropped rather than raising: a malformed id must not be able to widen the sending set, and
+    an empty result collapses to None so the campaign falls back to its legacy behaviour instead
+    of matching zero accounts and silently sending nothing.
+    """
+    if not raw:
+        return None
+    out, seen = [], set()
+    for item in raw:
+        try:
+            key = str(uuid.UUID(str(item)))
+        except (ValueError, AttributeError, TypeError):
+            continue
+        if key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out or None
+
+
 def _campaign_detail(c: Campaign) -> dict:
     return {
         "id": str(c.id),
@@ -174,6 +201,7 @@ def _campaign_detail(c: Campaign) -> dict:
         "is_always_on": c.is_always_on,
         "parallel_accounts": c.parallel_accounts,
         "max_parallel_accounts": c.max_parallel_accounts,
+        "selected_account_ids": list(c.selected_account_ids or []),   # V60 PART A
         "show_product_prices": c.show_product_prices,
         "schedule_start_shamsi": to_shamsi(c.schedule_start),
         "schedule_end_shamsi": to_shamsi(c.schedule_end),
@@ -292,6 +320,7 @@ async def update_campaign(campaign_id: str, body: CampaignCreateBody, db: AsyncS
     c.button_footer = body.button_footer
     c.product_detail_level = body.product_detail_level or "medium"
     c.selected_account_id = uuid.UUID(body.selected_account_id) if body.selected_account_id else None
+    c.selected_account_ids = _clean_account_ids(body.selected_account_ids)
     c.append_links = body.append_links
     c.links_count = max(1, int(body.links_count or 1))
     c.links_mode = body.links_mode or "weighted"
@@ -396,6 +425,7 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         is_active=body.is_active,
         parallel_accounts=body.parallel_accounts,
         max_parallel_accounts=body.max_parallel_accounts,
+        selected_account_ids=_clean_account_ids(body.selected_account_ids),
         show_product_prices=body.show_product_prices,
         schedule_start=from_shamsi(body.schedule_start_shamsi) if body.schedule_start_shamsi else None,
         schedule_end=from_shamsi(body.schedule_end_shamsi) if body.schedule_end_shamsi else None,
@@ -571,18 +601,32 @@ async def start_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
     if campaign.campaign_scope == "group":
         from app.workers.tasks import task_run_group_campaign
         task_run_group_campaign.delay(campaign_id)
-    elif campaign.parallel_accounts:
-        # Feature 37 — split contacts across all active accounts, sent concurrently.
+    elif campaign.parallel_accounts or campaign.selected_account_ids:
+        # Feature 37 — split contacts across accounts, sent concurrently.
         # V18 PART 2 — exclude cooldown + mesh-warming (non-graduated) numbers so a warming
         # account is never pulled into a real campaign even in parallel/all mode.
+        # V60 PART A — when the user named specific accounts, narrow to exactly those. The
+        # health filters below still apply on top: an explicit choice can remove an account
+        # from the run, never force an unhealthy one into it.
         from app.services import governors
         from app.services.warmup_exclusion import enrollment_states_by_instance, warmup_campaign_excluded
         from app.services.listener_service import listener_campaign_excluded
         acc_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
         enr_map = await enrollment_states_by_instance(db)
+        chosen = {str(x) for x in (campaign.selected_account_ids or [])}
         active_accounts = [str(a.id) for a in acc_result.scalars().all()
-                           if not governors.in_cooldown(a) and not warmup_campaign_excluded(a, enr_map)
+                           if (not chosen or str(a.id) in chosen)
+                           and not governors.in_cooldown(a) and not warmup_campaign_excluded(a, enr_map)
                            and not listener_campaign_excluded(a)]
+        # Fail closed: a named selection whose accounts are all unhealthy must NOT fall through
+        # to the sequential path, which would send from any eligible account instead.
+        if chosen and not active_accounts:
+            from app.services.account_selection import SELECTED_ACCOUNT_UNAVAILABLE_REASON
+            campaign.status = CampaignStatus.paused
+            campaign.pause_reason = SELECTED_ACCOUNT_UNAVAILABLE_REASON
+            await db.commit()
+            return {"status": "paused", "campaign_id": campaign_id,
+                    "reason": SELECTED_ACCOUNT_UNAVAILABLE_REASON}
         task_run_campaign.delay(campaign_id, active_accounts)
     else:
         task_run_campaign.delay(campaign_id)
