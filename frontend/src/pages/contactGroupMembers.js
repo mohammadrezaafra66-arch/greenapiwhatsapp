@@ -41,6 +41,29 @@ export function toggleSelected(selected, id) {
   return next;
 }
 
+// V63 — the card button that opens the members dialog used to read «مشاهده اعضا» ("view
+// members"). That is where members are ADDED, but nothing said so, so the operator looked for an
+// add control on the card, opened «ویرایش» (name/colour only, no search box) and concluded the
+// search had disappeared. It happened three times. The dialog was never broken — the button was
+// named after only half of what it does.
+//
+// Kept as pure functions so the wording is pinned by tests and cannot silently drift back.
+
+/** Label for the card button that opens the members dialog. Must name BOTH things it does. */
+export function membersButtonLabel() {
+  return "اعضا و افزودن عضو";
+}
+
+/**
+ * Hint under an empty group's card. An empty group shows no members anywhere, so without this
+ * the card is a dead end — nothing on screen says where to go next.
+ */
+export function emptyGroupHint(memberCount) {
+  return Number(memberCount) > 0
+    ? ""
+    : "برای افزودن عضو، «اعضا و افزودن عضو» را بزنید.";
+}
+
 /** Persian summary under the search box: how many are shown, and how many are already in. */
 export function resultsSummary(results, members) {
   const all = extractContacts(results);

@@ -2,7 +2,9 @@ import React from "react";
 import { ContactGroupsApi as Api, Contacts as ContactsApi } from "../api.js";
 import { Spinner, Empty, Modal, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
-import { excludeExisting, toggleSelected, resultsSummary } from "./contactGroupMembers.js";
+import {
+  excludeExisting, toggleSelected, resultsSummary, membersButtonLabel, emptyGroupHint,
+} from "./contactGroupMembers.js";
 
 export default function ContactGroups() {
   const { data, loading, error, reload } = useAsync(() => Api.list(), []);
@@ -51,8 +53,15 @@ export default function ContactGroups() {
               {g.description && (
                 <p className="text-sm text-muted">{g.description}</p>
               )}
+              {/* V63 — this is the ONLY place members can be added, so it is the primary action
+                  and its label says so. «ویرایش» edits the name/colour and has no search box. */}
+              {emptyGroupHint(g.member_count) && (
+                <p className="text-xs text-amber-700">{emptyGroupHint(g.member_count)}</p>
+              )}
               <div className="flex gap-2">
-                <button className="btn-secondary btn-sm" onClick={() => setMembers(g)}>مشاهده اعضا</button>
+                <button className="btn-primary btn-sm" onClick={() => setMembers(g)}>
+                  {membersButtonLabel()}
+                </button>
                 <button className="btn-ghost btn-sm" onClick={() => setEdit(g)}>ویرایش</button>
                 <button className="btn-danger btn-sm" onClick={() => remove(g.id)}>حذف</button>
               </div>
@@ -96,6 +105,14 @@ function GroupModal({ group, onClose, onDone }) {
   return (
     <Modal title={isEdit ? "ویرایش گروه" : "گروه جدید"} onClose={onClose}>
       <div className="space-y-3">
+        {/* V63 — the dead end that caused the confusion: people opened this looking for the
+            member search. Say plainly that it is not here, and where it is. */}
+        {isEdit && (
+          <p className="text-xs text-muted">
+            اینجا فقط نام، توضیحات و رنگ گروه تغییر می‌کند. برای افزودن عضو، پنجره را ببندید و
+            «{membersButtonLabel()}» را بزنید.
+          </p>
+        )}
         <div><label className="label">نام</label><input className="input" value={f.name} onChange={set("name")} /></div>
         <div><label className="label">توضیحات</label><textarea className="input h-24" value={f.description} onChange={set("description")} /></div>
         <div>

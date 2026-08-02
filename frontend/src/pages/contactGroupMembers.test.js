@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 
 import {
   extractContacts, totalMatches, excludeExisting, toggleSelected, resultsSummary,
+  membersButtonLabel, emptyGroupHint,
 } from "./contactGroupMembers.js";
 
 // exactly what GET /contacts/?search=… returns
@@ -104,4 +105,36 @@ test("a partial overlap reports how many were hidden", () => {
 test("a truncated result set shows shown-of-total", () => {
   const res = paginated([c(1, "الف"), c(2, "ب")], 40);
   assert.match(resultsSummary(res, []), /2 از 40 نتیجه/);
+});
+
+// ── V63: the button has to name the ADD action ──────────────────────────────
+// The dialog was never broken. The card button read «مشاهده اعضا» ("view members"), so an
+// operator wanting to ADD members never opened it — they opened «ویرایش», found no search box,
+// and reported that the search had vanished. Three times. These pin the wording.
+test("the members button names adding, not only viewing", () => {
+  const label = membersButtonLabel();
+  assert.match(label, /افزودن/);            // the whole point
+  assert.ok(!/^مشاهده اعضا$/.test(label));  // the old view-only label must not come back
+});
+
+test("an empty group tells the operator where to go next", () => {
+  const hint = emptyGroupHint(0);
+  assert.notEqual(hint, "");
+  assert.ok(hint.includes(membersButtonLabel()),
+    "the hint must name the exact button, or it sends people hunting again");
+});
+
+test("a group that already has members shows no hint", () => {
+  assert.equal(emptyGroupHint(5), "");
+  assert.equal(emptyGroupHint(995), "");
+});
+
+test("a missing or junk count is treated as empty, so the hint still shows", () => {
+  for (const v of [undefined, null, "", NaN, "x"]) {
+    assert.notEqual(emptyGroupHint(v), "");
+  }
+});
+
+test("a string count from the API still counts as non-empty", () => {
+  assert.equal(emptyGroupHint("7"), "");
 });
