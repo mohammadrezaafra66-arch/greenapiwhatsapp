@@ -5,6 +5,7 @@ import { Badge, Spinner, Empty, Modal, Progress, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
 import {
   capacitySentence, youngAccountNotice, capacityWithTeamCollab, teamCollabNotice,
+  accountAgeAndCap, capExplanation, neverSentNotice,
 } from "./campaignCapacity.js";
 
 const fa = (n) => Number(n || 0).toLocaleString("fa-IR");
@@ -1369,6 +1370,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
                 const picked = (f.selected_account_ids || []).includes(a.id);
                 const isTc = tcSenderIds.includes(a.instance_id);
                 const young = Number(a.days_active ?? 0) < 10;
+                const neverSent = neverSentNotice(a);
                 return (
                   <button
                     key={a.id}
@@ -1382,17 +1384,36 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
                           : [...cur, a.id],
                       });
                     }}
-                    className={`px-2 py-1 rounded-lg border text-xs flex items-center gap-1 ${picked
+                    className={`px-2 py-1 rounded-lg border text-xs flex flex-col items-start gap-0.5 ${picked
                       ? "bg-brand/15 border-brand text-brand font-bold"
                       : "bg-canvas border-line text-ink"}`}>
-                    <span>{a.phone || a.name}</span>
-                    <span className="opacity-70">({a.daily_limit}/روز)</span>
-                    {young && <span className="badge bg-amber-50 text-amber-700 border-amber-200">جوان</span>}
-                    {isTc && <span className="badge bg-sky-50 text-sky-700 border-sky-200">همکاری تیمی</span>}
+                    <span className="flex items-center gap-1 flex-wrap">
+                      <span>{a.phone || a.name}</span>
+                      {young && <span className="badge bg-amber-50 text-amber-700 border-amber-200">جوان</span>}
+                      {neverSent && (
+                        <span className="badge bg-red-50 text-red-700 border-red-200">{neverSent}</span>
+                      )}
+                      {isTc && <span className="badge bg-sky-50 text-sky-700 border-sky-200">همکاری تیمی</span>}
+                    </span>
+                    {/* V64 — age and cap, each named. One unlabelled number read as the other. */}
+                    <span className="opacity-70 font-normal">{accountAgeAndCap(a)}</span>
                   </button>
                 );
               })}
             </div>
+            {/* V64 — why an account can be 18 روز old and still capped at 5 پیام. Without this
+                the two numbers on the chip look like a bug (they were reported as one). */}
+            {(f.selected_account_ids || []).length > 0 && (
+              <div className="mt-1 space-y-0.5">
+                {activeAccounts
+                  .filter((a) => (f.selected_account_ids || []).includes(a.id))
+                  .map((a) => capExplanation(a) && (
+                    <p key={a.id} className="text-[11px] text-amber-700">
+                      {a.phone || a.name}: {capExplanation(a)}
+                    </p>
+                  ))}
+              </div>
+            )}
             <p className="text-[11px] text-muted mt-1">
               اگر هیچ‌کدام را انتخاب نکنید، رفتار قبلی حفظ می‌شود (یک حساب، یا همه در حالت موازی).
             </p>

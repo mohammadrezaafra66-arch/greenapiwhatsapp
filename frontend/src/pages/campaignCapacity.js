@@ -39,6 +39,71 @@ export function accountDailyCap(row) {
   return Math.min(base + incoming + replies, absolute);
 }
 
+// V64 — the campaign form used to render ONE number per account, `({daily_limit}/روز)`, which
+// reads as an age and was taken for one: an account showing «(۵/روز)» was read as "5 days old"
+// while accounts-overview said 18 days for the same account. Both numbers were real and they
+// measured different things — messages-per-day vs age — and nothing on screen said which.
+//
+// The fix is to show BOTH, each labelled, with the age coming from the API field the overview
+// itself is built on (`age_days`), so the two pages cannot disagree again.
+//
+// The cap is deliberately NOT derived from the age. `daily_limit` stays authoritative: an
+// account that has existed for 18 days but never sent a message is untested, not warmed up.
+
+/** The age accounts-overview shows, in days. null when the API didn't supply one. */
+export function accountAgeDays(row) {
+  if (!row) return null;
+  // `Number(null)` is 0, not NaN — a `Number.isFinite` guard alone would turn an ABSENT age into
+  // "0 روز" and then into a "still under 10 days" warning about an account whose age we simply
+  // do not know. Unknown must stay unknown.
+  const raw = row.age_days;
+  if (raw === null || raw === undefined || raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** «۱۸ روز» — the age, or «—» when unknown. Whole days; the .2 is noise to an operator. */
+export function accountAgeLabel(row) {
+  const age = accountAgeDays(row);
+  return age === null ? "—" : `${Math.floor(age)} روز`;
+}
+
+/**
+ * The one-line summary under an account chip: age AND cap, each named, so neither can be
+ * mistaken for the other.
+ */
+export function accountAgeAndCap(row) {
+  return `${accountAgeLabel(row)} · ${accountDailyCap(row)} پیام در روز`;
+}
+
+/**
+ * Why a cap is lower than the age would suggest. Returns "" when there is nothing to explain.
+ *
+ * This is the sentence that resolves the contradiction on screen: an account can be 18 days old
+ * and still capped at 5, because the cap follows the warm-up counter (`days_active`), which only
+ * advances while «گرم‌سازی» is on. Without this the two numbers just look broken.
+ */
+export function capExplanation(row) {
+  if (!row) return "";
+  const age = accountAgeDays(row);
+  const counter = Number(row.days_active ?? 0) || 0;
+  const cap = accountDailyCap(row);
+  if (age === null || counter >= YOUNG_ACCOUNT_DAYS || cap > YOUNG_ACCOUNT_CAP) return "";
+  if (age < YOUNG_ACCOUNT_DAYS) {
+    return `هنوز زیر ${YOUNG_ACCOUNT_DAYS} روز است — سقف ${YOUNG_ACCOUNT_CAP} پیام در روز.`;
+  }
+  return (
+    `${Math.floor(age)} روز از افزودنش گذشته، ولی شمارنده‌ی گرم‌سازی روی ${counter} مانده `
+    + `(«گرم‌سازی» خاموش است)، پس سقف ${YOUNG_ACCOUNT_CAP} پیام در روز باقی می‌ماند.`
+  );
+}
+
+/** Risk flag: an instance that has never sent a single message is untested, whatever its age. */
+export function neverSentNotice(row) {
+  if (!row || row.ever_sent === undefined) return "";
+  return row.ever_sent ? "" : "بدون سابقه‌ی ارسال";
+}
+
 /**
  * Capacity for a chosen set of accounts against a contact count.
  * Returns { accounts, perAccount:[{id,name,cap,young}], perDay, days, anyYoung }.

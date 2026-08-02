@@ -67,6 +67,47 @@ async def list_accounts(db: AsyncSession = Depends(get_db)):
     # V18 PART 2 — the warm-up toggle now reflects the V17 enrollment, not the legacy flag.
     from app.services.warmup_exclusion import enrollment_states_by_instance
     enr_map = await enrollment_states_by_instance(db)
+
+    # V64 — the age accounts-overview shows, served from the SAME function so the two pages can
+    # never disagree again. `days_active` is a warm-up COUNTER that only advances while
+    # `warmup_enabled` is true; on an account where it is false the counter sits at 0 forever
+    # while the account genuinely ages. Two numbers, both real, measuring different things —
+    # which is exactly the contradiction the campaign form showed.
+    #
+    # `age_days` is deliberately NOT fed into any cap. It is reporting only. The send limit
+    # stays on `computed_daily_limit`, because a number that has never sent anything is not made
+    # safe by having existed for 18 days.
+    from datetime import datetime as _dt
+    from sqlalchemy import func as _func
+    from app.models.warmup_mesh import WarmupEnrollment
+    from app.services.warmup_peer_eligibility import peer_age_days, connected_since
+    from app.models.campaign import CampaignContact
+    from app.models.reporting import DailySendLog
+
+    _now = _dt.utcnow()
+    _enr_rows = {e.instance_id: e for e in (
+        await db.execute(select(WarmupEnrollment))).scalars().all()}
+    # "Has this instance EVER sent a real message?" — the single most useful risk signal for a
+    # brand-new number, and the one thing neither page showed. Two grouped queries, not N+1.
+    _sent_ids = {r[0] for r in (await db.execute(
+        select(CampaignContact.account_id)
+        .where(CampaignContact.sent_at.isnot(None))
+        .group_by(CampaignContact.account_id)
+    )).all() if r[0] is not None}
+    _sent_ids |= {r[0] for r in (await db.execute(
+        select(DailySendLog.account_id)
+        .where(DailySendLog.status == "sent")
+        .group_by(DailySendLog.account_id)
+    )).all() if r[0] is not None}
+
+    def _age_days(a):
+        age = peer_age_days(a, _enr_rows.get(a.instance_id), _now)
+        return round(age, 1) if age is not None else None
+
+    def _age_anchor(a):
+        cs = connected_since(a, _enr_rows.get(a.instance_id))
+        return cs.isoformat() if cs else None
+
     return [
         {
             "id": str(a.id),
@@ -78,6 +119,15 @@ async def list_accounts(db: AsyncSession = Depends(get_db)):
             "received_today": a.received_today,
             "daily_limit": a.computed_daily_limit,
             "days_active": a.days_active,
+            # V64 — the three age facts, so no page has to guess:
+            #   age_days      — what accounts-overview calls «روزهای اتصال» (same function)
+            #   age_anchor_at — the timestamp that age is measured from, so the number is auditable
+            #   connected_at  — the REAL Green API connection; NULL means never recorded connecting
+            #   ever_sent     — has this instance ever sent a single real message
+            "age_days": _age_days(a),
+            "age_anchor_at": _age_anchor(a),
+            "connected_at": a.connected_at.isoformat() if a.connected_at else None,
+            "ever_sent": a.id in _sent_ids,
             "warmup_enabled": a.warmup_enabled,
             "auto_reply_enabled": a.auto_reply_enabled,
             "auto_reply_outside_hours": a.auto_reply_outside_hours,

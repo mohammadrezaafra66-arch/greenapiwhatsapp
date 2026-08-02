@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import {
   accountDailyCap, campaignCapacity, capacitySentence, youngAccountNotice,
   YOUNG_ACCOUNT_CAP, YOUNG_ACCOUNT_DAYS,
+  accountAgeDays, accountAgeLabel, accountAgeAndCap, capExplanation, neverSentNotice,
 } from "./campaignCapacity.js";
 
 const young = (over = {}) => ({ instance_id: "y", days_active: 0, max_daily_absolute: 200, ...over });
@@ -150,4 +151,68 @@ test("the TC notice names the accounts and shows remaining out of total", () => 
 
 test("no TC notice when no chosen account is a warm-up sender", () => {
   assert.equal(teamCollabNotice(capacityWithTeamCollab([tc()], 100, [], 1)), "");
+});
+
+// ── V64: age and cap are two different numbers and must both be named ───────
+// The live confusion: the chip showed only «(۵/روز)» — the daily message cap — and it was read
+// as "5 days old", while accounts-overview showed 18 days for the very same account. Both were
+// right; nothing said which was which. These pin that the chip now carries BOTH, labelled, and
+// that the age never leaks into the cap.
+const aged = (over = {}) => ({
+  instance_id: "770022683809", phone: "9048249526",
+  age_days: 18.2, days_active: 0, daily_limit: 5, ever_sent: false, ...over,
+});
+
+test("age comes from the API field accounts-overview is built on", () => {
+  assert.equal(accountAgeDays(aged()), 18.2);
+  assert.equal(accountAgeLabel(aged()), "18 روز");
+});
+
+test("an unknown age renders as a dash, never as zero days", () => {
+  assert.equal(accountAgeDays(aged({ age_days: null })), null);
+  assert.equal(accountAgeLabel(aged({ age_days: null })), "—");
+  assert.equal(accountAgeLabel(aged({ age_days: undefined })), "—");
+  assert.equal(accountAgeLabel(null), "—");
+});
+
+test("the chip names both numbers, so neither can be read as the other", () => {
+  const s = accountAgeAndCap(aged());
+  assert.match(s, /18 روز/);
+  assert.match(s, /5 پیام در روز/);
+});
+
+test("the real age NEVER raises the cap — the young-account brake is untouched", () => {
+  // 18 days old, but the warm-up counter is 0, so the backend cap of 5 must stand.
+  assert.equal(accountDailyCap(aged()), YOUNG_ACCOUNT_CAP);
+  assert.equal(accountDailyCap(aged({ age_days: 400 })), YOUNG_ACCOUNT_CAP);
+});
+
+test("the contradiction is explained on screen, naming both numbers", () => {
+  const msg = capExplanation(aged());
+  assert.match(msg, /18 روز/);          // the overview's number
+  assert.match(msg, /گرم‌سازی/);         // why the counter is stuck
+  assert.match(msg, /5 پیام در روز/);   // the cap that still applies
+});
+
+test("a genuinely young account gets the plain young explanation instead", () => {
+  const msg = capExplanation(aged({ age_days: 3 }));
+  assert.match(msg, new RegExp(`زیر ${YOUNG_ACCOUNT_DAYS} روز`));
+});
+
+test("no explanation when the counter has actually advanced past the window", () => {
+  assert.equal(capExplanation(aged({ days_active: 30, daily_limit: 30 })), "");
+});
+
+test("no explanation when the age is unknown — never invent a reason", () => {
+  assert.equal(capExplanation(aged({ age_days: null })), "");
+  assert.equal(capExplanation(null), "");
+});
+
+test("an instance that has never sent is flagged, whatever its age", () => {
+  assert.equal(neverSentNotice(aged({ ever_sent: false })), "بدون سابقه‌ی ارسال");
+  assert.equal(neverSentNotice(aged({ ever_sent: true })), "");
+});
+
+test("an API that omits ever_sent shows no flag rather than a false one", () => {
+  assert.equal(neverSentNotice({ instance_id: "x" }), "");
 });
