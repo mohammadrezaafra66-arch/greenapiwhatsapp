@@ -1,5 +1,5 @@
 import React from "react";
-import { Campaigns as Api, FilesApi, Accounts, ContactGroupsApi, WaCollectionsApi, LabelsApi, Dashboard, WarmupHelpersApi } from "../api.js";
+import { Campaigns as Api, FilesApi, Accounts, ContactGroupsApi, WaCollectionsApi, LabelsApi, ProductsApi, Dashboard, WarmupHelpersApi } from "../api.js";
 import ShamsiDateTimePicker from "../components/ShamsiDateTimePicker.jsx";
 import { Badge, Spinner, Empty, Modal, Progress, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
@@ -7,8 +7,109 @@ import {
   capacitySentence, youngAccountNotice, capacityWithTeamCollab, teamCollabNotice,
   accountAgeAndCap, capExplanation, neverSentNotice,
 } from "./campaignCapacity.js";
+import {
+  extractProducts, totalProducts, brandOptions, togglePooled, isPooled,
+  priceLabel, poolSummary, poolVarietyWarning,
+} from "./productPool.js";
 
 const fa = (n) => Number(n || 0).toLocaleString("fa-IR");
+
+/**
+ * V63 — pick the exact products this campaign may advertise.
+ *
+ * Without a pool every recipient gets the same list: the first `product_count` rows the catalogue
+ * happens to return, from a query with no ORDER BY. With one, the backend draws each recipient's
+ * share from these products, seeded on (campaign, contact) — so one person always sees the same
+ * products while different people see different ones.
+ *
+ * Collapsed by default: the legacy behaviour must stay the path of least resistance, and an
+ * always-open 109-row catalogue would bury the rest of the form.
+ */
+function ProductPoolPicker({ pool, perMessage, onChange }) {
+  const [open, setOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+  const [brand, setBrand] = React.useState("");
+  const [resp, setResp] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      setResp(await ProductsApi.table({ search, brands: brand || undefined, limit: 200 }));
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [search, brand]);
+
+  React.useEffect(() => { if (open && !resp) load(); }, [open, resp, load]);
+
+  const items = extractProducts(resp);
+  const warning = poolVarietyWarning(pool, perMessage);
+
+  return (
+    <div className="border border-line rounded-lg p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <label className="label mb-0">محصولات این کمپین (اختیاری)</label>
+        <button type="button" className="btn-secondary btn-sm" onClick={() => setOpen((o) => !o)}>
+          {open ? "بستن فهرست" : (pool.length ? `ویرایش (${fa(pool.length)} محصول)` : "انتخاب محصول")}
+        </button>
+      </div>
+
+      <p className="text-xs text-muted">{poolSummary(pool, perMessage)}</p>
+      {warning && <p className="text-xs text-amber-700">⚠️ {warning}</p>}
+
+      {open && (
+        <div className="space-y-2 border-t border-line pt-2">
+          <div className="flex gap-2 flex-wrap">
+            <input
+              className="input flex-1 min-w-40"
+              placeholder="جستجوی نام یا مدل"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), load())}
+            />
+            <select className="input w-auto" value={brand} onChange={(e) => setBrand(e.target.value)}>
+              <option value="">— همه برندها —</option>
+              {brandOptions(resp).map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
+            <button type="button" className="btn-secondary" disabled={loading} onClick={load}>
+              {loading ? "..." : "جستجو"}
+            </button>
+          </div>
+
+          {resp && (
+            <p className="text-xs text-muted">
+              نمایش {fa(items.length)} از {fa(totalProducts(resp))} محصول
+              {pool.length > 0 && (
+                <button type="button" className="btn-ghost btn-sm mr-2" onClick={() => onChange([])}>
+                  پاک کردن انتخاب‌ها
+                </button>
+              )}
+            </p>
+          )}
+
+          <div className="space-y-1 max-h-64 overflow-y-auto">
+            {items.map((it) => (
+              <label key={it.id} className="flex items-center gap-2 text-sm border-b border-line py-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isPooled(pool, it.id)}
+                  onChange={() => onChange(togglePooled(pool, it.id))}
+                />
+                <span className="flex-1">{it.name}</span>
+                {it.brand && <span className="text-muted text-xs">{it.brand}</span>}
+                <span className="text-muted whitespace-nowrap" dir="ltr">{priceLabel(it)}</span>
+              </label>
+            ))}
+            {resp && items.length === 0 && <Empty label="محصولی یافت نشد." />}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // V13.6 — render WhatsApp inline formatting markers (*bold* _italic_ ~strike~ ```mono```).
 function renderWaInline(text) {
@@ -499,6 +600,7 @@ const CAMPAIGN_DEFAULTS = {
   poll_question: "", poll_options: "", buttons: "", footer_text: "",
   campaign_scope: "pv", group_ids: "",
   description: "", contact_group_id: "", wa_collection_id: "", product_label_filter: "",
+  product_pool_ids: [],   // V63 — hand-picked products; empty = legacy behaviour
   emoji_level: "medium",
   append_seller_name: false, seller_name: "",
   append_seller_phone: false, seller_phone: "", seller_phone2: "",
@@ -555,6 +657,7 @@ function seedCampaignForm(d) {
     contact_group_id: d.contact_group_id || "",
     wa_collection_id: d.wa_collection_id || "",
     product_label_filter: d.product_label_filter || "",
+    product_pool_ids: d.product_pool_ids || [],
     emoji_level: d.emoji_level || "medium",
     append_seller_name: d.append_seller_name || false,
     seller_name: d.seller_name || "",
@@ -651,6 +754,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
   // V13.6 — live preview
   const [preview, setPreview] = React.useState(null);
   const [previewWarning, setPreviewWarning] = React.useState(null);
+  const [poolNote, setPoolNote] = React.useState(null);   // V63
   const [previewing, setPreviewing] = React.useState(false);
   const buildPreviewBody = () => ({
     use_gpt: f.use_gpt,
@@ -659,6 +763,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
     include_products: f.include_products,
     product_count: Number(f.product_count) || 3,
     product_label_filter: f.include_products && f.product_label_filter ? f.product_label_filter : null,
+    product_pool_ids: f.include_products && f.product_pool_ids?.length ? f.product_pool_ids : null,
     show_product_prices: f.show_product_prices !== false,
     emoji_level: f.emoji_level,
     opening_mode: f.opening_mode,
@@ -683,6 +788,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
       const r = await Api.preview(buildPreviewBody());
       setPreview(r?.preview || "");
       setPreviewWarning(r?.price_warning || null);
+      setPoolNote(r?.pool_note || null);
     } catch (e) {
       toast.error(e?.response?.data?.detail || e.message);
     } finally {
@@ -772,6 +878,7 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         contact_group_id: f.contact_group_id || null,
         wa_collection_id: f.wa_collection_id || null,
         product_label_filter: f.include_products && f.product_label_filter ? f.product_label_filter : null,
+    product_pool_ids: f.include_products && f.product_pool_ids?.length ? f.product_pool_ids : null,
         emoji_level: f.emoji_level,
         append_seller_name: f.append_seller_name,
         seller_name: f.append_seller_name ? (f.seller_name || null) : null,
@@ -1011,6 +1118,14 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
               />
               <p className="text-xs text-muted mt-1">در حالت تنوع بین گروه‌ها، این عدد باید بزرگ‌تر از «تعداد در هر گروه» باشد.</p>
             </div>
+
+            {/* V63 — hand-picked product pool. Empty = the pre-V63 behaviour (the first
+                `product_count` products the catalogue returns, identical for every recipient). */}
+            <ProductPoolPicker
+              pool={f.product_pool_ids || []}
+              perMessage={f.product_count}
+              onChange={(ids) => setF((cur) => ({ ...cur, product_pool_ids: ids }))}
+            />
 
             {/* V15 Item 8 — product detail level */}
             <div>
@@ -1531,7 +1646,20 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
               ⚠️ {previewWarning}
             </div>
           )}
+          {poolNote && (
+            <div className="mt-2 card bg-amber-50 border-amber-200 text-amber-700 text-xs">
+              ⚠️ {poolNote}
+            </div>
+          )}
           <p className="text-xs text-muted mt-1">پیش‌نمایش دقیقاً از همان مسیر ساخت پیام واقعی تولید می‌شود (نمونه مخاطب: اولین مخاطب یا «دوست»).</p>
+          {/* V63 — with a pool, the preview is ONE recipient's draw, not what everyone gets.
+              Saying so prevents "the preview always shows the same three" being read as a bug. */}
+          {f.include_products && (f.product_pool_ids || []).length > 0 && (
+            <p className="text-xs text-muted mt-1">
+              این پیش‌نمایش، محصولات <span className="font-bold">یک مخاطب نمونه</span> است. هر مخاطب
+              واقعی ترکیب متفاوتی می‌گیرد. برای دیدن ترکیب دیگری، نام نمونه را عوض کنید.
+            </p>
+          )}
         </div>
 
         <button className="btn-primary w-full" disabled={saving} onClick={submit}>
