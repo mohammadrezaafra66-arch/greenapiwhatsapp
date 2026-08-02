@@ -105,3 +105,49 @@ test("the young-account notice explains the cap cannot be raised by settings", (
 test("no notice when every chosen account is mature", () => {
   assert.equal(youngAccountNotice(campaignCapacity([mature(), mature()], 50)), "");
 });
+
+// ── V60 STEP 2: capacity shared with Team Collaboration ─────────────────────
+import { capacityWithTeamCollab, teamCollabNotice } from "./campaignCapacity.js";
+
+const tc = (over = {}) => ({ instance_id: "tc-1", days_active: 0, max_daily_absolute: 200, ...over });
+
+test("an account that is also a TC sender loses that share of its daily cap", () => {
+  const cap = capacityWithTeamCollab([tc()], 100, ["tc-1"], 1);
+  assert.equal(cap.perAccount[0].cap, 5);
+  assert.equal(cap.perAccount[0].remaining, 4);
+  assert.equal(cap.perDay, 4);
+  assert.equal(cap.anyTeamCollab, true);
+});
+
+test("an account not in Team Collaboration keeps its whole cap", () => {
+  const cap = capacityWithTeamCollab([tc({ instance_id: "plain" })], 100, ["tc-1"], 1);
+  assert.equal(cap.perAccount[0].remaining, 5);
+  assert.equal(cap.anyTeamCollab, false);
+});
+
+test("the reserved share can never push remaining below zero", () => {
+  const cap = capacityWithTeamCollab([tc()], 100, ["tc-1"], 99);
+  assert.equal(cap.perAccount[0].remaining, 0);
+  assert.equal(cap.perDay, 0);
+  assert.equal(cap.days, null);
+});
+
+test("days are recomputed from the REMAINING capacity, not the raw cap", () => {
+  // three young TC senders: raw would be 15/day → 14 days; real is 12/day → 17 days
+  const rows = [tc({ instance_id: "a" }), tc({ instance_id: "b" }), tc({ instance_id: "c" })];
+  const cap = capacityWithTeamCollab(rows, 200, ["a", "b", "c"], 1);
+  assert.equal(cap.perDay, 12);
+  assert.equal(cap.days, 17);
+});
+
+test("the TC notice names the accounts and shows remaining out of total", () => {
+  const cap = capacityWithTeamCollab([tc({ instance_id: "a", phone: "9048249526" })], 100, ["a"], 1);
+  const notice = teamCollabNotice(cap);
+  assert.match(notice, /همکاری تیمی/);
+  assert.match(notice, /9048249526/);
+  assert.match(notice, /4 از 5/);
+});
+
+test("no TC notice when no chosen account is a warm-up sender", () => {
+  assert.equal(teamCollabNotice(capacityWithTeamCollab([tc()], 100, [], 1)), "");
+});

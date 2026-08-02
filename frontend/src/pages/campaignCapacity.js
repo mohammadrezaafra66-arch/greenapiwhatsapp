@@ -72,6 +72,52 @@ export function capacitySentence(cap, contactCount) {
   return `${head} — ${n} مخاطب در حدود ${cap.days} روز تمام می‌شود.`;
 }
 
+/**
+ * V60 STEP 2 — an account that is ALSO an active Team Collaboration sender does not get a
+ * fresh allowance for the campaign: both roles draw on the SAME per-account daily cap. Showing
+ * the raw cap here would over-promise, and the operator would plan a list that quietly starves
+ * the warm-up (or the other way round).
+ *
+ * `tcReserved` is how many of that account's daily messages the warm-up is expected to take.
+ * Returns the same shape as campaignCapacity, with `perDay` reduced to what is genuinely left.
+ */
+export function capacityWithTeamCollab(rows, contactCount, tcSenderIds = [], tcReserved = 1) {
+  const reserved = new Set((tcSenderIds || []).map(String));
+  const list = (rows || []).map((r) => {
+    const id = r.instance_id || r.account_id || r.id;
+    const cap = accountDailyCap(r);
+    const isTc = reserved.has(String(id)) || reserved.has(String(r.instance_id));
+    const taken = isTc ? Math.min(cap, Math.max(0, num(tcReserved, 1))) : 0;
+    return {
+      id,
+      name: r.phone || r.name || r.instance_id,
+      cap,
+      remaining: Math.max(0, cap - taken),
+      young: num(r.days_active ?? 0, 0) < YOUNG_ACCOUNT_DAYS,
+      teamCollab: isTc,
+    };
+  });
+  const perDay = list.reduce((s, a) => s + a.remaining, 0);
+  const n = Math.max(0, num(contactCount, 0));
+  return {
+    accounts: list.length,
+    perAccount: list,
+    perDay,
+    days: perDay > 0 && n > 0 ? Math.ceil(n / perDay) : null,
+    anyYoung: list.some((a) => a.young),
+    anyTeamCollab: list.some((a) => a.teamCollab),
+  };
+}
+
+/** Warning naming the accounts whose daily capacity is shared with Team Collaboration. */
+export function teamCollabNotice(cap) {
+  if (!cap || !cap.anyTeamCollab) return "";
+  const shared = cap.perAccount.filter((a) => a.teamCollab);
+  const detail = shared.map((a) => `${a.name} (${a.remaining} از ${a.cap})`).join(" · ");
+  return `${shared.length} حساب هم‌زمان در «همکاری تیمی» فعال است و ظرفیت روزانه‌اش بین `
+    + `کمپین و گرم‌سازی تقسیم می‌شود. ظرفیت باقی‌مانده برای کمپین: ${detail}`;
+}
+
 /** Warning shown when any chosen account is still inside its 10-day high-risk window. */
 export function youngAccountNotice(cap) {
   if (!cap || !cap.anyYoung) return "";

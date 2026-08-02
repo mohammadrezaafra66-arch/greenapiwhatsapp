@@ -1,9 +1,11 @@
 import React from "react";
-import { Campaigns as Api, FilesApi, Accounts, ContactGroupsApi, WaCollectionsApi, LabelsApi, Dashboard } from "../api.js";
+import { Campaigns as Api, FilesApi, Accounts, ContactGroupsApi, WaCollectionsApi, LabelsApi, Dashboard, WarmupHelpersApi } from "../api.js";
 import ShamsiDateTimePicker from "../components/ShamsiDateTimePicker.jsx";
 import { Badge, Spinner, Empty, Modal, Progress, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
-import { campaignCapacity, capacitySentence, youngAccountNotice } from "./campaignCapacity.js";
+import {
+  capacitySentence, youngAccountNotice, capacityWithTeamCollab, teamCollabNotice,
+} from "./campaignCapacity.js";
 
 const fa = (n) => Number(n || 0).toLocaleString("fa-IR");
 
@@ -506,6 +508,7 @@ const CAMPAIGN_DEFAULTS = {
   opening_mode: "ai", opening_line: "", opening_variants: "",
   product_variation_mode: "same", products_per_group: 3, product_weights: "",
   product_detail_level: "medium", selected_account_id: "",
+  selected_account_ids: [],                       // V60 PART A — exact accounts to send from
   append_links: false, links_count: 1, links_mode: "weighted",
   include_opt_out: true, opt_out_text: "",
   ab_test_enabled: false, variant_b_prompt: "", variant_b_template: "",
@@ -568,6 +571,7 @@ function seedCampaignForm(d) {
     products_per_group: d.products_per_group || 3,
     product_detail_level: d.product_detail_level || "medium",
     selected_account_id: d.selected_account_id || "",
+    selected_account_ids: d.selected_account_ids || [],   // V60 PART A
     append_links: d.append_links || false,
     links_count: d.links_count || 1,
     links_mode: d.links_mode || "weighted",
@@ -598,8 +602,17 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
   const [waCollections, setWaCollections] = React.useState([]);
   const [labels, setLabels] = React.useState([]);
   const [activeAccounts, setActiveAccounts] = React.useState([]); // V15 Item 11
+  // V60 STEP 2 — instance_ids that are ACTIVE Team Collaboration senders. Such an account does
+  // not get a fresh allowance for the campaign: both roles draw on the SAME per-account cap.
+  const [tcSenderIds, setTcSenderIds] = React.useState([]);
   React.useEffect(() => {
     Accounts.list().then((a) => setActiveAccounts((a || []).filter((x) => x.status === "active"))).catch(() => {});
+    WarmupHelpersApi.senders()
+      .then((r) => setTcSenderIds(
+        (r?.senders || [])
+          .filter((s) => s.team_enabled && (s.contact_count || 0) > 0)
+          .map((s) => s.instance_id)))
+      .catch(() => {});
   }, []);
   const [feasContactCount, setFeasContactCount] = React.useState(100);
   const [feasResult, setFeasResult] = React.useState(null);
@@ -779,6 +792,8 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         product_weights: f.campaign_scope === "group" ? parseWeights(f.product_weights) : null,
         product_detail_level: f.product_detail_level || "medium",
         selected_account_id: (!f.parallel_accounts && f.selected_account_id) ? f.selected_account_id : null,
+        // V60 PART A — empty array means "no restriction"; the backend collapses it to NULL.
+        selected_account_ids: (f.selected_account_ids || []).length ? f.selected_account_ids : null,
         append_links: f.append_links,
         links_count: Number(f.links_count) || 1,
         links_mode: f.links_mode || "weighted",
@@ -1309,24 +1324,67 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
             <input type="checkbox" checked={f.parallel_accounts} onChange={set("parallel_accounts")} />
             ارسال موازی با چند حساب
           </label>
-          {/* V60 PART C-3 — the cap that actually governs a campaign is PER ACCOUNT: an account
-              under 10 days is hard-capped at 5/day whatever «سقف روزانه» shows. Saying so here
-              stops the "I set 50 and only 5 went out" confusion, and stops a list being rushed. */}
+          {/* V60 PART A — pick the exact accounts. Before this the only choices were ONE account
+              or (with parallel) EVERY active one, so "these three" meant blasting from all. */}
+          <div className="mt-2">
+            <label className="label">ارسال فقط با این حساب‌ها:</label>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {activeAccounts.map((a) => {
+                const picked = (f.selected_account_ids || []).includes(a.id);
+                const isTc = tcSenderIds.includes(a.instance_id);
+                const young = Number(a.days_active ?? 0) < 10;
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => {
+                      const cur = f.selected_account_ids || [];
+                      setF({
+                        ...f,
+                        selected_account_ids: picked
+                          ? cur.filter((x) => x !== a.id)
+                          : [...cur, a.id],
+                      });
+                    }}
+                    className={`px-2 py-1 rounded-lg border text-xs flex items-center gap-1 ${picked
+                      ? "bg-brand/15 border-brand text-brand font-bold"
+                      : "bg-canvas border-line text-ink"}`}>
+                    <span>{a.phone || a.name}</span>
+                    <span className="opacity-70">({a.daily_limit}/روز)</span>
+                    {young && <span className="badge bg-amber-50 text-amber-700 border-amber-200">جوان</span>}
+                    {isTc && <span className="badge bg-sky-50 text-sky-700 border-sky-200">همکاری تیمی</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-muted mt-1">
+              اگر هیچ‌کدام را انتخاب نکنید، رفتار قبلی حفظ می‌شود (یک حساب، یا همه در حالت موازی).
+            </p>
+          </div>
+
+          {/* V60 PART C-3 + STEP 2 — the cap that governs a campaign is PER ACCOUNT (an account
+              under 10 days is hard-capped at 5/day whatever «سقف روزانه» shows), and an account
+              that is also a Team Collaboration sender shares that cap between both roles. */}
           {(() => {
-            const chosen = f.parallel_accounts
-              ? activeAccounts
-              : activeAccounts.filter((a) => a.id === f.selected_account_id);
-            const cap = campaignCapacity(chosen, feasContactCount);
-            const notice = youngAccountNotice(cap);
+            const picked = f.selected_account_ids || [];
+            const chosen = picked.length
+              ? activeAccounts.filter((a) => picked.includes(a.id))
+              : (f.parallel_accounts
+                  ? activeAccounts
+                  : activeAccounts.filter((a) => a.id === f.selected_account_id));
+            const cap = capacityWithTeamCollab(chosen, feasContactCount, tcSenderIds, 1);
+            const young = youngAccountNotice(cap);
+            const tcNote = teamCollabNotice(cap);
             return (
               <div className="mt-2 rounded-lg bg-canvas border border-line p-2 space-y-1">
                 <p className="text-xs text-ink">📊 {capacitySentence(cap, feasContactCount)}</p>
                 {cap.accounts > 0 && (
                   <p className="text-[11px] text-muted">
-                    {cap.perAccount.map((a) => `${a.name}: ${a.cap}`).join(" · ")}
+                    {cap.perAccount.map((a) => `${a.name}: ${a.remaining}`).join(" · ")}
                   </p>
                 )}
-                {notice && <p className="text-[11px] text-amber-700">⚠️ {notice}</p>}
+                {tcNote && <p className="text-[11px] text-sky-700">🤝 {tcNote}</p>}
+                {young && <p className="text-[11px] text-amber-700">⚠️ {young}</p>}
               </div>
             );
           })()}
