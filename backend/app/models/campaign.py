@@ -76,6 +76,13 @@ class Campaign(Base):
     contact_group_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     wa_collection_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     product_label_filter: Mapped[str | None] = mapped_column(String(200))
+    # V63 — the campaign's PRODUCT POOL: Supabase product ids the operator hand-picked.
+    # Empty/NULL keeps the pre-V63 behaviour exactly (the first `product_count` products the
+    # catalogue happens to return, identical for every recipient), so every existing campaign is
+    # untouched. When set, each recipient gets `product_count` products drawn from THIS list and
+    # nothing else — chosen deterministically per contact, so one person always sees the same
+    # products while different people see different ones.
+    product_pool_ids: Mapped[list | None] = mapped_column(JSONB)
     is_always_on: Mapped[bool] = mapped_column(Boolean, default=False)
     # ── Message customization (opening line / per-group products / opt-out) ──
     opening_mode: Mapped[str] = mapped_column(String(20), default="ai")  # ai|fixed|none|random

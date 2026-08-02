@@ -284,6 +284,9 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS selected_account_ids jsonb",
             # V60 PART B — allowed weekdays (Persian indices). NULL/empty = every day.
             "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS allowed_weekdays jsonb",
+            # V63 — hand-picked Supabase product ids for this campaign. NULL/empty = the legacy
+            # behaviour (first `product_count` from the catalogue, same for everyone).
+            "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS product_pool_ids jsonb",
             # Feature 39: per-account send limits with Meta standards
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS max_daily_absolute integer DEFAULT 200",
             "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS incoming_ratio_multiplier numeric DEFAULT 0.5",

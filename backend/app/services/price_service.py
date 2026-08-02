@@ -159,6 +159,55 @@ async def get_products(count: int = 3, category_filter: str | None = None) -> li
         return []
 
 
+async def get_products_by_ids(ids: list[str]) -> list[dict]:
+    """V63 — fetch exactly the products the operator hand-picked, with live prices.
+
+    Returns them in the SAME ORDER as `ids`, because the caller's per-contact draw is seeded and
+    must be reproducible: if Supabase returned rows in a different order on a later call, the
+    same contact would be shown different products, which is the one thing the stable draw exists
+    to prevent.
+
+    Ids that no longer resolve (product deleted, deactivated, or out of stock) are simply absent
+    from the result — the pool shrinks rather than the send failing. `stock_status` is filtered
+    here, unlike `get_products_by_label`, so a pool campaign never advertises something
+    unavailable.
+    """
+    ids = [str(i).strip() for i in (ids or []) if str(i or "").strip()]
+    if not ids:
+        return []
+    ids_filter = "(" + ",".join(ids) + ")"
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"{settings.supabase_url}/rest/v1/products",
+                params={
+                    "id": f"in.{ids_filter}",
+                    "is_active": "eq.true",
+                    "stock_status": "neq.unavailable",
+                    "select": _PRODUCT_SELECT,
+                },
+                headers=_headers(),
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+            price_map = await _fetch_price_map(client)
+    except Exception as e:
+        logger.warning("get_products_by_ids failed: %s", e)
+        return []
+
+    by_id = {}
+    for item in rows if isinstance(rows, list) else []:
+        if not isinstance(item, dict) or not item.get("name"):
+            continue
+        by_id[str(item.get("id"))] = {
+            "id": str(item.get("id") or ""),
+            "name": item["name"],
+            "price": price_map.get(str(item.get("id"))),
+        }
+    # Caller's order, not Supabase's — see the docstring.
+    return [by_id[i] for i in ids if i in by_id]
+
+
 async def get_products_by_label(label_id: str, count: int = 3) -> list[dict]:
     """Get products that carry a specific product label (self-hosted Supabase)."""
     headers = _headers()

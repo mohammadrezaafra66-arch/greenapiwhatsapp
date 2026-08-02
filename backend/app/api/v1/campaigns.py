@@ -43,6 +43,9 @@ class CampaignCreateBody(BaseModel):
     contact_group_id: str | None = None  # use contacts from this group
     wa_collection_id: str | None = None  # send to WA groups in this collection
     product_label_filter: str | None = None  # filter products by label id
+    # V63 — hand-picked Supabase product ids. Empty/None = legacy behaviour (the first
+    # `product_count` products the catalogue returns, identical for every recipient).
+    product_pool_ids: list[str] | None = None
     is_always_on: bool = False
     is_active: bool = True
     # V8 extensions
@@ -106,6 +109,7 @@ class CampaignPreviewBody(BaseModel):
     include_products: bool = False
     product_count: int = 3
     product_label_filter: str | None = None
+    product_pool_ids: list[str] | None = None   # V63 — hand-picked product pool
     show_product_prices: bool = True
     emoji_level: str = "medium"
     opening_mode: str = "ai"
@@ -198,6 +202,33 @@ def _clean_weekdays(raw) -> list[int] | None:
     return sorted(out)
 
 
+def _clean_product_pool(raw) -> list[str] | None:
+    """V63 — normalise the hand-picked product pool to a de-duplicated list of id strings, or
+    None when nothing was chosen.
+
+    Supabase product ids are UUIDs, but they are NOT parsed as such here: they are opaque
+    identifiers we only ever hand back to Supabase in an `id=in.(…)` filter. Validating them as
+    UUIDs would silently drop a perfectly good id if the catalogue ever used another key format,
+    and a dropped id means a product the operator picked quietly vanishes from their campaign.
+    Blanks and non-scalars are still rejected.
+
+    An empty result collapses to None so the campaign falls back to its legacy product behaviour
+    instead of matching zero products and sending messages with no products at all.
+    """
+    if not raw:
+        return None
+    out, seen = [], set()
+    for item in raw:
+        if item is None or isinstance(item, (dict, list, tuple, set, bool)):
+            continue
+        key = str(item).strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(key)
+    return out or None
+
+
 def _campaign_detail(c: Campaign) -> dict:
     return {
         "id": str(c.id),
@@ -228,6 +259,7 @@ def _campaign_detail(c: Campaign) -> dict:
         "parallel_accounts": c.parallel_accounts,
         "max_parallel_accounts": c.max_parallel_accounts,
         "selected_account_ids": list(c.selected_account_ids or []),   # V60 PART A
+        "product_pool_ids": list(c.product_pool_ids or []),           # V63
         "allowed_weekdays": list(c.allowed_weekdays or []),           # V60 PART B
         "show_product_prices": c.show_product_prices,
         "schedule_start_shamsi": to_shamsi(c.schedule_start),
@@ -348,6 +380,7 @@ async def update_campaign(campaign_id: str, body: CampaignCreateBody, db: AsyncS
     c.product_detail_level = body.product_detail_level or "medium"
     c.selected_account_id = uuid.UUID(body.selected_account_id) if body.selected_account_id else None
     c.selected_account_ids = _clean_account_ids(body.selected_account_ids)
+    c.product_pool_ids = _clean_product_pool(body.product_pool_ids)
     c.allowed_weekdays = _clean_weekdays(body.allowed_weekdays)
     c.append_links = body.append_links
     c.links_count = max(1, int(body.links_count or 1))
@@ -454,6 +487,7 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         parallel_accounts=body.parallel_accounts,
         max_parallel_accounts=body.max_parallel_accounts,
         selected_account_ids=_clean_account_ids(body.selected_account_ids),
+        product_pool_ids=_clean_product_pool(body.product_pool_ids),
         allowed_weekdays=_clean_weekdays(body.allowed_weekdays),
         show_product_prices=body.show_product_prices,
         schedule_start=from_shamsi(body.schedule_start_shamsi) if body.schedule_start_shamsi else None,
@@ -499,9 +533,28 @@ async def preview_message(body: CampaignPreviewBody, db: AsyncSession = Depends(
     from app.services.campaign_runner import build_message_text
     from app.services.price_service import get_products, get_products_by_label
 
+    # V63 — the pool draw is seeded on the SAMPLE contact, so the preview behaves exactly like a
+    # real send: the same sample always shows the same products, and changing the sample name
+    # shows what a different recipient would get. Previewing repeatedly with the same name and
+    # seeing the same products is correct, not a bug.
+    sample_key = f"{body.sample_first_name or ''}|{body.sample_last_name or ''}"
     products = []
+    pool_note = None
     if body.include_products:
-        if body.product_label_filter:
+        if body.product_pool_ids:
+            from app.services.price_service import get_products_by_ids
+            from app.services.product_selection import stable_pool_pick
+            pool = await get_products_by_ids(list(body.product_pool_ids))
+            missing = len(body.product_pool_ids) - len(pool)
+            if missing > 0:
+                pool_note = (f"{missing} محصول از فهرست انتخابی شما در دسترس نیست "
+                             f"(حذف‌شده یا ناموجود) و در پیام نمی‌آید.")
+            if pool:
+                products = stable_pool_pick(pool, body.product_count, "preview", sample_key)
+            else:
+                pool_note = "هیچ‌کدام از محصولات انتخابی در دسترس نیست — محصولات پیش‌فرض نمایش داده می‌شود."
+                products = await get_products(body.product_count)
+        elif body.product_label_filter:
             products = await get_products_by_label(body.product_label_filter, body.product_count)
         else:
             products = await get_products(body.product_count)
@@ -542,7 +595,7 @@ async def preview_message(body: CampaignPreviewBody, db: AsyncSession = Depends(
             st = price_source_status()
             price_warning = ("قیمت‌ها از Supabase دریافت نشدند، بنابراین «تماس بگیرید» نمایش داده می‌شود. علت: "
                              + (st.get("reason") or "منبع قیمت در دسترس نیست"))
-    return {"preview": text, "price_warning": price_warning}
+    return {"preview": text, "price_warning": price_warning, "pool_note": pool_note}
 
 
 @router.post("/{campaign_id}/contacts")

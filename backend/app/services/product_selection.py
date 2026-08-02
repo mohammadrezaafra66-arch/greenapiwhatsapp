@@ -2,7 +2,41 @@
 
 Pure functions (no DB/network) so the selection logic is unit-testable. A product is
 a dict with at least a 'name' (and optionally 'id'); weights key off name or id."""
+import hashlib
 import random
+
+
+def stable_seed(*parts) -> int:
+    """V63 — a process-independent integer seed from arbitrary parts.
+
+    Deliberately NOT Python's `hash()`: string hashing is salted per interpreter, so `hash()`
+    gives a different value in every worker process and after every restart. The whole point of
+    the per-contact draw is that ONE contact always sees the SAME products — a per-process seed
+    would silently break that across the two send paths, which run in different workers.
+    """
+    raw = "|".join("" if p is None else str(p) for p in parts)
+    return int.from_bytes(hashlib.sha256(raw.encode("utf-8")).digest()[:8], "big")
+
+
+def stable_pool_pick(pool: list, count: int, *seed_parts) -> list:
+    """V63 — deterministically draw `count` distinct products from `pool` for ONE recipient.
+
+    Same seed parts → same products, every time, in every process. Different recipients get
+    different draws, which is the anti-spam benefit: 30 recipients no longer receive a
+    byte-identical product list.
+
+    A pool smaller than `count` returns the whole pool (shuffled) rather than raising — an
+    operator who picks 2 products and asks for 3 per message should still get their 2.
+    """
+    if not pool:
+        return []
+    try:
+        count = int(count or 1)
+    except (TypeError, ValueError):
+        count = 1
+    count = max(1, min(count, len(pool)))
+    rng = random.Random(stable_seed(*seed_parts))
+    return rng.sample(list(pool), count)
 
 
 def _weight_key(p: dict) -> str:

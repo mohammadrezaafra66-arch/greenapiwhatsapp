@@ -10,10 +10,30 @@ from app.services.price_service import get_products
 from app.services.rate_limiter import can_send, record_send
 
 
-async def fetch_campaign_products(campaign) -> list:
+async def fetch_campaign_products(campaign, contact=None) -> list:
     """CRITICAL: fetch prices PER-MESSAGE (not per-campaign) so mid-campaign price changes
     are reflected immediately. get_products is Redis-cached (≤5 min) so this stays cheap.
-    See V15 Item 24."""
+    See V15 Item 24.
+
+    V63 — when the campaign has a hand-picked `product_pool_ids`, draw this recipient's share
+    from THAT pool instead. The draw is seeded on (campaign, contact) so one contact always sees
+    the same products while different contacts see different ones. Prices are still read live in
+    the same call, so the random pick is never a stale-price pick.
+
+    `contact` is optional and the pool branch is skipped without it: the callers that prefetch a
+    campaign-level list (before any recipient is known) must keep getting the legacy list, and a
+    pool draw with no contact would be an arbitrary one presented as personalised.
+    """
+    pool_ids = getattr(campaign, "product_pool_ids", None)
+    if pool_ids and contact is not None:
+        from app.services.price_service import get_products_by_ids
+        from app.services.product_selection import stable_pool_pick
+        pool = await get_products_by_ids(list(pool_ids))
+        if pool:
+            return stable_pool_pick(pool, campaign.product_count,
+                                    getattr(campaign, "id", ""), getattr(contact, "id", ""))
+        # Pool resolved to nothing (every picked product deleted/out of stock) → fall through to
+        # the legacy list rather than sending a product-less message the operator didn't ask for.
     if getattr(campaign, "product_label_filter", None):
         from app.services.price_service import get_products_by_label
         return await get_products_by_label(campaign.product_label_filter, campaign.product_count)
@@ -130,8 +150,9 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
             effective_template = campaign.variant_b_template or effective_template
         # V15 Item 24 — fetch prices PER-MESSAGE (not the campaign-start snapshot) so a
         # price change mid-campaign is reflected on the very next message (cache ≤5 min).
+        # V63 — `contact` is passed so a pool campaign draws THIS recipient's products here.
         if effective_include_products:
-            products = await fetch_campaign_products(campaign)
+            products = await fetch_campaign_products(campaign, contact)
 
         # Build the message via the shared builder (same path the preview uses).
         message = await build_message_text(
