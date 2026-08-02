@@ -83,6 +83,8 @@ class CampaignCreateBody(BaseModel):
     # keeps the legacy behaviour; when set it narrows the sending set in EVERY mode, including
     # parallel, which previously always meant "every active account".
     selected_account_ids: list[str] | None = None
+    # V60 PART B — Persian weekday indices (شنبه=0 … جمعه=6). Empty/None = every day.
+    allowed_weekdays: list[int] | None = None
     # V16 PART 3 — append advertising links
     append_links: bool = False
     links_count: int = 1
@@ -172,6 +174,30 @@ def _clean_account_ids(raw) -> list[str] | None:
     return out or None
 
 
+def _clean_weekdays(raw) -> list[int] | None:
+    """V60 PART B — normalise allowed weekdays to sorted, unique Persian indices (شنبه=0 …
+    جمعه=6), or None for "every day".
+
+    Out-of-range and unparsable values are dropped, and a selection that ends up empty collapses
+    to None. That matters: an empty list read literally would mean "no day is allowed", which
+    would park the campaign forever instead of running it — the opposite of what a user who
+    cleared the toggles expects.
+    """
+    if not raw:
+        return None
+    out = set()
+    for item in raw:
+        try:
+            day = int(item)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= day <= 6:
+            out.add(day)
+    if not out or len(out) == 7:
+        return None            # all seven = no restriction; store NULL so intent is unambiguous
+    return sorted(out)
+
+
 def _campaign_detail(c: Campaign) -> dict:
     return {
         "id": str(c.id),
@@ -202,6 +228,7 @@ def _campaign_detail(c: Campaign) -> dict:
         "parallel_accounts": c.parallel_accounts,
         "max_parallel_accounts": c.max_parallel_accounts,
         "selected_account_ids": list(c.selected_account_ids or []),   # V60 PART A
+        "allowed_weekdays": list(c.allowed_weekdays or []),           # V60 PART B
         "show_product_prices": c.show_product_prices,
         "schedule_start_shamsi": to_shamsi(c.schedule_start),
         "schedule_end_shamsi": to_shamsi(c.schedule_end),
@@ -321,6 +348,7 @@ async def update_campaign(campaign_id: str, body: CampaignCreateBody, db: AsyncS
     c.product_detail_level = body.product_detail_level or "medium"
     c.selected_account_id = uuid.UUID(body.selected_account_id) if body.selected_account_id else None
     c.selected_account_ids = _clean_account_ids(body.selected_account_ids)
+    c.allowed_weekdays = _clean_weekdays(body.allowed_weekdays)
     c.append_links = body.append_links
     c.links_count = max(1, int(body.links_count or 1))
     c.links_mode = body.links_mode or "weighted"
@@ -426,6 +454,7 @@ async def create_campaign(body: CampaignCreateBody, db: AsyncSession = Depends(g
         parallel_accounts=body.parallel_accounts,
         max_parallel_accounts=body.max_parallel_accounts,
         selected_account_ids=_clean_account_ids(body.selected_account_ids),
+        allowed_weekdays=_clean_weekdays(body.allowed_weekdays),
         show_product_prices=body.show_product_prices,
         schedule_start=from_shamsi(body.schedule_start_shamsi) if body.schedule_start_shamsi else None,
         schedule_end=from_shamsi(body.schedule_end_shamsi) if body.schedule_end_shamsi else None,

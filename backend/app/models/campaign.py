@@ -112,6 +112,9 @@ class Campaign(Base):
     # express, so an operator wanting three ended up blasting from all of them. Empty/NULL keeps
     # the legacy behaviour exactly, so existing campaigns are untouched.
     selected_account_ids: Mapped[list | None] = mapped_column(JSONB)
+    # V60 PART B — Persian weekday indices (شنبه=0 … جمعه=6) this campaign may send on.
+    # NULL/empty = every day, which is the pre-V60 behaviour every existing campaign keeps.
+    allowed_weekdays: Mapped[list | None] = mapped_column(JSONB)
     # V16 PART 3 — append advertising links to the message
     append_links: Mapped[bool] = mapped_column(Boolean, default=False)
     links_count: Mapped[int] = mapped_column(Integer, default=1)

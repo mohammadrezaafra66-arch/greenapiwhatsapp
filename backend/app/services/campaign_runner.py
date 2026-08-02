@@ -26,6 +26,9 @@ from app.config import settings
 from app.services.account_selection import (
     NO_ACCOUNT_REASON, SELECTED_ACCOUNT_UNAVAILABLE_REASON, resolve_sending_accounts,
 )
+# V60 — the shared pre-flight brakes; imported at module level so both send paths (and the
+# auto-resume checks) reference the SAME pause reasons rather than re-declaring them.
+from app.services import campaign_preflight
 WINDOW_WAIT_REASON = "خارج از بازه مجاز ارسال این اکانت — ادامه خودکار در بازه بعدی"
 
 
@@ -324,6 +327,7 @@ async def _run_campaign_inner(campaign_id: str):
         # scheduled start time (this task was rescheduled for exactly that).
         if campaign.status == CampaignStatus.paused and (
             campaign.pause_reason == WINDOW_WAIT_REASON
+            or campaign.pause_reason == campaign_preflight.DAY_NOT_ALLOWED_REASON
             or (campaign.pause_reason or "").startswith("زمان شروع")
         ):
             campaign.status = CampaignStatus.running
@@ -366,6 +370,24 @@ async def _run_campaign_inner(campaign_id: str):
             campaign.status = CampaignStatus.paused
             campaign.pause_reason = abort_reason
             await db.commit()
+            return
+
+        # V60 PART B — allowed weekdays, checked with the hour window rather than with the
+        # end-of-campaign logic: a disallowed day is temporary, so it PARKS the campaign
+        # (paused + reason + retry) and must never mark it completed. Tehran calendar.
+        from app.services import campaign_preflight as _pf
+        if not _pf.is_send_day(campaign.allowed_weekdays, _pf.tehran_now()):
+            campaign.status = CampaignStatus.paused
+            campaign.pause_reason = _pf.DAY_NOT_ALLOWED_REASON
+            await db.commit()
+            try:
+                from app.workers.tasks import task_run_campaign
+                task_run_campaign.apply_async(
+                    args=[campaign_id],
+                    countdown=max(1, _pf.seconds_until_next_send_day(
+                        campaign.allowed_weekdays, _pf.tehran_now())))
+            except Exception as e:
+                print(f"[Campaign {campaign_id}] weekday reschedule failed (non-fatal): {e}")
             return
 
         # Outside EVERY active account's send window (per-account hour schedule,
@@ -592,6 +614,7 @@ async def _run_campaign_parallel_inner(campaign_id: str, account_ids: list[str])
         # Auto-resume a campaign parked by a window/schedule wait (this run IS that retry).
         if campaign.status == CampaignStatus.paused and (
             campaign.pause_reason == WINDOW_WAIT_REASON
+            or campaign.pause_reason == campaign_preflight.DAY_NOT_ALLOWED_REASON
             or (campaign.pause_reason or "").startswith("زمان شروع")
         ):
             campaign.status = CampaignStatus.running
@@ -628,6 +651,19 @@ async def _run_campaign_parallel_inner(campaign_id: str, account_ids: list[str])
                 campaign.pause_reason = abort_reason
                 await db.commit()
                 return
+
+        # Brake 3b — V60 PART B: allowed weekdays. Placed with the hour window, NOT with the
+        # end-of-campaign logic: a disallowed day is a temporary condition, so it must PARK the
+        # campaign (paused + reason + retry) and never mark it completed. Computed on the Tehran
+        # calendar, since Friday there begins 3.5h before Friday in UTC.
+        if not pf.is_send_day(campaign.allowed_weekdays, pf.tehran_now(now)):
+            campaign.status = CampaignStatus.paused
+            campaign.pause_reason = pf.DAY_NOT_ALLOWED_REASON
+            await db.commit()
+            _reschedule(campaign_id, account_ids,
+                        pf.seconds_until_next_send_day(campaign.allowed_weekdays,
+                                                       pf.tehran_now(now)))
+            return
 
         # Brake 4 — send-hour window. Outside every account's window, park and retry when the
         # earliest one opens (never mark the campaign finished).

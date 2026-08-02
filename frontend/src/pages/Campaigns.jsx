@@ -509,6 +509,7 @@ const CAMPAIGN_DEFAULTS = {
   product_variation_mode: "same", products_per_group: 3, product_weights: "",
   product_detail_level: "medium", selected_account_id: "",
   selected_account_ids: [],                       // V60 PART A — exact accounts to send from
+  allowed_weekdays: [],                           // V60 PART B — [] = every day
   append_links: false, links_count: 1, links_mode: "weighted",
   include_opt_out: true, opt_out_text: "",
   ab_test_enabled: false, variant_b_prompt: "", variant_b_template: "",
@@ -572,6 +573,7 @@ function seedCampaignForm(d) {
     product_detail_level: d.product_detail_level || "medium",
     selected_account_id: d.selected_account_id || "",
     selected_account_ids: d.selected_account_ids || [],   // V60 PART A
+    allowed_weekdays: d.allowed_weekdays || [],           // V60 PART B
     append_links: d.append_links || false,
     links_count: d.links_count || 1,
     links_mode: d.links_mode || "weighted",
@@ -794,6 +796,8 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
         selected_account_id: (!f.parallel_accounts && f.selected_account_id) ? f.selected_account_id : null,
         // V60 PART A — empty array means "no restriction"; the backend collapses it to NULL.
         selected_account_ids: (f.selected_account_ids || []).length ? f.selected_account_ids : null,
+        // V60 PART B — empty means every day; the backend also stores all-seven as NULL.
+        allowed_weekdays: (f.allowed_weekdays || []).length ? f.allowed_weekdays : null,
         append_links: f.append_links,
         links_count: Number(f.links_count) || 1,
         links_mode: f.links_mode || "weighted",
@@ -1317,6 +1321,38 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
             </div>
           </div>
           <p className="text-xs text-muted">از تقویم شمسی انتخاب کنید. خالی = بدون زمان‌بندی (بلافاصله).</p>
+
+          {/* V60 PART B — restrict sending to certain weekdays. A disallowed day only PAUSES
+              the campaign (it resumes automatically on the next allowed day), so ticking
+              پنجشنبه/جمعه off can never retire a campaign that still has contacts left. */}
+          <div className="mt-3">
+            <label className="label">روزهای مجاز ارسال:</label>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه"].map((label, idx) => {
+                const days = f.allowed_weekdays || [];
+                const on = days.length === 0 || days.includes(idx);
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      const cur = days.length === 0 ? [0, 1, 2, 3, 4, 5, 6] : [...days];
+                      const next = cur.includes(idx) ? cur.filter((d) => d !== idx) : [...cur, idx].sort();
+                      setF({ ...f, allowed_weekdays: next.length === 7 ? [] : next });
+                    }}
+                    className={`px-2 py-1 rounded-lg border text-xs ${on
+                      ? "bg-brand/15 border-brand text-brand font-bold"
+                      : "bg-canvas border-line text-muted line-through"}`}>
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-muted mt-1">
+              همه روشن = بدون محدودیت. در روز غیرمجاز کمپین موقتاً متوقف می‌شود و روز مجاز بعدی
+              خودکار ادامه می‌یابد.
+            </p>
+          </div>
         </div>
 
         <div className="border-t border-line pt-3 mt-3">

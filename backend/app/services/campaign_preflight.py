@@ -16,7 +16,19 @@ Nothing here relaxes an existing brake — every function either returns "go" or
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+
+import pytz
+
+# Weekday boundaries are a LOCAL notion: Friday in Tehran starts 3.5h before Friday in UTC, so
+# computing the day in UTC would enable/disable sending on the wrong side of the boundary.
+TEHRAN_TZ = pytz.timezone("Asia/Tehran")
+
+
+def tehran_now(now_utc: datetime | None = None) -> datetime:
+    """Tehran-local wall clock (naive) for a UTC instant — the clock weekday rules use."""
+    base = now_utc or datetime.utcnow()
+    return pytz.utc.localize(base.replace(tzinfo=None)).astimezone(TEHRAN_TZ).replace(tzinfo=None)
 
 logger = logging.getLogger("afrakala.campaign.preflight")
 
@@ -45,6 +57,54 @@ def check_schedule_window(schedule_start, schedule_end, now: datetime) -> tuple[
     if schedule_start is not None and now < schedule_start:
         return SCHEDULE_PARK, max(1, int((schedule_start - now).total_seconds()))
     return SCHEDULE_OK, 0
+
+
+# ── V60 PART B: allowed weekdays ─────────────────────────────────────────────
+# Indexed the Persian way — شنبه = 0 … جمعه = 6 — because that is the order the operator sees
+# in the form. Python's weekday() is Monday = 0, so the two must be converted explicitly;
+# storing Python's numbering would silently shift every choice by two days.
+WEEKDAY_FA = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه"]
+DAY_NOT_ALLOWED_REASON = "امروز جزو روزهای مجاز ارسال نیست — ادامهٔ خودکار در روز مجاز بعدی"
+
+
+def persian_weekday(dt: datetime) -> int:
+    """PURE. Persian weekday index (شنبه=0 … جمعه=6) for a Tehran-local datetime."""
+    return (dt.weekday() + 2) % 7
+
+
+def is_send_day(allowed_weekdays, now_tehran: datetime) -> bool:
+    """PURE. May the campaign send on this Tehran calendar day?
+
+    Empty/None means every day is allowed, which is the pre-V60 behaviour and therefore what
+    every existing campaign keeps. Only an explicit, non-empty list can restrict anything.
+    """
+    if not allowed_weekdays:
+        return True
+    try:
+        wanted = {int(d) for d in allowed_weekdays}
+    except (TypeError, ValueError):
+        return True                      # unreadable config must not silently block sending
+    return persian_weekday(now_tehran) in wanted
+
+
+def seconds_until_next_send_day(allowed_weekdays, now_tehran: datetime) -> int:
+    """PURE. Seconds until the next allowed day begins (Tehran midnight). 0 when today is
+    already allowed. Falls back to a day when the list allows nothing, so a mis-configured
+    campaign retries tomorrow instead of hammering the broker."""
+    if is_send_day(allowed_weekdays, now_tehran):
+        return 0
+    try:
+        wanted = {int(d) for d in allowed_weekdays}
+    except (TypeError, ValueError):
+        return 0
+    if not wanted or not wanted & set(range(7)):
+        return 86400
+    midnight = now_tehran.replace(hour=0, minute=0, second=0, microsecond=0)
+    for offset in range(1, 8):
+        candidate = midnight + timedelta(days=offset)
+        if persian_weekday(candidate) in wanted:
+            return max(1, int((candidate - now_tehran).total_seconds()))
+    return 86400
 
 
 def drip_remaining(drip_enabled: bool, drip_per_day, already_sent_today: int) -> int | None:
