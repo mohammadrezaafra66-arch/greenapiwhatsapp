@@ -514,13 +514,92 @@ async def _run_campaign_inner(campaign_id: str):
 
 
 # ── Feature 37: parallel multi-account sending ─────────────────────────────
+def _reschedule(campaign_id: str, account_ids: list[str], wait_seconds: int) -> None:
+    """V60 — re-queue the PARALLEL run for later, preserving its account list. Best-effort:
+    a broker hiccup must not lose the campaign, so the failure is logged, not raised."""
+    try:
+        from app.workers.tasks import task_run_campaign
+        task_run_campaign.apply_async(args=[campaign_id, list(account_ids)],
+                                      countdown=max(1, int(wait_seconds)))
+        print(f"[Campaign {campaign_id}] parallel run rescheduled in {wait_seconds}s")
+    except Exception as e:
+        print(f"[Campaign {campaign_id}] parallel reschedule failed (non-fatal): {e}")
+
+
+async def _drip_today(campaign_id: str) -> int:
+    from app.services.drip import drip_count_today
+    return await drip_count_today(campaign_id)
+
+
 async def run_campaign_parallel(campaign_id: str, account_ids: list[str]):
     """Split pending contacts across the given accounts and send concurrently,
-    one independent DB session + send loop per account."""
+    one independent DB session + send loop per account.
+
+    V60 STEP 0 — this path used to skip every pre-flight brake the sequential path applies:
+    the single-run lock, the scheduled date window, the send-hour window, the drip quota and
+    the fail-closed account selection. Turning on multi-account sending therefore turned OFF
+    four safety brakes, which is exactly backwards. All of them now run here too, using the
+    SHARED decisions in campaign_preflight so the two paths cannot drift apart again.
+    """
+    # Brake 1 — single-run lock. Without it, startup-resume plus orphan-recovery could run two
+    # copies of the same campaign concurrently and double-send. Fail-open when Redis is down,
+    # matching run_campaign's existing behaviour.
+    lock_key = f"campaign_lock:{campaign_id}"
+    r = None
+    try:
+        from app.services import redis_rate_limiter
+        r = await redis_rate_limiter.get_redis()
+        if not await r.set(lock_key, "1", nx=True, ex=14400):
+            print(f"[Campaign {campaign_id}] already running (lock held) — skipping duplicate")
+            return
+    except Exception:
+        r = None
+    try:
+        await _run_campaign_parallel_inner(campaign_id, account_ids)
+    finally:
+        if r is not None:
+            try:
+                await r.delete(lock_key)
+            except Exception:
+                pass
+
+
+async def _run_campaign_parallel_inner(campaign_id: str, account_ids: list[str]):
+    from app.services import campaign_preflight as pf
+
     async with AsyncSessionLocal() as db:
         campaign = await db.get(Campaign, uuid.UUID(campaign_id))
-        if not campaign or campaign.status != CampaignStatus.running:
+        if not campaign:
             return
+
+        # Brake 2 — scheduled date window (Feature 35), same rules as the sequential path.
+        from app.utils.shamsi import to_shamsi
+        now = datetime.utcnow()
+        decision, wait = pf.check_schedule_window(
+            campaign.schedule_start, campaign.schedule_end, now)
+        if decision == pf.SCHEDULE_COMPLETE:
+            campaign.status = CampaignStatus.completed
+            campaign.completed_at = now
+            await db.commit()
+            return
+        if decision == pf.SCHEDULE_PARK:
+            campaign.status = CampaignStatus.paused
+            campaign.pause_reason = f"زمان شروع: {to_shamsi(campaign.schedule_start)}"
+            await db.commit()
+            _reschedule(campaign_id, account_ids, wait)
+            return
+
+        # Auto-resume a campaign parked by a window/schedule wait (this run IS that retry).
+        if campaign.status == CampaignStatus.paused and (
+            campaign.pause_reason == WINDOW_WAIT_REASON
+            or (campaign.pause_reason or "").startswith("زمان شروع")
+        ):
+            campaign.status = CampaignStatus.running
+            campaign.pause_reason = None
+            await db.commit()
+        if campaign.status != CampaignStatus.running:
+            return
+
         result = await db.execute(
             select(CampaignContact, Contact)
             .join(Contact, CampaignContact.contact_id == Contact.id)
@@ -531,6 +610,47 @@ async def run_campaign_parallel(campaign_id: str, account_ids: list[str]):
         )
         pending = result.all()
 
+        # Brake 3 — FAIL-CLOSED selection. The caller passes ids it already filtered, but the
+        # guard is what makes "these accounts and no others" an invariant rather than a promise.
+        # Resolving against live rows also drops any account that went unhealthy since start.
+        accounts = []
+        if account_ids:
+            from app.services import governors as _g
+            rows = (await db.execute(
+                select(Account).where(Account.status == AccountStatus.active)
+            )).scalars().all()
+            wanted = {str(a) for a in account_ids}
+            eligible = [a for a in rows
+                        if str(a.id) in wanted and not _g.in_cooldown(a)]
+            accounts, abort_reason = resolve_sending_accounts(eligible, campaign)
+            if abort_reason:
+                campaign.status = CampaignStatus.paused
+                campaign.pause_reason = abort_reason
+                await db.commit()
+                return
+
+        # Brake 4 — send-hour window. Outside every account's window, park and retry when the
+        # earliest one opens (never mark the campaign finished).
+        if accounts:
+            wait_seconds = await pf.hour_window_wait_seconds(accounts)
+            if wait_seconds > 0:
+                campaign.status = CampaignStatus.paused
+                campaign.pause_reason = WINDOW_WAIT_REASON
+                await db.commit()
+                _reschedule(campaign_id, account_ids, wait_seconds)
+                return
+
+        # Brake 5 — drip quota for today (campaign-level, on top of each account's own cap).
+        remaining = pf.drip_remaining(
+            getattr(campaign, "drip_enabled", False), campaign.drip_per_day,
+            await _drip_today(campaign_id))
+        if remaining is not None and remaining <= 0:
+            from app.services.drip import PAUSE_REASON
+            campaign.status = CampaignStatus.paused
+            campaign.pause_reason = PAUSE_REASON
+            await db.commit()
+            return
+
     if not account_ids:
         await run_campaign(campaign_id)
         return
@@ -539,14 +659,23 @@ async def run_campaign_parallel(campaign_id: str, account_ids: list[str]):
         await run_campaign(campaign_id)
         return
 
+    allowed_ids = [str(a.id) for a in accounts] or list(account_ids)
     # Round-robin split (store ids only — ORM objects are bound to the closed session).
-    chunks = {aid: [] for aid in account_ids}
+    chunks = {aid: [] for aid in allowed_ids}
     for i, (cc, contact) in enumerate(pending):
-        aid = account_ids[i % len(account_ids)]
+        aid = allowed_ids[i % len(allowed_ids)]
         chunks[aid].append((str(cc.id), str(contact.id)))
 
+    # Split the day's remaining drip quota evenly across the chunks so the campaign-level cap
+    # holds even though the chunks run concurrently and cannot see each other's counters.
+    per_chunk_quota = None
+    if remaining is not None:
+        n = max(1, len([1 for items in chunks.values() if items]))
+        per_chunk_quota = max(0, remaining // n)
+
     await asyncio.gather(
-        *[_send_chunk(campaign_id, aid, items) for aid, items in chunks.items() if items],
+        *[_send_chunk(campaign_id, aid, items, drip_quota=per_chunk_quota)
+          for aid, items in chunks.items() if items],
         return_exceptions=True,
     )
 
@@ -567,8 +696,13 @@ async def run_campaign_parallel(campaign_id: str, account_ids: list[str]):
             await db2.commit()
 
 
-async def _send_chunk(campaign_id: str, account_id: str, items: list):
-    """Send a chunk of (campaign_contact_id, contact_id) pairs using one fixed account."""
+async def _send_chunk(campaign_id: str, account_id: str, items: list, *, drip_quota: int | None = None):
+    """Send a chunk of (campaign_contact_id, contact_id) pairs using one fixed account.
+
+    V60 STEP 0 — `drip_quota` is this chunk's share of the campaign's remaining daily drip
+    allowance (None = drip off). Each chunk also enforces the young-account new-contact cap,
+    which previously only existed on the sequential path.
+    """
     async with AsyncSessionLocal() as db:
         campaign = await db.get(Campaign, uuid.UUID(campaign_id))
         account = await db.get(Account, uuid.UUID(account_id))
@@ -593,6 +727,7 @@ async def _send_chunk(campaign_id: str, account_id: str, items: list):
         buttons = [b for b in [campaign.button1_text, campaign.button2_text, campaign.button3_text] if b]
 
         _chunk_cap = [None]   # V27 PART 7 — guarded daily cap for this chunk's fixed account
+        _drip_sent = [0]      # V60 — how much of this chunk's drip share is used
         for cc_id, contact_id in items:
             await db.refresh(campaign)
             if campaign.status != CampaignStatus.running:
@@ -619,7 +754,27 @@ async def _send_chunk(campaign_id: str, account_id: str, items: list):
                 await asyncio.sleep(60)
                 continue
 
+            # V60 STEP 0 — this chunk's share of the campaign's daily drip allowance.
+            if drip_quota is not None and _drip_sent[0] >= drip_quota:
+                break
+
+            # V60 STEP 0 — young-account new-contact cap (V14 F23.6: <10 days → 20 new/day).
+            from app.services import campaign_preflight as _pf
+            is_new_contact = getattr(contact, "first_messaged_at", None) is None
+            if not await _pf.new_contact_allowed(account, contact):
+                continue
+
             products = await _deliver_message(db, campaign, cc, contact, account, products, poll_options, buttons)
+
+            if cc.status == MessageStatus.sent:
+                if is_new_contact:
+                    contact.first_messaged_at = datetime.utcnow()
+                    await _gov.record_new_contact(str(account.id))
+                    await db.commit()
+                if drip_quota is not None:
+                    _drip_sent[0] += 1
+                    from app.services.drip import drip_incr
+                    await drip_incr(campaign_id)
 
             from app.services.delay_service import get_delay_for_account
             min_d, max_d = await get_delay_for_account(account)   # TG — platform-aware pacing
