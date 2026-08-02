@@ -3,6 +3,7 @@ import { Campaigns as Api, FilesApi, Accounts, ContactGroupsApi, WaCollectionsAp
 import ShamsiDateTimePicker from "../components/ShamsiDateTimePicker.jsx";
 import { Badge, Spinner, Empty, Modal, Progress, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
+import { campaignCapacity, capacitySentence, youngAccountNotice } from "./campaignCapacity.js";
 
 const fa = (n) => Number(n || 0).toLocaleString("fa-IR");
 
@@ -1308,6 +1309,27 @@ function AddCampaignModal({ onClose, onDone, editId = null, initial = null }) {
             <input type="checkbox" checked={f.parallel_accounts} onChange={set("parallel_accounts")} />
             ارسال موازی با چند حساب
           </label>
+          {/* V60 PART C-3 — the cap that actually governs a campaign is PER ACCOUNT: an account
+              under 10 days is hard-capped at 5/day whatever «سقف روزانه» shows. Saying so here
+              stops the "I set 50 and only 5 went out" confusion, and stops a list being rushed. */}
+          {(() => {
+            const chosen = f.parallel_accounts
+              ? activeAccounts
+              : activeAccounts.filter((a) => a.id === f.selected_account_id);
+            const cap = campaignCapacity(chosen, feasContactCount);
+            const notice = youngAccountNotice(cap);
+            return (
+              <div className="mt-2 rounded-lg bg-canvas border border-line p-2 space-y-1">
+                <p className="text-xs text-ink">📊 {capacitySentence(cap, feasContactCount)}</p>
+                {cap.accounts > 0 && (
+                  <p className="text-[11px] text-muted">
+                    {cap.perAccount.map((a) => `${a.name}: ${a.cap}`).join(" · ")}
+                  </p>
+                )}
+                {notice && <p className="text-[11px] text-amber-700">⚠️ {notice}</p>}
+              </div>
+            );
+          })()}
           {f.parallel_accounts ? (
             <p className="text-xs text-sky-700">💡 مخاطبین به‌صورت مساوی بین حساب‌های فعال تقسیم می‌شوند</p>
           ) : (
