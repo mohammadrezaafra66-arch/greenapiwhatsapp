@@ -2,6 +2,7 @@ import React from "react";
 import { ContactGroupsApi as Api, Contacts as ContactsApi } from "../api.js";
 import { Spinner, Empty, Modal, useAsync } from "../ui.jsx";
 import { toast, confirmDialog } from "../ui/toast.jsx";
+import { excludeExisting, toggleSelected, resultsSummary } from "./contactGroupMembers.js";
 
 export default function ContactGroups() {
   const { data, loading, error, reload } = useAsync(() => Api.list(), []);
@@ -115,12 +116,17 @@ function MembersModal({ group, onClose, onDone }) {
   const [search, setSearch] = React.useState("");
   const [results, setResults] = React.useState(null);
   const [searching, setSearching] = React.useState(false);
+  const [selected, setSelected] = React.useState(new Set());
+  const [adding, setAdding] = React.useState(false);
 
   const doSearch = async () => {
     setSearching(true);
     try {
-      const list = await ContactsApi.list({ search });
-      setResults(list);
+      // GET /contacts/ returns {total, skip, limit, contacts:[…]} — NOT a bare array.
+      // Storing the object made `results.length` undefined, so neither the results nor the
+      // "not found" line ever rendered and searching looked like it did nothing.
+      setResults(await ContactsApi.list({ search }));
+      setSelected(new Set());
     } catch (e) {
       toast.error(e?.response?.data?.detail || e.message);
     } finally {
@@ -128,13 +134,24 @@ function MembersModal({ group, onClose, onDone }) {
     }
   };
 
-  const add = async (contactId) => {
+  // Contacts matching the search that are NOT already in this group.
+  const candidates = React.useMemo(
+    () => excludeExisting(results, members), [results, members]);
+
+  const add = async (contactIds) => {
+    const ids = contactIds.filter(Boolean);
+    if (!ids.length) return;
+    setAdding(true);
     try {
-      await Api.addMembers(group.id, [contactId]);
+      const r = await Api.addMembers(group.id, ids);
+      toast.success(`${r.added ?? ids.length} مخاطب به گروه اضافه شد`);
+      setSelected(new Set());
       await reload();
       await onDone();
     } catch (e) {
       toast.error(e?.response?.data?.detail || e.message);
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -184,19 +201,49 @@ function MembersModal({ group, onClose, onDone }) {
               {searching ? "..." : "جستجو"}
             </button>
           </div>
-          {results && results.length === 0 && <p className="text-muted text-sm mt-2">مخاطبی یافت نشد.</p>}
-          {results && results.length > 0 && (
-            <div className="space-y-1 max-h-52 overflow-y-auto mt-2">
-              {results.map((c) => (
-                <div key={c.id} className="flex items-center gap-2 text-sm border-b border-line py-1">
-                  <span className="font-bold">{c.name || "بدون نام"}</span>
-                  <span className="text-muted" dir="ltr">{c.phone}</span>
-                  {c.province && <span className="text-muted">{c.province}</span>}
-                  {c.has_whatsapp && <span className="badge bg-brand-light text-brand border-brand/30">واتساپ</span>}
-                  <button className="btn-secondary btn-sm mr-auto" onClick={() => add(c.id)}>افزودن</button>
-                </div>
-              ))}
-            </div>
+          {results && (
+            <p className="text-muted text-xs mt-2">{resultsSummary(results, members)}</p>
+          )}
+          {candidates.length > 0 && (
+            <>
+              {/* Bulk add — the backend has always accepted an array; only the UI was
+                  one-at-a-time, which made a 30-contact group impractical to build. */}
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <label className="flex items-center gap-1 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={selected.size === candidates.length && candidates.length > 0}
+                    onChange={(e) =>
+                      setSelected(e.target.checked ? new Set(candidates.map((c) => c.id)) : new Set())
+                    }
+                  />
+                  انتخاب همه ({candidates.length})
+                </label>
+                <button
+                  className="btn-primary btn-sm mr-auto"
+                  disabled={adding || selected.size === 0}
+                  onClick={() => add([...selected])}>
+                  {adding ? "در حال افزودن..." : `افزودن انتخاب‌شده‌ها (${selected.size})`}
+                </button>
+              </div>
+              <div className="space-y-1 max-h-52 overflow-y-auto mt-2">
+                {candidates.map((c) => (
+                  <div key={c.id} className="flex items-center gap-2 text-sm border-b border-line py-1">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(c.id)}
+                      onChange={() => setSelected((s) => toggleSelected(s, c.id))}
+                    />
+                    <span className="font-bold">{c.name || "بدون نام"}</span>
+                    <span className="text-muted" dir="ltr">{c.phone}</span>
+                    {c.province && <span className="text-muted">{c.province}</span>}
+                    {c.has_whatsapp && <span className="badge bg-brand-light text-brand border-brand/30">واتساپ</span>}
+                    <button className="btn-secondary btn-sm mr-auto" disabled={adding}
+                      onClick={() => add([c.id])}>افزودن</button>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
