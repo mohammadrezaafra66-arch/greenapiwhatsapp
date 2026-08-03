@@ -101,6 +101,70 @@ async def handle_yellow_card(account: Account, via: str, db) -> AccountIncident 
     return incident
 
 
+async def record_suspension(account: Account, via: str, db) -> AccountIncident | None:
+    """V65 — write a Green API spam suspension into the incident table.
+
+    Until now a suspension changed `accounts.status` and `suspended_until` but wrote NO incident
+    row. Everything that judges an account's health counts incident ROWS, so a suspended number
+    kept reporting perfectly healthy: on 2026-08-03 instance 770022683838 was suspended for
+    seven days and still showed warmth 80 «بالا» with incident_count_7d = 0 — meaning it stayed
+    eligible to be picked for the next campaign.
+
+    Idempotent per suspension window: re-polling a still-suspended instance every 60s must not
+    add a row each time. A NEW suspension after the previous one was resolved does record again.
+
+    `cooldown_until` is deliberately NOT set here. The suspension itself already blocks sending
+    through the gate (`suspended` is in BLOCKING_LIVE_STATES and status != active), and inventing
+    an extra cooldown would outlive the restriction and silently sideline a recovered number.
+    """
+    existing = (await db.execute(
+        select(AccountIncident).where(
+            AccountIncident.account_id == account.id,
+            AccountIncident.incident_type == "suspended",
+            AccountIncident.resolved.is_(False),
+        ).limit(1)
+    )).scalar_one_or_none()
+    if existing is not None:
+        return None
+
+    now = datetime.utcnow()
+    account.incident_count_7d = (account.incident_count_7d or 0) + 1
+    account.last_incident_at = now
+    incident = AccountIncident(
+        account_id=account.id,
+        id_instance=int(account.instance_id) if str(account.instance_id).isdigit() else None,
+        incident_type="suspended", detected_via=via, severity="critical",
+        auto_actions={
+            "status": "suspended",
+            "suspended_until": (account.suspended_until.isoformat()
+                                if getattr(account, "suspended_until", None) else None),
+            "sent_today_at_suspension": account.sent_today,
+        },
+        notes="Green API spam restriction (stateInstance=suspended)",
+    )
+    db.add(incident)
+    logger.warning("suspension recorded for %s (via %s), until %s",
+                   account.instance_id, via, getattr(account, "suspended_until", None))
+    return incident
+
+
+async def resolve_suspension(account: Account, db) -> int:
+    """V65 — close open suspension incidents once the instance is authorized again, so a number
+    that genuinely recovered is not penalised forever."""
+    rows = (await db.execute(
+        select(AccountIncident).where(
+            AccountIncident.account_id == account.id,
+            AccountIncident.incident_type == "suspended",
+            AccountIncident.resolved.is_(False),
+        )
+    )).scalars().all()
+    for r in rows:
+        r.resolved = True
+        r.resolved_at = datetime.utcnow()
+        r.resolved_by = "auto"
+    return len(rows)
+
+
 async def _send_emergency_alert(carded: Account, paused_n: int, cooldown_until, db):
     from app.models.reporting import EmergencyContact
     from app.utils.shamsi import to_shamsi

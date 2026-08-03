@@ -18,17 +18,41 @@ async def receive_webhook(instance_id: str, request: Request, bg: BackgroundTask
     return {"status": "ok"}
 
 
-async def _already_processed(instance_id: str, id_message: str) -> bool:
+def _dedup_key(instance_id: str, payload: dict) -> str:
+    """V65 — the identity of ONE webhook event, not of one message.
+
+    The bug this fixes: the key used to be just (instance_id, idMessage). But a single message
+    legitimately produces SEVERAL webhooks that all carry the SAME idMessage:
+
+        outgoingAPIMessageWebhook   idMessage=3EB0…                  (we sent it)
+        outgoingMessageStatus       idMessage=3EB0…  status=sent
+        outgoingMessageStatus       idMessage=3EB0…  status=delivered
+        outgoingMessageStatus       idMessage=3EB0…  status=read
+
+    The send notification claimed the key first, so every status that followed was discarded as
+    a "duplicate" and `delivery_status` was never written. Live proof: all 30 messages of the
+    first real campaign had an idMessage, Green API reported 15 delivered — and the dashboard
+    showed 0%, because every status webhook was dropped here.
+
+    Including the webhook TYPE and, for status events, the status VALUE keeps the real
+    protection (Green API redelivering the exact same event) while letting a message progress
+    through sent → delivered → read.
+    """
+    return (f"webhook_seen:{instance_id}:{payload.get('typeWebhook', '')}"
+            f":{payload.get('idMessage', '')}:{payload.get('status', '')}")
+
+
+async def _already_processed(instance_id: str, payload: dict) -> bool:
     """B1.2 — webhook idempotency: Green API can deliver the same event twice.
-    Mark idMessage as seen in Redis (24h TTL); return True if it was already
+    Mark this EVENT as seen in Redis (24h TTL); return True if it was already
     seen. Fail-open: if Redis is unavailable, never block processing."""
-    if not id_message:
+    if not payload.get("idMessage"):
         return False
     try:
         from app.services import redis_rate_limiter
         r = await redis_rate_limiter.get_redis()
         # SET NX returns True only the first time → not-first means duplicate.
-        first = await r.set(f"webhook_seen:{instance_id}:{id_message}", "1", nx=True, ex=86400)
+        first = await r.set(_dedup_key(instance_id, payload), "1", nx=True, ex=86400)
         return not first
     except Exception:
         return False
@@ -38,7 +62,7 @@ async def process_webhook(instance_id: str, payload: dict):
     wtype = payload.get("typeWebhook", "")
 
     # B1.2 — skip duplicate deliveries (only events carrying an idMessage).
-    if await _already_processed(instance_id, payload.get("idMessage", "")):
+    if await _already_processed(instance_id, payload):
         return
 
     # B1.6 — isolate handlers: one malformed webhook must not crash the loop.
@@ -380,6 +404,12 @@ async def handle_state_change(instance_id: str, payload: dict):
                 account.status = AccountStatus.suspended
                 from app.services.state_monitor import refresh_suspended_until
                 await refresh_suspended_until(db, account)
+                # V65 — also write an incident row. Without it a suspended number keeps
+                # reporting warmth «بالا» and incident_count_7d = 0, so it stays eligible for
+                # the next campaign. Order matters: refresh_suspended_until first, so the
+                # incident can record WHEN the restriction lifts.
+                from app.services.incident_handler import record_suspension
+                await record_suspension(account, "webhook", db)
                 await db.commit()
             else:
                 await db.commit()

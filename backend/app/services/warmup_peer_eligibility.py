@@ -24,7 +24,12 @@ PEER_HISTORY_WINDOW_DAYS = 14
 
 # Incident types that disqualify a peer for the trailing window (health signals, not the
 # warning-only throttles like low reply rate).
-DISQUALIFYING_INCIDENT_TYPES = ("yellowCard", "blocked", "notAuthorized", "logout")
+# V65 — `suspended` added. It is Green API's spam restriction and the single strongest signal
+# that a number has been flagged, yet it was absent here: instance 770022683838 was suspended
+# for seven days on 2026-08-03 and still scored warmth 80 «بالا» with a clean 14-day window,
+# because nothing counted the suspension. A number WhatsApp has restricted must not read as a
+# healthy candidate.
+DISQUALIFYING_INCIDENT_TYPES = ("yellowCard", "blocked", "notAuthorized", "logout", "suspended")
 
 TOO_YOUNG_FA = (
     "این اکانت هنوز به‌اندازه‌ی کافی قدیمی/سالم نیست تا بتواند فرستنده‌ی گرم‌سازی باشد "
