@@ -24,11 +24,13 @@ def _run_alembic(*args: str) -> subprocess.CompletedProcess:
 def test_alembic_heads_and_history():
     heads = _run_alembic("heads")
     assert heads.returncode == 0, heads.stderr
-    assert "v67_03_fleet_accounts" in heads.stdout
+    # Head advances with later phases; Phase 2 introduced v67_03, Phase 3 adds v67_04.
+    assert "v67_03_fleet_accounts" in heads.stdout or "v67_04_account_journeys" in heads.stdout
     hist = _run_alembic("history")
     assert hist.returncode == 0
     assert "v67_01_baseline_stamp" in hist.stdout
     assert "v67_02_fleet_policies" in hist.stdout
+    assert "v67_03_fleet_accounts" in hist.stdout
 
 
 @pytest.mark.skipif(
