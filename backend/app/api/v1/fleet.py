@@ -1,13 +1,34 @@
-"""V67 Phase 2 — read-only fleet API (no Autopilot / journey mutation)."""
+"""V67 Phase 2/3 — fleet API: read-only + simulation (no live journey / cutover)."""
 from __future__ import annotations
+import time
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.models.account_journey import AccountJourney
 from app.services import fleet_service, fleet_seed
+from app.services.journey_orchestrator import JourneyOrchestrator
+from app.services.journey_types import JourneyType
 
 router = APIRouter(prefix="/fleet", tags=["fleet"])
+
+# Soft in-process rate limit for simulate (best-effort; no Redis dependency).
+_SIM_HITS: dict[str, list[float]] = {}
+_SIM_LIMIT = 30
+_SIM_WINDOW = 60.0
+
+
+def _rate_limit_simulate(request: Request) -> None:
+    ip = (request.client.host if request.client else "unknown")
+    now = time.time()
+    bucket = [t for t in _SIM_HITS.get(ip, []) if now - t < _SIM_WINDOW]
+    if len(bucket) >= _SIM_LIMIT:
+        raise HTTPException(429, "simulate rate limit exceeded")
+    bucket.append(now)
+    _SIM_HITS[ip] = bucket
 
 
 @router.get("/accounts")
@@ -78,3 +99,113 @@ async def seed_preview(
     """Dry-run seed plan only — never applies."""
     plans = await fleet_seed.build_seed_plan(db, account_id=account_id, batch_size=batch_size)
     return {"dry_run": True, "count": len(plans), "plans": fleet_seed.plans_as_dicts(plans)}
+
+
+# ── Phase 3 journey read / simulate ─────────────────────────────────────────
+
+@router.get("/journeys")
+async def list_journeys(limit: int = Query(100, ge=1, le=500),
+                        db: AsyncSession = Depends(get_db)):
+    rows = list((await db.execute(
+        select(AccountJourney).order_by(AccountJourney.updated_at.desc()).limit(limit)
+    )).scalars().all())
+    return [{
+        "id": str(j.id),
+        "account_id": str(j.account_id),
+        "fleet_account_id": str(j.fleet_account_id),
+        "journey_type": j.journey_type,
+        "status": j.status,
+        "current_state": j.current_state,
+        "simulation_only": j.simulation_only,
+        "shadow_mode": j.shadow_mode,
+        "version": j.version,
+    } for j in rows]
+
+
+@router.get("/journeys/{journey_id}")
+async def get_journey(journey_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    j = (await db.execute(
+        select(AccountJourney).where(AccountJourney.id == journey_id)
+    )).scalar_one_or_none()
+    if j is None:
+        raise HTTPException(404, "journey not found")
+    return {
+        "id": str(j.id),
+        "account_id": str(j.account_id),
+        "fleet_account_id": str(j.fleet_account_id),
+        "journey_type": j.journey_type,
+        "status": j.status,
+        "current_state": j.current_state,
+        "policy_snapshot": j.policy_snapshot,
+        "evidence_snapshot": j.evidence_snapshot,
+        "simulation_only": j.simulation_only,
+        "shadow_mode": j.shadow_mode,
+        "version": j.version,
+        "started_at": j.started_at.isoformat() if j.started_at else None,
+    }
+
+
+@router.get("/accounts/{account_id}/journey-preview")
+async def journey_preview(
+    account_id: uuid.UUID,
+    journey_type: str = Query(JourneyType.NEW_ACCOUNT.value),
+    db: AsyncSession = Depends(get_db),
+):
+    return await JourneyOrchestrator().preview(db, account_id, journey_type=journey_type)
+
+
+@router.get("/accounts/{account_id}/shadow-comparison")
+async def shadow_comparison(account_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    preview = await JourneyOrchestrator().preview(db, account_id)
+    if preview.get("error"):
+        raise HTTPException(404, preview["error"])
+    return preview.get("shadow", {})
+
+
+class SimulateBody(BaseModel):
+    journey_type: str = JourneyType.NEW_ACCOUNT.value
+    persist_simulation: bool = False
+    inject_suspended: bool = False
+    inject_blocked: bool = False
+    inject_forced_logout: bool = False
+    inject_breaker: bool = False
+    inject_webhook_stale: bool = False
+    days: int | None = None
+    elapsed_hours: float | None = None
+
+
+@router.post("/accounts/{account_id}/simulate-journey")
+async def simulate_journey(
+    account_id: uuid.UUID,
+    request: Request,
+    body: SimulateBody | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Simulation only. Default dry-run. Never enables cutover or live sends."""
+    _rate_limit_simulate(request)
+    body = body or SimulateBody()
+    inject = {
+        "suspended": body.inject_suspended,
+        "blocked": body.inject_blocked,
+        "forced_logout": body.inject_forced_logout,
+        "breaker": body.inject_breaker,
+        "webhook_stale": body.inject_webhook_stale,
+    }
+    if body.days is not None:
+        inject["days"] = body.days
+    if body.elapsed_hours is not None:
+        inject["elapsed_hours"] = body.elapsed_hours
+    result = await JourneyOrchestrator().simulate_and_maybe_persist(
+        db,
+        account_id,
+        journey_type=body.journey_type,
+        persist_simulation=body.persist_simulation,
+        inject=inject,
+    )
+    if result.get("error") == "account_not_found":
+        raise HTTPException(404, result["error"])
+    if body.persist_simulation and result.get("persisted"):
+        await db.commit()
+    result.pop("api_token", None)
+    result.pop("token", None)
+    return result
