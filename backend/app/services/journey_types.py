@@ -1,0 +1,62 @@
+"""V67 Phase 3 — Journey domain enums (migration-safe string values)."""
+from __future__ import annotations
+import enum
+
+
+class JourneyType(str, enum.Enum):
+    NEW_ACCOUNT = "NEW_ACCOUNT"
+    INACTIVE_AUTHORIZED = "INACTIVE_AUTHORIZED"
+    EXISTING_WARM = "EXISTING_WARM"
+    REWARM = "REWARM"
+    MAINTENANCE = "MAINTENANCE"
+
+
+class JourneyStatus(str, enum.Enum):
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    SIMULATING = "SIMULATING"
+    CANCELLED = "CANCELLED"
+
+
+class JourneyActionType(str, enum.Enum):
+    WAIT = "WAIT"
+    VERIFY_STATE = "VERIFY_STATE"
+    VERIFY_SETTINGS = "VERIFY_SETTINGS"
+    REQUEST_INBOUND = "REQUEST_INBOUND"
+    PREPARE_REPLY = "PREPARE_REPLY"
+    CHECK_EVIDENCE = "CHECK_EVIDENCE"
+    CHECK_QUEUE = "CHECK_QUEUE"
+    CHECK_WEBHOOK = "CHECK_WEBHOOK"
+    REEVALUATE = "REEVALUATE"
+    PAUSE = "PAUSE"
+    REQUIRE_OWNER_REVIEW = "REQUIRE_OWNER_REVIEW"
+
+
+class JourneyActionStatus(str, enum.Enum):
+    PLANNED = "PLANNED"
+    CLAIMED = "CLAIMED"
+    SKIPPED = "SKIPPED"
+    CANCELLED = "CANCELLED"
+    SIMULATED = "SIMULATED"
+
+
+# Disabled forever in Phase 3 — never planned by engine
+FORBIDDEN_LIVE_ACTION_TYPES = frozenset({
+    "SEND_MESSAGE", "SEND_MEDIA", "PLACE_CALL", "STATUS_SEND", "CAMPAIGN_SEND",
+})
+
+NEW_ACCOUNT_LADDER = (
+    "NEW",
+    "PRECHECK",
+    "QR_WAITING",
+    "READY_TO_LINK",
+    "AUTHORIZED_QUIET",
+    "INBOUND_BUILDING",
+    "BIDIRECTIONAL_BUILDING",
+    "CONTROLLED_RAMP",
+    "WARMUP_READY",
+)
+
+PHASE3_TERMINAL_PROGRESS = "WARMUP_READY"
