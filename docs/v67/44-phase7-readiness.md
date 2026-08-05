@@ -1,6 +1,6 @@
-# V67.1 Phase 7 — Readiness (superseded pointer)
+# V67.1 Phase 7 — Readiness
 
-This file is superseded by:
+Canonical detail:
 
 - `docs/v67/46-phase7-scope-freeze.md`
 - `docs/v67/47-phase7-owner-decisions.md`
@@ -8,10 +8,8 @@ This file is superseded by:
 
 ## Verdict
 
-# NO
+# YES — waiting for `Execute V67.1 Phase 7`
 
-Do **not** implement Phase 7 until:
+D-P7-01 … D-P7-16 are **APPROVED**.
 
-1. Phase 6.1 acceptance is confirmed
-2. Owner decisions in `47` are answered
-3. Explicit command: `Execute V67.1 Phase 7`
+Do **not** implement Phase 7 until that exact command is issued.
