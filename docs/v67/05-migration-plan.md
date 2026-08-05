@@ -78,14 +78,16 @@ Audit (Phase 0 ✓)
 
 ## 6. Suggested Phase 2 revision sequence (names only)
 
-1. `v67_01_baseline_stamp`  
-2. `v67_02_fleet_policies`  
-3. `v67_03_fleet_accounts_journeys`  
-4. `v67_04_fleet_actions_idempotency`  
-5. `v67_05_fleet_metrics_decisions`  
-6. `v67_06_human_device_certificate`  
-7. `v67_07_helper_consent_columns` (additive on existing helpers)  
-8. `v67_08_fleet_events`
+1. `v67_01_baseline_stamp` — **DONE** (empty stamp)
+2. `v67_02_fleet_policies` — **DONE**
+3. `v67_03_fleet_accounts` — **DONE** (includes evidence timestamp columns; no separate journeys yet)
+4. `v67_04_fleet_actions_idempotency` — deferred
+5. `v67_05_fleet_metrics_decisions` — deferred
+6. `v67_06_human_device_certificate` — deferred
+7. `v67_07_helper_consent_columns` (additive on existing helpers) — deferred
+8. `v67_08_fleet_events` — deferred
+
+Phase 2 intentionally stopped after policies + fleet_accounts per `17`/`18` freeze.
 
 Each must include downgrade dropping only new objects.
 
