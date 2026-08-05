@@ -209,3 +209,78 @@ async def simulate_journey(
     result.pop("api_token", None)
     result.pop("token", None)
     return result
+
+
+# ── Phase 4 trust / risk / graduation simulation ─────────────────────────────
+
+class ScoreSimulateBody(BaseModel):
+    persist: bool = False
+    inject_suspended: bool = False
+    inject_blocked: bool = False
+    inject_inactivity: bool = False
+    inject_webhook_failure: bool = False
+    inject_breaker: bool = False
+    inactivity_days: int | None = None
+
+
+@router.post("/accounts/{account_id}/simulate-scores")
+async def simulate_scores(
+    account_id: uuid.UUID,
+    request: Request,
+    body: ScoreSimulateBody | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Phase 4: simulate trust/risk/readiness. Never mutates FleetState or send_gate."""
+    from app.services.fleet_scoring import FleetScoringService
+    _rate_limit_simulate(request)
+    body = body or ScoreSimulateBody()
+    inject = {
+        "suspended": body.inject_suspended,
+        "blocked": body.inject_blocked,
+        "inactivity": body.inject_inactivity,
+        "webhook_failure": body.inject_webhook_failure,
+        "breaker": body.inject_breaker,
+    }
+    if body.inactivity_days is not None:
+        inject["inactivity_days"] = body.inactivity_days
+    result = await FleetScoringService().simulate(
+        db, account_id, inject=inject, persist=body.persist,
+    )
+    if result.get("error") == "account_not_found":
+        raise HTTPException(404, result["error"])
+    if body.persist and result.get("persisted"):
+        await db.commit()
+    return result
+
+
+@router.get("/accounts/{account_id}/trust")
+async def get_trust_preview(account_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    from app.services.fleet_scoring import FleetScoringService
+    result = await FleetScoringService().simulate(db, account_id, persist=False)
+    if result.get("error"):
+        raise HTTPException(404, result["error"])
+    return result["trust"]
+
+
+@router.get("/accounts/{account_id}/risk")
+async def get_risk_preview(account_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    from app.services.fleet_scoring import FleetScoringService
+    result = await FleetScoringService().simulate(db, account_id, persist=False)
+    if result.get("error"):
+        raise HTTPException(404, result["error"])
+    return result["risk"]
+
+
+@router.get("/accounts/{account_id}/graduation-preview")
+async def graduation_preview(account_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    from app.services.fleet_scoring import FleetScoringService
+    result = await FleetScoringService().simulate(db, account_id, persist=False)
+    if result.get("error"):
+        raise HTTPException(404, result["error"])
+    return {
+        "graduation_trial": result["graduation_trial"],
+        "readiness": result["readiness"],
+        "canonical_fleet_state": result["canonical_fleet_state"],
+        "fleet_state_mutated": False,
+        "simulation_only": True,
+    }
