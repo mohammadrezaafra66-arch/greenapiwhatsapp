@@ -96,7 +96,12 @@ Canary پیاده‌سازی یا فعال نشد؛ طبق D-P7-06 معوق اس
 
 ## 24. تاریخچهٔ Commit
 
-Commitهای قبلی Phase 7 تا `7700970` روی شاخه باقی است. تغییرات این مأموریت (ایزوله، اسناد Session 1/2، گزارش) در همان شاخه commit می‌شوند و SHA نهایی پس از commit در وضعیت git ثبت می‌گردد.
+شاخه: `feature/v67-autonomous-fleet-manager`
+
+- `d33e1f1` — `fix(v67): isolate alembic migration tests from ENV-A`
+- `191dcb4` — `docs(v67): archive session 1 and record session 2 day 0`
+
+پیش از این مأموریت، آخرین commit عملیاتی Session 1: `7700970`. این دو commit هنوز روی origin push نشده‌اند مگر مالک دستور دهد.
 
 ## 25. فایل‌های تغییر یافته
 
