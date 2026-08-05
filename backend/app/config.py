@@ -58,6 +58,16 @@ class Settings(BaseSettings):
     # "*" to allow any origin. This allowlist applies ONLY to /api/v1/reports/* (see main.py); the
     # rest of the API keeps its own CORS untouched.
     reports_allowed_origins: str = "http://192.168.170.8:3100,http://192.168.170.10:3100"
+    # V67.1 Phase 7 — Shadow Runtime (defaults OFF; never enable in live env during Phase 7)
+    v67_shadow_runtime_enabled: bool = False
+    v67_shadow_scheduler_enabled: bool = False
+    v67_shadow_persistence_enabled: bool = True
+    v67_shadow_batch_size: int = 25
+    v67_shadow_lock_ttl_seconds: int = 60
+    v67_shadow_max_runtime_seconds: int = 120
+    # D-P7-16 — privileged operator token (empty = Shadow APIs fail-closed / unconfigured)
+    v67_shadow_operator_token: str = ""
+    v67_shadow_allowed_roles: str = "admin,operator"
 
     class Config:
         env_file = ".env"

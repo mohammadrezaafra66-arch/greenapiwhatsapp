@@ -94,6 +94,23 @@ CONSERVATIVE_POLICY_SETTINGS: dict = {
         "unknown_risk_blocks": True,
         "unknown_readiness_blocks": True,
     },
+    # Phase 7 — Shadow sensor freshness (policy-driven; fail-closed if absent)
+    "shadow_freshness": {
+        "live_state_max_age_seconds": 90,
+        "webhook_max_age_seconds": 3600,
+        "incidents_max_age_seconds": 86400,
+        "breaker_max_age_seconds": 300,
+        "journey_max_age_seconds": 86400,
+        "scoring_max_age_seconds": 3600,
+        "capacity_max_age_seconds": 3600,
+        "eligibility_max_age_seconds": 3600,
+        "legacy_observation_max_age_seconds": 300,
+        "policy_max_age_seconds": 86400,
+        "critical_sensors": [
+            "live_state", "policy", "breaker", "incidents", "eligibility",
+        ],
+        "dangerous_mismatch_threshold_status": "UNRATIFIED",
+    },
 }
 
 
