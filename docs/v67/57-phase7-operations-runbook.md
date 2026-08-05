@@ -5,8 +5,10 @@
 - `V67_SHADOW_RUNTIME_ENABLED=false`
 - `V67_SHADOW_SCHEDULER_ENABLED=false`
 - `V67_SHADOW_OPERATOR_TOKEN=<set before any Shadow API use>`
+- `V67_SHADOW_OPERATOR_ROLE=operator` (Backend-derived; client cannot self-assign)
+- Do **not** send a mismatched `X-Fleet-Shadow-Role` (403 spoof reject)
 
-Phase 7 implementation completion does **not** authorize enabling Shadow in any live environment.
+Phase 7 / 7.1 completion does **not** authorize enabling Shadow in any live environment.
 
 ## Manual dry-run
 
