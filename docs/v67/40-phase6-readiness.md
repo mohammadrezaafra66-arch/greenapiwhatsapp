@@ -2,18 +2,21 @@
 
 ## Verdict
 
-# NO — wait for explicit `Execute V67.1 Phase 6`
+# YES — Phase 6 COMPLETE (eligibility decisions only)
 
-Phase 5 planners complete (simulation only).
+Owner authorized `Execute V67.1 Phase 6`. See docs `41`–`43`.  
+Phase 7: `44-phase7-readiness.md` → **NO** until commanded.
 
-## Unresolved Phase 6 blockers
+## Closed
 
-1. Owner command: **`Execute V67.1 Phase 6`**
-2. Live Journey / Autopilot approval
-3. send_gate / FleetState cutover approval
-4. Shadow / Canary rollout
-5. Real campaign execution (forbidden until later)
+| Item | Status |
+|---|---|
+| CampaignEligibilityEngine | YES |
+| Policy-driven rules | YES |
+| Explainable decisions | YES |
+| Simulation API/CLI | YES |
+| No runtime / send / cutover | YES |
 
 ## Recommended next
 
-Wait for: **Execute V67.1 Phase 6**
+Wait for: **Execute V67.1 Phase 7**
