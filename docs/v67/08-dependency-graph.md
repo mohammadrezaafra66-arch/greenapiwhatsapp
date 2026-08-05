@@ -170,3 +170,9 @@ Fleet CircuitBreaker TRIPPED
 ```
 
 Mesh 48h breaker does not clear fleet 24h Suspend breaker (and vice versa) until unified (owner D-C1).
+
+---
+
+## 6. Master phase identity note (owner 2026-08-05)
+
+Master **فاز ۸** remains **Graduation / Maintenance** (`109`). It is not Shadow Bridge, Dual Evaluation, or Decision Replay. Execution Phase 7 Shadow observation continues separately until Fully Accepted. DecisionExplainer in this graph is a shared diagnostic dependency, not a Phase 8 Graduation feature and not a license to start Phase 8 during Session 2.

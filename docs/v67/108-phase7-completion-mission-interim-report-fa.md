@@ -145,6 +145,9 @@ Phase 7 هنوز کاملاً پذیرفته نیست، چون:
 
 `SESSION 2 / DAY 0 / WINDOW STARTED — PHASE 7 NOT FULLY ACCEPTED`
 
-Phase 8 شروع نشده است و نباید شروع شود تا دستور صریح مالک:
+هویت Master Phase 8 = Graduation / Maintenance حفظ شده است (`109`). Remap به Shadow Bridge رد شده است. اجرای موازی Phase 8 در طول Session 2 ممنوع است. Gapهای تشخیصی فقط در `110` فهرست شده‌اند و پیاده‌سازی نشده‌اند.
 
-Execute V67.1 Phase 8
+Phase 8 Graduation/Maintenance شروع نشده است. شروع آن تنها پس از `PHASE 7 FULLY ACCEPTED` و دستور صریح بعدی مالک مجاز است. تا آن زمان:
+
+`PHASE 8 NOT STARTED`  
+`NEXT GATE: 14 VALID CONSECUTIVE DAYS + PHASE 7 COMPLETION AUDIT`
