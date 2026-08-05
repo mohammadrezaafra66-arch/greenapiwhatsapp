@@ -5,6 +5,7 @@
 # NO — wait for explicit `Execute V67.1 Phase 2`
 
 Phase 1 acceptance is complete on `feature/v67-autonomous-fleet-manager`.  
+Phase 1.1 Bugbot remediation is complete (see `15-phase1-1-bugbot-remediation.md`).  
 Phase 2 must not start until the owner issues that exact command.
 
 ---
@@ -18,8 +19,23 @@ Phase 2 must not start until the owner issues that exact command.
 | ZERO DDL | YES |
 | Incidents + eligibility + fleet breaker + campaign lock | YES |
 | Mesh WRAP / TC KEEP / synthetic autochat OFF | YES |
-| Targeted + full Backend suite recorded | YES — **1684 passed, 0 failed** (2026-08-05) |
+| Targeted + full Backend suite recorded | YES — **1684 passed, 0 failed** (Phase 1, 2026-08-05) |
 | Docs `11`–`13` | YES |
+
+---
+
+## Phase 1.1 gates (closed)
+
+| Gate | Status |
+|---|---|
+| Bugbot Finding 1 — nested non-reentrant lock | RESOLVED |
+| Bugbot Finding 2 — `parallel_accounts` owns mode | RESOLVED |
+| Bugbot Finding 3 — poll uses canonical `record_suspension` | RESOLVED |
+| Full Backend suite after remediation | YES — **1696 passed, 0 failed** (2026-08-05) |
+| Docs `15`–`16` | YES |
+| No Phase 2 scope leakage | YES |
+
+Details: `15-phase1-1-bugbot-remediation.md`, `16-phase2-readiness-after-bugfix.md`.
 
 ---
 
