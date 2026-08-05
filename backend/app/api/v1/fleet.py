@@ -284,3 +284,80 @@ async def graduation_preview(account_id: uuid.UUID, db: AsyncSession = Depends(g
         "fleet_state_mutated": False,
         "simulation_only": True,
     }
+
+
+# ── Phase 5 capacity / campaign planning (simulation only) ───────────────────
+
+class CampaignPlanBody(BaseModel):
+    target_messages: int = 100
+    batch_size: int = 10
+    spacing_minutes: int = 20
+    persist: bool = False
+
+
+@router.get("/capacity")
+async def fleet_capacity(
+    account_id: uuid.UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.fleet_planning import FleetPlanningService
+    return await FleetPlanningService().capacity_preview(db, account_id=account_id)
+
+
+@router.get("/budget")
+async def fleet_budget(db: AsyncSession = Depends(get_db)):
+    from app.services.fleet_planning import FleetPlanningService
+    preview = await FleetPlanningService().capacity_preview(db)
+    return {
+        "simulation_only": True,
+        "budgets": [p["budget"] for p in preview.get("plans", [])],
+        "mutates_runtime": False,
+    }
+
+
+@router.get("/planner")
+async def fleet_planner(db: AsyncSession = Depends(get_db)):
+    from app.services.fleet_planning import FleetPlanningService
+    return await FleetPlanningService().campaign_plan_simulate(db, persist=False)
+
+
+@router.get("/schedule-preview")
+async def schedule_preview(account_id: str | None = None, db: AsyncSession = Depends(get_db)):
+    from app.services.fleet_planning import FleetPlanningService
+    return await FleetPlanningService().schedule_preview(db, account_id=account_id)
+
+
+@router.post("/simulate-capacity")
+async def simulate_capacity(
+    request: Request,
+    account_id: uuid.UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.fleet_planning import FleetPlanningService
+    _rate_limit_simulate(request)
+    out = await FleetPlanningService().capacity_preview(db, account_id=account_id)
+    out["dry_run"] = True
+    return out
+
+
+@router.post("/simulate-campaign-plan")
+async def simulate_campaign_plan(
+    request: Request,
+    body: CampaignPlanBody | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.fleet_planning import FleetPlanningService
+    _rate_limit_simulate(request)
+    body = body or CampaignPlanBody()
+    result = await FleetPlanningService().campaign_plan_simulate(
+        db,
+        campaign={
+            "target_messages": body.target_messages,
+            "batch_size": body.batch_size,
+            "spacing_minutes": body.spacing_minutes,
+        },
+        persist=body.persist,
+    )
+    if body.persist and result.get("persisted"):
+        await db.commit()
+    return result
