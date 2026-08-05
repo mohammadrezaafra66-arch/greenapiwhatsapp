@@ -1,13 +1,13 @@
-"""V67 Phase 3/4 — Trust / Risk / Capacity ports.
+"""V67 Phase 3/4/5 — Trust / Risk / Capacity ports.
 
-Phase 4: TrustEngine + RiskEngine are real deterministic implementations.
-CapacityPlanner remains a stub until a later phase.
+Phase 5: CapacityPlanner is a real deterministic implementation.
 """
 from __future__ import annotations
 from typing import Protocol, Any
 
 from app.services.trust_engine import TrustEngine
 from app.services.risk_engine import RiskEngine
+from app.services.capacity_planner import CapacityPlanner
 
 
 class TrustEnginePort(Protocol):
@@ -22,19 +22,16 @@ class RiskEnginePort(Protocol):
 
 class CapacityPlannerPort(Protocol):
     def plan(self, fleet_state: str, policy: dict[str, Any], evidence: dict[str, Any]) -> dict[str, Any]:
-        """Deferred — not implemented in Phase 4."""
         ...
 
 
-# Back-compat names used by Phase 3 orchestrator
 class StubTrustEngine(TrustEngine):
-    """Phase 4: real TrustEngine (name kept for orchestrator imports)."""
+    pass
 
 
 class StubRiskEngine(RiskEngine):
-    """Phase 4: real RiskEngine (name kept for orchestrator imports)."""
+    pass
 
 
-class StubCapacityPlanner:
-    def plan(self, fleet_state: str, policy: dict[str, Any], evidence: dict[str, Any]) -> dict[str, Any]:
-        return {"implemented": False, "phase": 4, "capacity": None, "deferred": True}
+class StubCapacityPlanner(CapacityPlanner):
+    """Phase 5: real CapacityPlanner (name kept for orchestrator imports)."""
