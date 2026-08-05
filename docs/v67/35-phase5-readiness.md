@@ -2,19 +2,22 @@
 
 ## Verdict
 
-# NO — wait for explicit `Execute V67.1 Phase 5`
+# YES — Phase 5 COMPLETE (planning simulation)
 
-Phase 4 Trust/Risk/Graduation/Evidence complete (simulation only).
+Owner authorized `Execute V67.1 Phase 5`. See docs `36`–`39`.  
+Phase 6: `40-phase6-readiness.md` → **NO** until commanded.
 
-## Unresolved Phase 5 blockers
+## Closed
 
-1. Owner command: **`Execute V67.1 Phase 5`**
-2. Capacity Planner
-3. Campaign Planner / Autopilot
-4. Live Journey execution approval
-5. send_gate / FleetState cutover approval
-6. Shadow / Canary rollout
+| Item | Status |
+|---|---|
+| CapacityPlanner | YES |
+| FleetBudgetEngine | YES |
+| CampaignPlanner | YES |
+| SchedulePlanner | YES |
+| FleetOptimizer | YES |
+| No send_gate / cutover / live exec | YES |
 
 ## Recommended next
 
-Wait for: **Execute V67.1 Phase 5**
+Wait for: **Execute V67.1 Phase 6**
