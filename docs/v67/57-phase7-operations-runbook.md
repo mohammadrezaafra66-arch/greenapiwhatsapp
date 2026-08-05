@@ -18,13 +18,16 @@ python -m app.scripts.fleet_shadow_run --account-id <uuid> --dry-run
 
 Authenticated API: `POST /api/v1/fleet/shadow/run-once?account_id=...` with Shadow headers.
 
-## Future approved enablement (NOT Phase 7)
+## Future approved enablement (NOT Phase 7 / 7.1 / 7.2)
 
-1. Separate owner authorization for an approved environment  
-2. Set operator token + both flags carefully  
-3. Verify scheduler health and snapshot production  
-4. Start 14-day observation window (D-P7-10)  
-5. Immediate disable: set both flags false  
+Phase 7.2 completed **preflight only** (`docs/v67/65`–`83`). Flags must stay false until owner answers D-SE-01+ and issues a separate named-environment authorization.
+
+1. Owner answers `docs/v67/82-shadow-enablement-owner-decisions.md`
+2. Separate authorization for the exact named environment
+3. Set operator token + flags only as authorized
+4. Verify scheduler health and snapshot production
+5. Start 14-day observation window only by separate command
+6. Immediate disable: set both flags false (see `76`)
 
 ## Dangerous threshold
 

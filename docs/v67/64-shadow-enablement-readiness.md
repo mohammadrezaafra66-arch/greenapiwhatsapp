@@ -1,29 +1,21 @@
-# V67.1 Phase 7.1 — Shadow Enablement Readiness (separate gates)
+# V67.1 — Shadow Enablement Readiness (updated Phase 7.2)
 
 Do **not** combine these gates.
 
 | Gate | Ready? | Notes |
 |---|---|---|
-| 1. Phase 7 implementation acceptance | **YES** | Backend Shadow complete; P0/P1 fixed; full suite **1805 passed, 0 failed** |
-| 2. Approved-environment Shadow enablement | **NO** | Requires separate env preflight + owner authorization to set flags |
-| 3. 14-day observation window start | **NO** | Requires enablement + observation plan ratification |
-| 4. Human/Native Contacts phase | **NO** | Explicitly out of Phase 7 / 7.1 |
-| 5. Frontend implementation | **NO** | `FRONTEND_NOT_IMPLEMENTED`; needs separate authorization |
-| 6. Canary | **NO** | Deferred |
+| 1. Phase 7 implementation acceptance | **YES** | Phase 7 + 7.1 APPROVED; suite baseline 1805 |
+| 2. Approved-environment Shadow enablement | **NO** | Phase 7.2 preflight complete; owner decisions D-SE-01+ unanswered |
+| 3. 14-day observation window start | **NO** | Plan frozen only (`75`) |
+| 4. Human/Native Contacts phase | **NO** | |
+| 5. Frontend implementation | **NO** | |
+| 6. Canary | **NO** | |
 
-## Preconditions still required before enablement (not done here)
+## Phase 7.2 outcome
 
-- Owner authorization for `v67_shadow_runtime_enabled` / scheduler in a named environment
-- Strong `V67_SHADOW_OPERATOR_TOKEN` configured only on Backend
-- Redis availability proven for locks
-- Migration applied in that environment
-- Monitoring/runbook rehearsal
-- Numeric dangerous-mismatch threshold remains **UNRATIFIED**
+- Candidate ENV-A (`claudegreenapi` Compose) identified as PRODUCTION_LIKE
+- Flags remain **false**
+- Migration `v67_07` present on ENV-A
+- Blockers: owner approval, `fleet_accounts=0`, monitoring cadence acceptance, backup proof
 
-## Phase 7.1 did NOT
-
-- Enable flags
-- Start 14-day window
-- Build frontend
-- Implement Human/Native Contacts
-- Run Canary / Cutover / live send
+See `65`–`83`.
