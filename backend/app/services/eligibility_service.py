@@ -1,4 +1,7 @@
-"""V67 Phase 6 — eligibility simulation facade (read sensors; decide; never mutate)."""
+"""V67 Phase 6.1 — eligibility simulation facade (read sensors; decide; never mutate).
+
+Explicit policy selection only — no silent eligibility_rules merge.
+"""
 from __future__ import annotations
 import uuid
 from typing import Any
@@ -16,6 +19,7 @@ from app.services.fleet_scoring import FleetScoringService
 from app.services.capacity_planner import CapacityPlanner
 from app.services.fleet_budget import FleetBudgetEngine
 from app.services.fleet_policy_defaults import CONSERVATIVE_POLICY_SETTINGS
+from app.services.eligibility_policy import validate_eligibility_rules
 from app.services.journey_types import JourneyStatus
 
 
@@ -26,18 +30,26 @@ class EligibilityService:
         self.capacity = CapacityPlanner()
         self.budget = FleetBudgetEngine()
 
-    async def _policy(self, db: AsyncSession) -> tuple[dict, int | None]:
+    async def _policy(self, db: AsyncSession) -> tuple[dict, int | None, str]:
+        """Return (policy, version, policy_source). Never silently patches rules."""
         row = (await db.execute(
             select(FleetPolicy).where(FleetPolicy.is_default.is_(True)).limit(1)
         )).scalar_one_or_none()
         if row:
+            settings = dict(row.settings_json or {})
+            # If DB policy lacks valid eligibility_rules, do NOT merge — engine fail-closes.
             return (
-                {"name": row.name, "version": row.version, "settings_json": dict(row.settings_json or {})},
+                {"name": row.name, "version": row.version, "settings_json": settings},
                 int(row.version),
+                f"db_default:{row.name}",
             )
-        # Ensure eligibility_rules present even on empty DB
+        # Empty DB: explicit conservative seed (auditable)
         settings = dict(CONSERVATIVE_POLICY_SETTINGS)
-        return {"name": "CONSERVATIVE", "version": 1, "settings_json": settings}, 1
+        return (
+            {"name": "CONSERVATIVE", "version": 1, "settings_json": settings},
+            1,
+            "explicit_conservative_default",
+        )
 
     async def preview(
         self,
@@ -46,6 +58,9 @@ class EligibilityService:
         *,
         inject: dict | None = None,
         persist: bool = False,
+        force_policy: dict | None = None,
+        force_policy_version: int | None = None,
+        force_policy_source: str | None = None,
     ) -> dict[str, Any]:
         inject = inject or {}
         fleet = (await db.execute(
@@ -55,20 +70,26 @@ class EligibilityService:
         if acc is None:
             return {"error": "account_not_found"}
 
-        policy, policy_version = await self._policy(db)
-        # Prefer policy from DB; merge default eligibility_rules if older policy lacks them
+        if force_policy is not None:
+            policy = force_policy
+            policy_version = force_policy_version
+            policy_source = force_policy_source or "forced_test_policy"
+        else:
+            policy, policy_version, policy_source = await self._policy(db)
+
+        # Surface invalid DB rules early (still engine-decided; no silent fix)
         settings = dict(policy.get("settings_json") or {})
-        if "eligibility_rules" not in settings:
-            settings["eligibility_rules"] = dict(
-                CONSERVATIVE_POLICY_SETTINGS.get("eligibility_rules") or {}
-            )
-            policy = {**policy, "settings_json": settings}
+        if "eligibility_rules" in settings:
+            ok, msg = validate_eligibility_rules(settings.get("eligibility_rules"))
+            if not ok:
+                policy_source = f"{policy_source}|rules_invalid:{msg}"
 
         score = await self.scoring.simulate(db, account_id, inject=inject, persist=False)
         if score.get("error"):
             return score
 
         evidence = dict(score.get("evidence") or {})
+        evidence["policy_source"] = policy_source
         if inject.get("breaker"):
             evidence["breaker"] = True
         breaker = bool(inject.get("breaker") or evidence.get("breaker") or evidence.get("fleet_breaker_tripped"))
@@ -83,7 +104,9 @@ class EligibilityService:
             select(AccountJourney).where(
                 AccountJourney.account_id == account_id,
                 AccountJourney.status.in_([
-                    JourneyStatus.ACTIVE.value, JourneyStatus.PAUSED.value, JourneyStatus.SIMULATING.value,
+                    JourneyStatus.ACTIVE.value, JourneyStatus.PAUSED.value,
+                    JourneyStatus.SIMULATING.value, JourneyStatus.FAILED.value,
+                    JourneyStatus.CANCELLED.value, JourneyStatus.COMPLETED.value,
                 ]),
             ).limit(1)
         )).scalar_one_or_none()
@@ -138,6 +161,7 @@ class EligibilityService:
             breaker_tripped=breaker,
             evidence=evidence,
             policy_version=policy_version,
+            policy_source=policy_source,
         )
 
         out = {
@@ -148,6 +172,7 @@ class EligibilityService:
             "canonical_fleet_state": fleet.fleet_state if fleet else None,
             "evaluated_fleet_state": fleet_state,
             "cutover": bool(fleet.cutover) if fleet else False,
+            "policy_source": policy_source,
             "decision": decision.as_dict(),
             "inputs": {
                 "trust_score": trust_score,

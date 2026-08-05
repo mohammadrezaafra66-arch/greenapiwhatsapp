@@ -65,9 +65,11 @@ CONSERVATIVE_POLICY_SETTINGS: dict = {
         "standard_max_risk": "NORMAL",
         "high_volume_max_risk": "NORMAL",
         "require_readiness_for_trial": ["READY_FOR_TRIAL", "READY_FOR_CAMPAIGN", "READY_FOR_MATURE"],
-        "require_readiness_for_limited": ["READY_FOR_CAMPAIGN", "READY_FOR_MATURE", "READY_FOR_TRIAL"],
+        # Limited+ must NOT accept READY_FOR_TRIAL (Phase 6.1 monotonic readiness)
+        "require_readiness_for_limited": ["READY_FOR_CAMPAIGN", "READY_FOR_MATURE"],
         "require_readiness_for_standard": ["READY_FOR_CAMPAIGN", "READY_FOR_MATURE"],
-        "require_readiness_for_high_volume": ["READY_FOR_MATURE", "READY_FOR_CAMPAIGN"],
+        # High volume fail-closed: READY_FOR_MATURE only until owner unlocks broader set
+        "require_readiness_for_high_volume": ["READY_FOR_MATURE"],
         "min_daily_capacity_trial": 1,
         "min_daily_capacity_limited": 5,
         "min_daily_capacity_standard": 20,
@@ -82,6 +84,15 @@ CONSERVATIVE_POLICY_SETTINGS: dict = {
         "major_incident_types": [
             "suspended", "blocked", "forced_logout", "device_restriction",
         ],
+        # Phase 6.1 — Journey fail-closed contract
+        "journey_hard_block_statuses": ["PAUSED", "FAILED", "CANCELLED"],
+        "journey_simulation_only_statuses": ["SIMULATING"],
+        "journey_allowed_for_eligibility": ["ACTIVE"],
+        "journey_missing_blocks": True,
+        "journey_unknown_blocks": True,
+        "unknown_fleet_state_blocks": True,
+        "unknown_risk_blocks": True,
+        "unknown_readiness_blocks": True,
     },
 }
 
