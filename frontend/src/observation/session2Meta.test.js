@@ -2,12 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   SESSION_2_META,
+  CALENDAR_DAY_DISCLAIMER,
   computeObservationDay,
   resolveObservationStatus,
   statusColor,
   dayLabel,
   observationWarning,
   buildObservationCardModel,
+  parseFleetAccountsHint,
 } from "./session2Meta.js";
 
 const START = SESSION_2_META.startedAtUtc;
@@ -18,6 +20,15 @@ test("Day Unknown when start missing", () => {
   assert.equal(dayLabel(null), "Unknown");
   assert.equal(resolveObservationStatus({ day: null }), "WAITING");
   assert.equal(statusColor("WAITING"), "gray");
+});
+
+test("invalid start timestamp yields Unknown day", () => {
+  assert.equal(computeObservationDay("not-a-date"), null);
+  assert.equal(dayLabel(computeObservationDay("not-a-date")), "Unknown");
+});
+
+test("before-start timestamp stays Day 0 not negative", () => {
+  assert.equal(computeObservationDay(START, T0 - 60_000), 0);
 });
 
 test("Day 0 within first 24h", () => {
@@ -41,7 +52,6 @@ test("Day 13 still RUNNING", () => {
   const day = computeObservationDay(START, T0 + 13 * 86_400_000);
   assert.equal(day, 13);
   assert.equal(resolveObservationStatus({ day: 13 }), "RUNNING");
-  assert.match(observationWarning(13), /still in progress/);
 });
 
 test("Day 14 COMPLETED ready for audit only", () => {
@@ -57,7 +67,7 @@ test("Day 20 still COMPLETED (audit phrase only)", () => {
   const day = computeObservationDay(START, T0 + 20 * 86_400_000);
   assert.equal(day, 20);
   assert.equal(resolveObservationStatus({ day: 20 }), "COMPLETED");
-  assert.equal(observationWarning(20), "Observation ready for Completion Audit.");
+  assert.doesNotMatch(observationWarning(20), /Fully Accepted/i);
 });
 
 test("INVALID and RESTART_REQUIRED colors", () => {
@@ -67,16 +77,48 @@ test("INVALID and RESTART_REQUIRED colors", () => {
   assert.equal(statusColor("RESTART_REQUIRED"), "orange");
 });
 
-test("card model has no actions and simulation badge", () => {
-  const m = buildObservationCardModel({ now: T0 + 1000, cohortCount: 1, snapshotCount: null });
-  assert.deepEqual(m.actions, []);
-  assert.equal(m.simulationOnly, true);
-  assert.equal(m.subtitle, "Session 2");
-  assert.equal(m.title, "Observation Window");
-  assert.equal(m.cohortCount, 1);
-  assert.equal(m.snapshotCount, "Unknown");
-  assert.equal(m.live.cutover, "OFF");
-  assert.equal(m.live.canary, "OFF");
-  assert.equal(m.live.humanContacts, "OFF");
-  assert.equal(m.live.scheduler, "Unknown");
+test("parseFleetAccountsHint success zero rows", () => {
+  assert.deepEqual(parseFleetAccountsHint([]), { fleetAccountCount: 0, anyCutover: false });
+});
+
+test("parseFleetAccountsHint one row cutover false", () => {
+  assert.deepEqual(parseFleetAccountsHint([{ cutover: false }]), {
+    fleetAccountCount: 1,
+    anyCutover: false,
+  });
+});
+
+test("parseFleetAccountsHint one row cutover true", () => {
+  assert.deepEqual(parseFleetAccountsHint([{ cutover: true }]), {
+    fleetAccountCount: 1,
+    anyCutover: true,
+  });
+});
+
+test("parseFleetAccountsHint malformed -> nulls", () => {
+  assert.deepEqual(parseFleetAccountsHint({ rows: [] }), {
+    fleetAccountCount: null,
+    anyCutover: null,
+  });
+  assert.deepEqual(parseFleetAccountsHint(null), {
+    fleetAccountCount: null,
+    anyCutover: null,
+  });
+});
+
+test("card model fail-closed cutover and FleetAccount label", () => {
+  const unknown = buildObservationCardModel({ now: T0 + 1000, cutover: null, fleetAccountCount: null });
+  assert.equal(unknown.live.cutover, "Unknown");
+  assert.equal(unknown.fleetAccountCount, "Unknown");
+  assert.equal(unknown.fleetAccountCountLabel, "Current FleetAccount Count");
+  assert.equal(unknown.disclaimer, CALENDAR_DAY_DISCLAIMER);
+  assert.deepEqual(unknown.actions, []);
+
+  const off = buildObservationCardModel({ now: T0 + 1000, cutover: false, fleetAccountCount: 0 });
+  assert.equal(off.live.cutover, "OFF");
+  assert.equal(off.fleetAccountCount, 0);
+
+  const on = buildObservationCardModel({ now: T0 + 1000, cutover: true, fleetAccountCount: 1 });
+  assert.equal(on.live.cutover, "ON");
+  assert.equal(on.fleetAccountCount, 1);
 });

@@ -2,6 +2,7 @@
  * V67.1 — Session 2 observation reminder metadata (frontend-only).
  * Source of start/run_id: ops docs 107 (not a new backend API).
  * Day index = full UTC days elapsed since official CELERY start (Day 0 until 24h elapses).
+ * This is calendar progress only — not proof of valid observation days.
  */
 
 export const SESSION_2_META = Object.freeze({
@@ -11,6 +12,9 @@ export const SESSION_2_META = Object.freeze({
   targetDays: 14,
   simulationOnly: true,
 });
+
+export const CALENDAR_DAY_DISCLAIMER =
+  "Elapsed calendar day only; final validity is determined by the Phase 7 Completion Audit.";
 
 /** @typedef {"WAITING"|"RUNNING"|"COMPLETED"|"INVALID"|"RESTART_REQUIRED"} ObservationStatus */
 
@@ -111,6 +115,21 @@ export function formatTehranFromUtc(isoUtc) {
 }
 
 /**
+ * Parse GET /fleet/accounts payload. Fail closed on malformed data.
+ * @param {unknown} data
+ * @returns {{ fleetAccountCount: number|null, anyCutover: boolean|null }}
+ */
+export function parseFleetAccountsHint(data) {
+  if (!Array.isArray(data)) {
+    return { fleetAccountCount: null, anyCutover: null };
+  }
+  return {
+    fleetAccountCount: data.length,
+    anyCutover: data.some((a) => a && a.cutover === true),
+  };
+}
+
+/**
  * Build card view-model (pure; no network).
  * @param {object} opts
  */
@@ -122,12 +141,12 @@ export function buildObservationCardModel(opts = {}) {
     sessionActive = true,
     invalid = false,
     restartRequired = false,
-    cohortCount = null,
+    fleetAccountCount = null,
     snapshotCount = null,
     scheduler = null,
     runtime = null,
     shadow = null,
-    cutover = false,
+    cutover = null,
     canary = false,
     humanContacts = false,
   } = opts;
@@ -135,6 +154,7 @@ export function buildObservationCardModel(opts = {}) {
   const day = computeObservationDay(startedAtUtc, now);
   const status = resolveObservationStatus({ day, sessionActive, invalid, restartRequired });
   const display = (v) => (v == null || v === "" ? "Unknown" : v);
+  const triState = (v) => (v === true ? "ON" : v === false ? "OFF" : "Unknown");
 
   return {
     title: "Observation Window",
@@ -144,23 +164,24 @@ export function buildObservationCardModel(opts = {}) {
     status,
     statusColor: statusColor(status),
     warning: observationWarning(day),
+    disclaimer: CALENDAR_DAY_DISCLAIMER,
     simulationOnly: true,
     currentSession: SESSION_2_META.sessionLabel,
     currentDay: day == null ? "Unknown" : String(day),
     startedAtUtc: startedAtUtc || "Unknown",
     startedAtTehran: formatTehranFromUtc(startedAtUtc),
     runId: runId || "Unknown",
-    cohortCount: display(cohortCount),
+    fleetAccountCount: display(fleetAccountCount),
+    fleetAccountCountLabel: "Current FleetAccount Count",
     snapshotCount: display(snapshotCount),
     live: {
-      scheduler: display(scheduler === true ? "ON" : scheduler === false ? "OFF" : null),
-      runtime: display(runtime === true ? "ON" : runtime === false ? "OFF" : null),
-      shadow: display(shadow === true ? "ON" : shadow === false ? "OFF" : null),
-      cutover: cutover === true ? "ON" : "OFF",
-      canary: canary === true ? "ON" : "OFF",
-      humanContacts: humanContacts === true ? "ON" : "OFF",
+      scheduler: triState(scheduler),
+      runtime: triState(runtime),
+      shadow: triState(shadow),
+      cutover: triState(cutover),
+      canary: triState(canary),
+      humanContacts: triState(humanContacts),
     },
-    // Explicit: no action affordances in the model
     actions: [],
   };
 }

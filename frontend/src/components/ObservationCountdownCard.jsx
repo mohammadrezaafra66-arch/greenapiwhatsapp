@@ -1,6 +1,10 @@
 import React from "react";
 import { http } from "../api.js";
-import { SESSION_2_META, buildObservationCardModel } from "../observation/session2Meta.js";
+import {
+  SESSION_2_META,
+  buildObservationCardModel,
+  parseFleetAccountsHint,
+} from "../observation/session2Meta.js";
 
 const COLOR_CLASS = {
   gray: "border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-600 dark:bg-slate-800/60 dark:text-slate-200",
@@ -32,24 +36,24 @@ function LiveRow({ label, value }) {
  */
 export default function ObservationCountdownCard() {
   const [now, setNow] = React.useState(() => Date.now());
-  const [cohortCount, setCohortCount] = React.useState(null);
-  const [anyCutover, setAnyCutover] = React.useState(false);
+  const [fleetAccountCount, setFleetAccountCount] = React.useState(null);
+  const [anyCutover, setAnyCutover] = React.useState(null);
 
   React.useEffect(() => {
     let cancelled = false;
     const tick = async () => {
       setNow(Date.now());
       try {
-        const rows = await http.get("/fleet/accounts", { params: { limit: 500 } }).then((r) => r.data);
+        const data = await http.get("/fleet/accounts", { params: { limit: 500 } }).then((r) => r.data);
         if (cancelled) return;
-        if (Array.isArray(rows)) {
-          setCohortCount(rows.length);
-          setAnyCutover(rows.some((a) => a && a.cutover === true));
-        } else {
-          setCohortCount(null);
-        }
+        const hint = parseFleetAccountsHint(data);
+        setFleetAccountCount(hint.fleetAccountCount);
+        setAnyCutover(hint.anyCutover);
       } catch {
-        if (!cancelled) setCohortCount(null);
+        if (!cancelled) {
+          setFleetAccountCount(null);
+          setAnyCutover(null);
+        }
       }
     };
     tick();
@@ -64,8 +68,8 @@ export default function ObservationCountdownCard() {
     now,
     startedAtUtc: SESSION_2_META.startedAtUtc,
     runId: SESSION_2_META.runId,
-    cohortCount,
-    snapshotCount: null, // no unauthenticated snapshot endpoint; never invent API
+    fleetAccountCount,
+    snapshotCount: null,
     cutover: anyCutover,
     canary: false,
     humanContacts: false,
@@ -114,6 +118,9 @@ export default function ObservationCountdownCard() {
       </p>
 
       <p className="mt-2 text-sm font-medium leading-relaxed">{model.warning}</p>
+      <p className="mt-1 text-xs opacity-70 leading-relaxed" data-testid="observation-calendar-disclaimer">
+        {model.disclaimer}
+      </p>
 
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
         <div className="rounded-lg bg-white/50 dark:bg-black/20 border border-current/10 p-3 space-y-1">
@@ -122,7 +129,7 @@ export default function ObservationCountdownCard() {
           <LiveRow label="Started At UTC" value={model.startedAtUtc} />
           <LiveRow label="Started At Tehran" value={model.startedAtTehran} />
           <LiveRow label="Run ID" value={model.runId} />
-          <LiveRow label="Current Cohort Count" value={model.cohortCount} />
+          <LiveRow label={model.fleetAccountCountLabel} value={model.fleetAccountCount} />
           <LiveRow label="Current Snapshot Count" value={model.snapshotCount} />
         </div>
         <div className="rounded-lg bg-white/50 dark:bg-black/20 border border-current/10 p-3 space-y-1">
