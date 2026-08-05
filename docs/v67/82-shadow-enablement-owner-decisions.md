@@ -1,85 +1,69 @@
-# V67.1 Phase 7.2 — Shadow Enablement Owner Decisions
+# V67.1 Phase 7.3 — Shadow Enablement Owner Decisions (RATIFIED)
 
-**No decision below is approved.** Owner must answer explicitly.
+**Status:** All D-SE-01…D-SE-15 APPROVED by owner prompt for Phase 7.3.  
+**Environment:** ENV-A `claudegreenapi` Compose stack.
 
 ## D-SE-01 — Candidate environment
 
-- [ ] Approve exact named environment: `claudegreenapi` Compose stack (ENV-A)
-- [ ] Reject and require a new isolated staging environment
-- [ ] Select another named environment: ________
+**APPROVED:** ENV-A `claudegreenapi` Compose stack, classification `PRODUCTION_LIKE`.  
+ENV-B not primary. Unrelated host stacks not involved.
 
 ## D-SE-02 — Migration
 
-- [ ] Confirm `v67_07` on ENV-A is accepted as applied
-- [ ] Authorize apply on a different environment: ________
-- [ ] Do not authorize
+**APPROVED:** Accept `v67_07_fleet_shadow_snapshots` after read-only verification. Do not reapply if current.
 
 ## D-SE-03 — Temporary operator token
 
-- [ ] Authorize secure Backend token provisioning on approved env
-- [ ] Do not authorize
+**APPROVED:** Provision strong Backend-only Shadow operator token on ENV-A.  
+Never commit / print / log / store in DB or frontend. Backend role fixed. Client cannot self-assign role.
 
 ## D-SE-04 — Initial cohort
 
-- [ ] Approve Stage A criteria/count: ________ (requires `fleet_accounts` > 0)
-- [ ] Request different cohort criteria
-- [ ] Block until Fleet enrollment completed
+**APPROVED:** Stage A = **exactly 1** FleetAccount. Evidence-based selection. Dry-run before apply. No auto expansion.
 
 ## D-SE-05 — Manual run-once
 
-- [ ] Authorize dry-run only
-- [ ] Authorize dry-run + explicit Shadow persistence
-- [ ] Do not authorize
+**APPROVED:** Gate A dry-run (no persist) → Gate B one persisted snapshot only after Gate A passes.
 
 ## D-SE-06 — Runtime flag
 
-- [ ] Keep `v67_shadow_runtime_enabled=false`
-- [ ] Authorize `true` for controlled observation on named env only
+**APPROVED conditionally:** `v67_shadow_runtime_enabled=true` only after all listed gates pass. Remains false until then.
 
 ## D-SE-07 — Scheduler flag
 
-- [ ] Keep `v67_shadow_scheduler_enabled=false`
-- [ ] Authorize `true` only after Stage A success
+**APPROVED conditionally:** `v67_shadow_scheduler_enabled=true` only after Runtime validation and separate checkpoints. Not simultaneous with first Runtime enable.
 
 ## D-SE-08 — Scheduler frequency
 
-- [ ] Keep 300 seconds
-- [ ] Other: ________ seconds
+**APPROVED:** Keep **300 seconds**. No faster. No catch-up.
 
 ## D-SE-09 — Observation start
 
-- [ ] Authorize start only after all technical gates pass + separate command
-- [ ] Do not authorize
+**APPROVED conditionally:** Window starts at first successful **scheduled** Shadow snapshot after both flags enabled. No backdating.
 
 ## D-SE-10 — Emergency stop authority
 
-Authorized operator(s): ________
+**APPROVED:** Project Owner; Current authorized Backend/System Administrator.
 
 ## D-SE-11 — Monitoring cadence
 
-Daily review time/cadence (UTC): ________
+**APPROVED:** Daily formal review **06:00 UTC**.  
+Tehran equivalent at ratification: **09:30 IRST** (UTC+3:30). Recalculate if DST/rules change.
+
+Immediate review on P0/P1, CRITICAL mismatch, runtime-unknown spike, stale critical sensors, Redis/DB/Celery failure, duplicates, unauthorized API pattern, performance impact.
 
 ## D-SE-12 — Data retention
 
-- [ ] Keep indefinitely during observation
-- [ ] Choose duration: ________
-- [ ] Decide later with **no auto-delete**
+**APPROVED:** No automatic deletion during observation. Keep all Phase 7 Shadow snapshots for 14 days. No cleanup worker.
 
 ## D-SE-13 — Dangerous mismatch threshold
 
-- [ ] Remain **UNRATIFIED**
-- [ ] Separate later decision only
+**APPROVED:** Remain **UNRATIFIED**. Per-account dangerous classification remains visible. No numeric operational threshold.
 
 ## D-SE-14 — Frontend
 
-- [ ] Remain deferred
-- [ ] Authorize separate future frontend phase later
+**APPROVED:** Deferred. No frontend in Phase 7.3.
 
 ## D-SE-15 — Human/Native Contacts
 
-- [ ] Remain deferred until valid Shadow milestone
-- [ ] Authorize planning only after Stage A/B
-
----
-
-After answers, wait for a **separate explicit authorization command** for the exact named environment before any flag change.
+**APPROVED:** Deferred until after valid Shadow milestones. Not implemented in Phase 7.3.
