@@ -230,9 +230,11 @@ def test_shadow_api_has_auth_dependency_on_all_routes():
 
 
 def test_flags_remain_false_in_defaults():
-    assert settings.v67_shadow_runtime_enabled is False
-    assert settings.v67_shadow_scheduler_enabled is False
-    assert settings.v67_shadow_operator_token == ""
+    # Live ENV-A may enable flags during Phase 7.3 observation. Assert Settings class defaults only.
+    from app.config import Settings
+    assert Settings.model_fields["v67_shadow_runtime_enabled"].default is False
+    assert Settings.model_fields["v67_shadow_scheduler_enabled"].default is False
+    assert Settings.model_fields["v67_shadow_operator_token"].default == ""
 
 
 @pytest.mark.asyncio

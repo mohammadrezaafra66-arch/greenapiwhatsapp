@@ -122,8 +122,9 @@ def test_freshness_fail_closed_missing_policy():
 
 
 def test_feature_flags_default_false():
-    assert settings.v67_shadow_runtime_enabled is False
-    assert settings.v67_shadow_scheduler_enabled is False
+    from app.config import Settings
+    assert Settings.model_fields["v67_shadow_runtime_enabled"].default is False
+    assert Settings.model_fields["v67_shadow_scheduler_enabled"].default is False
 
 
 def test_send_gate_unchanged_no_shadow_leak():
