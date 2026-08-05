@@ -1,6 +1,12 @@
 # V67.1 Phase 7.2 — 14-Day Shadow Observation Plan (FROZEN DESIGN)
 
-**Status:** Plan frozen. **Window NOT started.**
+**Status:** `DAY 0 / WINDOW STARTED` on ENV-A (see `99-phase7-observation-window-start.md`).
+
+Official start UTC: `2026-08-05 18:03:05.304615` (first CELERY_PERIODIC snapshot).  
+Tehran: `2026-08-05 21:33:05.304615` IRST.
+
+Do **not** mark Day 1 until a full valid UTC day elapses.  
+Do **not** claim 14-day completion.
 
 ## Prerequisites (all required before start)
 
