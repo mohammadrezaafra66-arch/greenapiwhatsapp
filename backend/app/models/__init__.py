@@ -61,8 +61,10 @@ from app.models.fleet_policy import FleetPolicy
 from app.models.fleet_account import FleetAccount
 from app.models.account_journey import AccountJourney
 from app.models.journey_action import JourneyAction
+from app.models.fleet_evidence import FleetEvidenceSnapshot
 
 __all__ = [
+    "FleetEvidenceSnapshot",
     "AccountJourney",
     "JourneyAction",
     "FleetPolicy",
