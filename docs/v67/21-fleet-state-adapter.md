@@ -36,3 +36,10 @@ D-H2 grandfather CAMPAIGN_READY for clean GRADUATED≥25 is **not** automatic se
 `app.services.fleet_state_adapter.FleetStateAdapter`
 
 CLI seed: `python -m app.scripts.fleet_seed --dry-run` (default) / `--apply`
+
+## Phase 3 relationship
+
+- Adapter remains **sensor → recommended state** (no journey execution).
+- Journey engine (`evaluate_transition`) is a separate pure recommender for SIMULATION/SHADOW.
+- Shadow diagnostics compare: canonical FleetState, adapter recommendation, journey recommendation, legacy AccountStatus/WarmupState, live Green state, incidents.
+- Neither adapter nor journey engine cuts over `send_gate`. See `28-phase3-shadow-mode.md`.
