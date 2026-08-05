@@ -65,8 +65,10 @@ class Settings(BaseSettings):
     v67_shadow_batch_size: int = 25
     v67_shadow_lock_ttl_seconds: int = 60
     v67_shadow_max_runtime_seconds: int = 120
-    # D-P7-16 — privileged operator token (empty = Shadow APIs fail-closed / unconfigured)
+    # D-P7-16 — temporary Shadow-scoped operator token (empty = APIs fail-closed)
+    # NOT application-wide auth. Role is Backend-configured only (not client header).
     v67_shadow_operator_token: str = ""
+    v67_shadow_operator_role: str = "operator"
     v67_shadow_allowed_roles: str = "admin,operator"
 
     class Config:

@@ -406,13 +406,20 @@ class ShadowRuntimeService:
                 executes=False,
                 idempotency_key=idem,
             )
-            db.add(snap)
+            # Savepoint so IntegrityError cannot poison the outer transaction (batch-safe).
             try:
-                await db.flush()
+                async with db.begin_nested():
+                    db.add(snap)
+                    await db.flush()
             except IntegrityError:
                 shadow_metrics.incr("shadow_idempotent_skips")
                 out["persisted"] = False
                 out["duplicate"] = True
+                existing2 = (await db.execute(
+                    select(FleetShadowSnapshot).where(FleetShadowSnapshot.idempotency_key == idem)
+                )).scalar_one_or_none()
+                if existing2:
+                    out["snapshot_id"] = str(existing2.id)
                 return out
             out["snapshot_id"] = str(snap.id)
             out["persisted"] = True
