@@ -13,10 +13,15 @@ def test_eligibility_reuses_plan_snapshot_model():
 
 
 def test_no_phase6_alembic_revision_required():
-    """Phase 6 must not introduce a new migration; v67_06 is sufficient."""
+    """Phase 6 eligibility must not introduce its own DDL; plan snapshots suffice.
+
+    Phase 7 may add `v67_07_fleet_shadow_snapshots` — that is out of Phase 6 scope.
+    """
     versions = Path(__file__).resolve().parents[1] / "migrations" / "versions"
-    phase6 = list(versions.glob("*v67_07*")) + list(versions.glob("*phase6*eligib*"))
-    assert phase6 == [], f"unexpected Phase 6 migrations: {phase6}"
+    phase6_named = list(versions.glob("*phase6*eligib*")) + list(versions.glob("*v67_06*eligib*"))
+    assert phase6_named == [], f"unexpected Phase 6 eligibility migrations: {phase6_named}"
+    # Phase 6 head at ship time was v67_06; later phases may advance head.
+    assert any("v67_06" in p.name for p in versions.glob("*.py"))
 
 
 def test_phase5_plan_table_migration_still_present():
