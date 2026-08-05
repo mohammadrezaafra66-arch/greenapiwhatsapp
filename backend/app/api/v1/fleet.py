@@ -361,3 +361,73 @@ async def simulate_campaign_plan(
     if body.persist and result.get("persisted"):
         await db.commit()
     return result
+
+
+# ── Phase 6 campaign eligibility (decision only) ─────────────────────────────
+
+class EligibilityBody(BaseModel):
+    persist: bool = False
+    inject_breaker: bool = False
+    inject_suspended: bool = False
+    inject_blocked: bool = False
+    fleet_state: str | None = None
+    trust_score: float | None = None
+    risk_level: str | None = None
+    readiness_label: str | None = None
+    daily_capacity: int | None = None
+    recommended_usage: int | None = None
+
+
+@router.get("/eligibility")
+async def fleet_eligibility(db: AsyncSession = Depends(get_db)):
+    from app.services.eligibility_service import EligibilityService
+    return await EligibilityService().fleet_eligibility(db)
+
+
+@router.get("/eligibility-preview")
+async def eligibility_preview(
+    account_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.eligibility_service import EligibilityService
+    result = await EligibilityService().preview(db, account_id, persist=False)
+    if result.get("error") == "account_not_found":
+        raise HTTPException(404, result["error"])
+    return result
+
+
+@router.post("/simulate-eligibility")
+async def simulate_eligibility(
+    request: Request,
+    account_id: uuid.UUID,
+    body: EligibilityBody | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.eligibility_service import EligibilityService
+    _rate_limit_simulate(request)
+    body = body or EligibilityBody()
+    inject: dict = {
+        "breaker": body.inject_breaker,
+        "suspended": body.inject_suspended,
+        "blocked": body.inject_blocked,
+    }
+    if body.fleet_state:
+        inject["fleet_state"] = body.fleet_state
+    if body.trust_score is not None:
+        inject["trust_score"] = body.trust_score
+    if body.risk_level:
+        inject["risk_level"] = body.risk_level
+    if body.readiness_label:
+        inject["readiness_label"] = body.readiness_label
+    if body.daily_capacity is not None:
+        inject["daily_capacity"] = body.daily_capacity
+    if body.recommended_usage is not None:
+        inject["recommended_usage"] = body.recommended_usage
+    result = await EligibilityService().preview(
+        db, account_id, inject=inject, persist=body.persist,
+    )
+    if result.get("error") == "account_not_found":
+        raise HTTPException(404, result["error"])
+    if body.persist and result.get("persisted"):
+        await db.commit()
+    return result
