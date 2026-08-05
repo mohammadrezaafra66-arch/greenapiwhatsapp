@@ -57,8 +57,12 @@ from app.models.story_analysis import StoryProductAnalysis
 from app.models.catalog_alert import CatalogSpotAlert
 from app.models.own_number import OwnNumberExclusion
 from app.models.active_contact import ActiveWhatsappContact
+from app.models.fleet_policy import FleetPolicy
+from app.models.fleet_account import FleetAccount
 
 __all__ = [
+    "FleetPolicy",
+    "FleetAccount",
     "ReceivedStatus",
     "StoryProductAnalysis",
     "CatalogSpotAlert",

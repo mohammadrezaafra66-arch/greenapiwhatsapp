@@ -24,7 +24,7 @@ from app.api.v1 import (
     capabilities as capabilities_router,
     adlinks, warmup, warmup_helpers,
     group_monitor, telegram, onboarding,
-    reports_public, own_numbers, active_contacts,
+    reports_public, own_numbers, active_contacts, fleet,
 )
 from app.config import settings
 
@@ -32,6 +32,10 @@ from app.config import settings
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # V67 Phase 2 — Alembic owns additive fleet_* revisions (see migrations/versions/).
+        # create_all remains for the hybrid compatibility release (D-H5); it may create
+        # fleet_* on fresh empties. Alembic upgrades use IF NOT EXISTS and are reversible.
+        # Do not remove main.py IF NOT EXISTS patches in Phase 2.
         # V36 — create_all never ALTERs an existing PG enum, so add the new account status value
         # idempotently (PG 15 allows ADD VALUE inside this transaction as long as it isn't used here).
         await conn.execute(text("ALTER TYPE accountstatus ADD VALUE IF NOT EXISTS 'green_api_deleted'"))
@@ -1251,7 +1255,7 @@ for router in [
     capabilities_router.router, adlinks.router, warmup.router,
     warmup_helpers.router, group_monitor.router, telegram.router,
     onboarding.router, reports_public.router, own_numbers.router,
-    active_contacts.router,
+    active_contacts.router, fleet.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 
