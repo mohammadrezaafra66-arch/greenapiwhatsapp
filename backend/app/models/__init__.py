@@ -59,8 +59,12 @@ from app.models.own_number import OwnNumberExclusion
 from app.models.active_contact import ActiveWhatsappContact
 from app.models.fleet_policy import FleetPolicy
 from app.models.fleet_account import FleetAccount
+from app.models.account_journey import AccountJourney
+from app.models.journey_action import JourneyAction
 
 __all__ = [
+    "AccountJourney",
+    "JourneyAction",
     "FleetPolicy",
     "FleetAccount",
     "ReceivedStatus",
