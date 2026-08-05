@@ -1,51 +1,48 @@
-"""V67 Phase 3 — migration upgrade/downgrade for journey tables."""
+"""V67 Phase 3 — migration upgrade/downgrade for journey tables (migtest DB only)."""
 from __future__ import annotations
 import os
-import subprocess
+
 import pytest
+from sqlalchemy import text
 
-
-def _run_alembic(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        ["alembic", *args], cwd="/app", capture_output=True, text=True, env=os.environ.copy(),
-    )
+from tests.migration_test_db import (
+    migration_test_engine,
+    reset_additive_fleet_schema_for_alembic,
+    run_alembic,
+)
 
 
 @pytest.mark.skipif(not os.path.exists("/app/alembic.ini"), reason="backend container only")
 def test_phase3_upgrade_downgrade_reupgrade():
-    cur = _run_alembic("current")
-    if "v67_03" not in (cur.stdout or "") and "v67_04" not in (cur.stdout or ""):
-        st = _run_alembic("stamp", "v67_03_fleet_accounts")
-        assert st.returncode == 0, st.stderr
+    reset_additive_fleet_schema_for_alembic()
+    eng = migration_test_engine()
+    assert run_alembic("stamp", "v67_01_baseline_stamp").returncode == 0
+    assert run_alembic("upgrade", "v67_03_fleet_accounts").returncode == 0
 
-    up = _run_alembic("upgrade", "head")
+    up = run_alembic("upgrade", "head")
     assert up.returncode == 0, up.stderr + up.stdout
 
-    from sqlalchemy import create_engine, text
-    from app.config import settings
-    eng = create_engine(settings.sync_database_url)
     with eng.connect() as conn:
         for t in ("account_journeys", "journey_actions"):
             assert conn.execute(text(
                 "SELECT 1 FROM information_schema.tables WHERE table_name=:t"
             ), {"t": t}).scalar() == 1
-        # cutover column still exists and default false on fleet_accounts
         assert conn.execute(text(
             "SELECT column_name FROM information_schema.columns "
             "WHERE table_name='fleet_accounts' AND column_name='cutover'"
         )).scalar() == "cutover"
 
-    down = _run_alembic("downgrade", "v67_03_fleet_accounts")
+    down = run_alembic("downgrade", "v67_03_fleet_accounts")
     assert down.returncode == 0, down.stderr + down.stdout
     with eng.connect() as conn:
         for t in ("account_journeys", "journey_actions"):
             assert conn.execute(text(
                 "SELECT 1 FROM information_schema.tables WHERE table_name=:t"
             ), {"t": t}).scalar() is None
-        # Phase 2 tables preserved
         assert conn.execute(text(
             "SELECT 1 FROM information_schema.tables WHERE table_name='fleet_accounts'"
         )).scalar() == 1
 
-    reup = _run_alembic("upgrade", "head")
+    reup = run_alembic("upgrade", "head")
     assert reup.returncode == 0, reup.stderr + reup.stdout
+    eng.dispose()

@@ -5,6 +5,7 @@ so migrations are optional. This env wires Alembic to the same models in case
 you want to manage schema changes explicitly.
 """
 import os
+import sys
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
@@ -14,12 +15,17 @@ from alembic import context
 from app.config import settings
 from app.database import Base
 import app.models  # noqa: F401  (registers all models)
+from app.services.migration_db_guard import assert_alembic_downgrade_allowed
 
 config = context.config
 
 # Prefer the configured sync URL (env var wins).
 sync_url = os.getenv("SYNC_DATABASE_URL", settings.sync_database_url)
 config.set_main_option("sqlalchemy.url", sync_url)
+
+# Hard stop: never downgrade protected ENV-A (whatsapp_sender) unless explicitly allowed.
+if any(arg == "downgrade" for arg in sys.argv):
+    assert_alembic_downgrade_allowed(sync_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

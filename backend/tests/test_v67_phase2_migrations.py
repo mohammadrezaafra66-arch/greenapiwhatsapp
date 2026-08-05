@@ -1,20 +1,15 @@
-"""V67 Phase 2 — migration upgrade/downgrade verification (dev/test DB only)."""
+"""V67 Phase 2 — migration upgrade/downgrade verification (disposable migtest DB only)."""
 from __future__ import annotations
 import os
-import subprocess
+
 import pytest
+from sqlalchemy import text
 
-
-def _run_alembic(*args: str) -> subprocess.CompletedProcess:
-    env = os.environ.copy()
-    # Inside backend container SYNC_DATABASE_URL points at db host.
-    return subprocess.run(
-        ["alembic", *args],
-        cwd="/app",
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+from tests.migration_test_db import (
+    migration_test_engine,
+    reset_additive_fleet_schema_for_alembic,
+    run_alembic,
+)
 
 
 @pytest.mark.skipif(
@@ -22,11 +17,10 @@ def _run_alembic(*args: str) -> subprocess.CompletedProcess:
     reason="migration tests run inside backend container",
 )
 def test_alembic_heads_and_history():
-    heads = _run_alembic("heads")
+    heads = run_alembic("heads")
     assert heads.returncode == 0, heads.stderr
-    # Head advances with later phases (v67_03 → v67_04 → v67_05 …).
     assert "v67_0" in heads.stdout and "(head)" in heads.stdout
-    hist = _run_alembic("history")
+    hist = run_alembic("history")
     assert hist.returncode == 0
     assert "v67_01_baseline_stamp" in hist.stdout
     assert "v67_02_fleet_policies" in hist.stdout
@@ -38,20 +32,14 @@ def test_alembic_heads_and_history():
     reason="migration tests run inside backend container",
 )
 def test_upgrade_downgrade_reupgrade_fleet_tables():
-    """Assumes DB already has baseline schema (create_all). Stamps baseline if needed."""
-    # Ensure we are at least at baseline; if no version table, stamp baseline then upgrade.
-    cur = _run_alembic("current")
-    if cur.returncode != 0 or not cur.stdout.strip():
-        stamp = _run_alembic("stamp", "v67_01_baseline_stamp")
-        assert stamp.returncode == 0, stamp.stderr + stamp.stdout
+    reset_additive_fleet_schema_for_alembic()
+    eng = migration_test_engine()
+    stamp = run_alembic("stamp", "v67_01_baseline_stamp")
+    assert stamp.returncode == 0, stamp.stderr + stamp.stdout
 
-    up = _run_alembic("upgrade", "head")
+    up = run_alembic("upgrade", "head")
     assert up.returncode == 0, up.stderr + up.stdout
 
-    # Verify tables exist via SQLAlchemy
-    from sqlalchemy import create_engine, text
-    from app.config import settings
-    eng = create_engine(settings.sync_database_url)
     with eng.connect() as conn:
         for table in ("fleet_policies", "fleet_accounts"):
             exists = conn.execute(text(
@@ -59,18 +47,16 @@ def test_upgrade_downgrade_reupgrade_fleet_tables():
                 "WHERE table_schema='public' AND table_name=:t"
             ), {"t": table}).scalar()
             assert exists == 1, f"missing {table}"
-        # unique account_id
         uq = conn.execute(text(
             "SELECT 1 FROM pg_constraint WHERE conname='uq_fleet_accounts_account_id'"
         )).scalar()
         assert uq == 1
-        # check constraint
         ck = conn.execute(text(
             "SELECT 1 FROM pg_constraint WHERE conname='ck_fleet_accounts_fleet_state'"
         )).scalar()
         assert ck == 1
 
-    down = _run_alembic("downgrade", "v67_01_baseline_stamp")
+    down = run_alembic("downgrade", "v67_01_baseline_stamp")
     assert down.returncode == 0, down.stderr + down.stdout
 
     with eng.connect() as conn:
@@ -81,7 +67,7 @@ def test_upgrade_downgrade_reupgrade_fleet_tables():
             ), {"t": table}).scalar()
             assert exists is None, f"{table} should be dropped on downgrade"
 
-    reup = _run_alembic("upgrade", "head")
+    reup = run_alembic("upgrade", "head")
     assert reup.returncode == 0, reup.stderr + reup.stdout
 
     with eng.connect() as conn:
@@ -90,3 +76,4 @@ def test_upgrade_downgrade_reupgrade_fleet_tables():
             "WHERE table_schema='public' AND table_name='fleet_accounts'"
         )).scalar()
         assert exists == 1
+    eng.dispose()

@@ -2,7 +2,6 @@
 from __future__ import annotations
 import inspect
 import os
-import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -27,14 +26,17 @@ def test_phase7_migration_file_present():
 
 @pytest.mark.skipif(not os.path.exists("/app/alembic.ini"), reason="container only")
 def test_phase7_migration_roundtrip():
-    def _run(*args: str):
-        return subprocess.run(
-            ["alembic", *args], cwd="/app", capture_output=True, text=True, env=os.environ.copy(),
-        )
-    assert _run("upgrade", "head").returncode == 0
-    from sqlalchemy import create_engine, text
-    from app.config import settings as st
-    eng = create_engine(st.sync_database_url)
+    from sqlalchemy import text
+    from tests.migration_test_db import (
+        migration_test_engine,
+        reset_additive_fleet_schema_for_alembic,
+        run_alembic,
+    )
+
+    reset_additive_fleet_schema_for_alembic()
+    eng = migration_test_engine()
+    assert run_alembic("stamp", "v67_01_baseline_stamp").returncode == 0
+    assert run_alembic("upgrade", "head").returncode == 0
     with eng.connect() as conn:
         assert conn.execute(text(
             "SELECT 1 FROM information_schema.tables WHERE table_name='fleet_shadow_snapshots'"
@@ -54,12 +56,13 @@ def test_phase7_migration_roundtrip():
             assert False, "expected check constraint failure"
         except Exception:
             conn.rollback()
-    assert _run("downgrade", "v67_06_fleet_plan_snapshots").returncode == 0
+    assert run_alembic("downgrade", "v67_06_fleet_plan_snapshots").returncode == 0
     with eng.connect() as conn:
         assert conn.execute(text(
             "SELECT 1 FROM information_schema.tables WHERE table_name='fleet_shadow_snapshots'"
         )).scalar() is None
-    assert _run("upgrade", "head").returncode == 0
+    assert run_alembic("upgrade", "head").returncode == 0
+    eng.dispose()
 
 
 @pytest.mark.asyncio
