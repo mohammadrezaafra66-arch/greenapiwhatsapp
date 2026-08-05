@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Dashboard as DashApi, Inbox as InboxApi, AiApi, QueueApi, IncidentsApi, CallsApi } from "../api.js";
 import { Spinner } from "../ui.jsx";
+import ObservationCountdownCard from "../components/ObservationCountdownCard.jsx";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell, Legend,
@@ -269,6 +270,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <ObservationCountdownCard />
       {critical.length > 0 && (
         <Link to="/protection" className="block card border-red-200 bg-red-50 text-red-700 text-sm hover:bg-red-100">
           🔴 {critical.map((i) => i.account_name).join("، ")} کارت زرد گرفت — ارسال متوقف شد. مشاهده جزئیات
