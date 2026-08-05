@@ -986,3 +986,21 @@ def task_fetch_incoming_stories():
     task_analyze_story_backlog.delay(analysis_job_id, None, False, AUTO_ANALYZE_MAX_STORIES)
     print(f"[StoryFetch] chained auto-analysis job {analysis_job_id} "
           f"(cap={AUTO_ANALYZE_MAX_STORIES})")
+
+# V67.1 Phase 7 — Shadow Runtime periodic task (flags default OFF; no-op when disabled).
+@celery_app.task(name="tasks.fleet_shadow_tick")
+def task_fleet_shadow_tick():
+    """Observational Shadow only. Never sends, never mutates FleetState/Journey/cutover."""
+    from app.config import settings
+    if not bool(settings.v67_shadow_runtime_enabled) or not bool(settings.v67_shadow_scheduler_enabled):
+        return {"skipped": True, "reason": "shadow_flags_disabled", "mutates_runtime": False, "executes": False}
+
+    async def _run():
+        from app.database import AsyncSessionLocal
+        from app.services.shadow_runtime import ShadowRuntimeService
+        async with AsyncSessionLocal() as db:
+            out = await ShadowRuntimeService().run_batch_periodic(db)
+            if out.get("processed"):
+                await db.commit()
+            return out
+    return run_async(_run())

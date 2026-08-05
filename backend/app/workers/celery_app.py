@@ -100,4 +100,7 @@ celery_app.conf.beat_schedule = {
     # before their ~24h WhatsApp expiry. Idempotent persistence means repeat fetches never
     # re-download. The manual on-page refresh button is unaffected (additive).
     "fetch-incoming-stories": {"task": "tasks.fetch_incoming_stories", "schedule": 1800.0},
+    # V67.1 Phase 7 — Shadow tick (registered but no-ops unless BOTH flags true; defaults false).
+    # Enabling in any live environment requires separate owner authorization after Phase 7.
+    "fleet-shadow-tick": {"task": "tasks.fleet_shadow_tick", "schedule": 300.0},
 }
