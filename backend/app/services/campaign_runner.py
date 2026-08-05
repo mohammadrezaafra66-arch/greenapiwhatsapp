@@ -750,12 +750,15 @@ async def _run_campaign_parallel_inner(campaign_id: str, account_ids: list[str])
             await db.commit()
             return
 
+    # V67.1 Phase 1.1 — lock is already held by run_campaign_parallel. Never call
+    # run_campaign here: it would try to re-acquire the non-reentrant Redis lock and
+    # exit without completing, leaving the campaign stuck in `running`.
     if not account_ids:
-        await run_campaign(campaign_id)
+        await _run_campaign_inner(campaign_id)
         return
     if not pending:
-        # Nothing to send → let the sequential path mark completion.
-        await run_campaign(campaign_id)
+        # Nothing to send → sequential body marks completion under the same lock.
+        await _run_campaign_inner(campaign_id)
         return
 
     allowed_ids = [str(a.id) for a in accounts] or list(account_ids)

@@ -130,6 +130,7 @@ async def test_apply_state_clears_the_expiry_once_no_longer_suspended(monkeypatc
 
 @pytest.mark.asyncio
 async def test_apply_state_quarantines_a_suspended_instance(monkeypatch):
+    """V67.1 Phase 1.1 — suspension uses canonical record_suspension only; no invented cooldown."""
     async def _noop_persist(*_a, **_k):
         return None
 
@@ -137,11 +138,19 @@ async def test_apply_state_quarantines_a_suspended_instance(monkeypatch):
         account.suspended_until = datetime(2026, 8, 8, 14, 37, 35)
         return account.suspended_until
 
+    async def _fake_record(account, via, db):
+        account.incident_count_7d = (account.incident_count_7d or 0) + 1
+        return SimpleNamespace(incident_type="suspended")
+
     monkeypatch.setattr(send_gate, "persist_live_state", _noop_persist)
     monkeypatch.setattr(state_monitor, "refresh_suspended_until", _fake_refresh)
+    monkeypatch.setattr("app.services.incident_handler.record_suspension", _fake_record)
     acc = _acc()
+    acc.incident_count_7d = 0
     res = await state_monitor.apply_state(_FakeDB(), acc, "suspended", "webhook", NOW)
 
     assert res["acted"] == "suspended"                 # quarantined, not silently recorded
     assert acc.suspended_until == datetime(2026, 8, 8, 14, 37, 35)
-    assert acc.cooldown_until is not None and acc.throttle_until is not None
+    # Canonical path: no invented cooldown/throttle (matches record_suspension / webhook).
+    assert acc.cooldown_until is None
+    assert acc.throttle_until is None

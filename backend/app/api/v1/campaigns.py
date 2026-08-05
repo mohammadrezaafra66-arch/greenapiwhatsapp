@@ -683,8 +683,10 @@ async def start_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
     if campaign.campaign_scope == "group":
         from app.workers.tasks import task_run_group_campaign
         task_run_group_campaign.delay(campaign_id)
-    elif campaign.parallel_accounts or campaign.selected_account_ids:
+    elif campaign.parallel_accounts:
         # Feature 37 — split contacts across accounts, sent concurrently.
+        # V67.1 Phase 1.1 — execution MODE is controlled only by parallel_accounts.
+        # selected_account_ids only narrows the eligible pool; it must never force parallel.
         # V18 PART 2 — exclude cooldown + mesh-warming (non-graduated) numbers so a warming
         # account is never pulled into a real campaign even in parallel/all mode.
         # V60 PART A — when the user named specific accounts, narrow to exactly those. The
@@ -711,6 +713,26 @@ async def start_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
                     "reason": SELECTED_ACCOUNT_UNAVAILABLE_REASON}
         task_run_campaign.delay(campaign_id, active_accounts)
     else:
+        # Sequential worker. selected_account_ids (if any) is enforced fail-closed inside
+        # resolve_sending_accounts — never expands to unrestricted accounts.
+        if campaign.selected_account_ids:
+            from app.services import governors
+            from app.services.warmup_exclusion import enrollment_states_by_instance, warmup_campaign_excluded
+            from app.services.listener_service import listener_campaign_excluded
+            from app.services.account_selection import SELECTED_ACCOUNT_UNAVAILABLE_REASON
+            acc_result = await db.execute(select(Account).where(Account.status == AccountStatus.active))
+            enr_map = await enrollment_states_by_instance(db)
+            chosen = {str(x) for x in campaign.selected_account_ids}
+            usable = [a for a in acc_result.scalars().all()
+                      if str(a.id) in chosen
+                      and not governors.in_cooldown(a) and not warmup_campaign_excluded(a, enr_map)
+                      and not listener_campaign_excluded(a)]
+            if not usable:
+                campaign.status = CampaignStatus.paused
+                campaign.pause_reason = SELECTED_ACCOUNT_UNAVAILABLE_REASON
+                await db.commit()
+                return {"status": "paused", "campaign_id": campaign_id,
+                        "reason": SELECTED_ACCOUNT_UNAVAILABLE_REASON}
         task_run_campaign.delay(campaign_id)
     return {"status": "started", "campaign_id": campaign_id, "scope": campaign.campaign_scope}
 

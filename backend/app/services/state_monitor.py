@@ -64,26 +64,34 @@ async def apply_state(db, account, state: str, source: str,
     # V57 — keep `suspended_until` in step with the live state: fill it while suspended, clear it
     # the moment the instance reports anything else, so a stale date can never linger in the UI.
     if s == "suspended":
+        # V67.1 Phase 1.1 — canonical suspension path only. Must NOT fall through into the
+        # generic danger-state cooldown/throttle branch (webhook + record_suspension deliberately
+        # omit cooldown so a recovered number is not sidelined after the restriction lifts).
+        from app.models.account import AccountStatus
+        if getattr(account, "status", None) != AccountStatus.suspended:
+            account.status = AccountStatus.suspended
         result["suspended_until"] = await refresh_suspended_until(db, account)
         # V65 — record the suspension as an incident so health/warmth/eligibility stop calling a
         # restricted number healthy. Idempotent per open incident, so the 60s poll adds one row,
-        # not one per tick.
+        # not one per tick. Fleet breaker is notified inside record_suspension.
         from app.services.incident_handler import record_suspension
         try:
-            if await record_suspension(account, source, db) is not None:
-                result["acted"] = "suspended"
+            await record_suspension(account, source, db)
         except Exception as e:  # pragma: no cover - best-effort
             logger.warning("record_suspension failed for %s: %s", account.instance_id, e)
-    else:
-        if getattr(account, "suspended_until", None) is not None:
-            account.suspended_until = None
-        # V65 — the instance reports something other than suspended: close any open suspension
-        # incident so a recovered number is not penalised for a restriction that has lifted.
-        from app.services.incident_handler import resolve_suspension
-        try:
-            await resolve_suspension(account, db)
-        except Exception as e:  # pragma: no cover - best-effort
-            logger.warning("resolve_suspension failed for %s: %s", account.instance_id, e)
+        result["acted"] = "suspended"
+        return result
+
+    if getattr(account, "suspended_until", None) is not None:
+        account.suspended_until = None
+    # V65 — the instance reports something other than suspended: close any open suspension
+    # incident so a recovered number is not penalised for a restriction that has lifted.
+    from app.services.incident_handler import resolve_suspension
+    try:
+        await resolve_suspension(account, db)
+    except Exception as e:  # pragma: no cover - best-effort
+        logger.warning("resolve_suspension failed for %s: %s", account.instance_id, e)
+
     if s not in DANGER_STATES:
         return result
     if s == "yellowcard":
@@ -98,6 +106,7 @@ async def apply_state(db, account, state: str, source: str,
     else:
         # blocked / notAuthorized / logout → hard per-instance kill-switch so can_send_now
         # refuses it right away (in addition to the status change the webhook applies).
+        # (suspended returns earlier — never reaches this branch.)
         account.throttle_factor = governors.YELLOW_THROTTLE_FACTOR
         account.throttle_until = now + timedelta(days=7)
         account.cooldown_until = now + timedelta(days=1)
