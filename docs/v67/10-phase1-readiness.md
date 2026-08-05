@@ -55,4 +55,6 @@ Full Backend suite (once): **1684 passed, 0 failed** (2026-08-05). Baseline fail
 
 ## Recommended next after Phase 1
 
-Wait for explicit: **Execute V67.1 Phase 2**
+Phase 2 readiness closure: **READY** — see `17-phase2-blocker-closure.md`, `18-phase2-final-readiness.md`.
+
+Owner start command when ready: **`Execute V67.1 Phase 2`**

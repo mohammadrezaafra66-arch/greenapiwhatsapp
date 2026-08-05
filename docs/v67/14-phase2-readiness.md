@@ -2,11 +2,15 @@
 
 ## Verdict
 
-# NO — wait for explicit `Execute V67.1 Phase 2`
+# READY — Phase 2 may start
+
+Documentation / architecture / branch / test prerequisites are closed.  
+See `17-phase2-blocker-closure.md` and `18-phase2-final-readiness.md`.
+
+**Start gate only:** owner must still send exactly `Execute V67.1 Phase 2` before any Phase 2 implementation.
 
 Phase 1 acceptance is complete on `feature/v67-autonomous-fleet-manager`.  
-Phase 1.1 Bugbot remediation is complete (see `15-phase1-1-bugbot-remediation.md`).  
-Phase 2 must not start until the owner issues that exact command.
+Phase 1.1 Bugbot remediation is complete (see `15-phase1-1-bugbot-remediation.md`).
 
 ---
 
@@ -39,40 +43,39 @@ Details: `15-phase1-1-bugbot-remediation.md`, `16-phase2-readiness-after-bugfix.
 
 ---
 
-## Phase 2 scope (not started)
+## Phase 2 scope (not started — awaiting command)
 
 Per master + approved decisions:
 
-- `fleet_accounts` table (D-H4)
-- Alembic baseline/stamp (D-H5)
+- `fleet_accounts` table (D-H4) — **design frozen** in `17`
+- Alembic baseline/stamp (D-H5) — **plan frozen** in `17`
 - Canonical persisted FleetState
 - Policy Engine seed (D-H3 WarmupConfig bit-identical curve)
-- Journey / Trust / Risk / Capacity / Device Registry — design only until later phases unless Phase 2 doc expands
+- Journey / Trust / Risk / Capacity / Device Registry — only as Phase 2 execution prompt allows
 
 ---
 
-## Unresolved Phase 2 blockers
+## Former “Unresolved Phase 2 blockers” — closure
 
-1. **Explicit owner command** — `Execute V67.1 Phase 2`
-2. **DDL design freeze** — `fleet_accounts` columns + indexes; optional activity cache columns (not applied in Phase 1)
-3. **Alembic introduction** on a codebase that currently uses startup DDL (`main.py`) — migration plan in `05` / `06`
-4. **Day-ladder migration** (D-H2) — Phase 1 did not change Day-10 semantics; Phase 2+ must map mesh GRADUATED carefully
-5. **Mesh cutover** — WRAP only; deprecate only after canary (D-H1)
-6. **Live-state policy** — automated gate defaults `automated_require_live_state=False` (hydrate when known); strict unknown rejection available via `require_live_state=True` — Phase 2 may tighten after FleetState hydration is reliable
+| # | Former blocker | Class | Status |
+|---|---|---|---|
+| 1 | Explicit owner command `Execute V67.1 Phase 2` | OWNER_DECISION | **OPEN** (start gate only) |
+| 2 | DDL design freeze | DOCUMENTATION_ONLY | **CLOSED** — `17` B2 |
+| 3 | Alembic vs `main.py` | DOCUMENTATION_ONLY | **CLOSED** — `17` B3 |
+| 4 | Day-ladder migration (D-H2) | DOCUMENTATION_ONLY | **CLOSED** — `17` B4 |
+| 5 | Mesh cutover (D-H1) | DOCUMENTATION_ONLY / out of Phase 2 | **CLOSED** — `17` B5 |
+| 6 | Live-state policy | DOCUMENTATION_ONLY | **CLOSED** — `17` B6 |
+
+Full detail: `17-phase2-blocker-closure.md`.
 
 ---
 
 ## Proposed Phase 2 DDL (NOT applied)
 
-Optional later; document only:
-
-- `fleet_accounts` (canonical AFM row per account)
-- Optional denormalized activity evidence columns (first/last inbound/outbound, unique chats) — currently computed ZERO DDL from inbox / campaign / helper tables
-
-Do not apply until Phase 2 execution is authorized.
+Frozen in `17` B2. Still must not apply until Phase 2 execution is authorized.
 
 ---
 
 ## Recommended next
 
-Wait for: **Execute V67.1 Phase 2**
+Owner: **`Execute V67.1 Phase 2`**
