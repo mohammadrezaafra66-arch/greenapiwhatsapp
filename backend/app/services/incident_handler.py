@@ -145,6 +145,12 @@ async def record_suspension(account: Account, via: str, db) -> AccountIncident |
     db.add(incident)
     logger.warning("suspension recorded for %s (via %s), until %s",
                    account.instance_id, via, getattr(account, "suspended_until", None))
+    # V67.1 Phase 1 — feed fleet 24h suspension breaker (coexists with mesh 48h; D-C1).
+    try:
+        from app.services import fleet_breaker
+        await fleet_breaker.record_distinct_suspension(str(account.id), via=via)
+    except Exception as e:
+        logger.error("fleet breaker notify after suspension failed: %s", e)
     return incident
 
 
@@ -206,3 +212,174 @@ async def apply_warning_throttle(account: Account, reason: str, via: str, db,
     db.add(incident)
     await db.commit()
     return incident
+
+
+# ── V67.1 Phase 1 — critical incident completeness (idempotent) ─────────────
+
+CRITICAL_INCIDENT_TYPES = (
+    "yellowCard", "suspended", "blocked", "notAuthorized", "forced_logout",
+    "device_restriction", "auth_churn",
+)
+
+
+async def _open_incident(account_id, incident_type: str, db) -> AccountIncident | None:
+    return (await db.execute(
+        select(AccountIncident).where(
+            AccountIncident.account_id == account_id,
+            AccountIncident.incident_type == incident_type,
+            AccountIncident.resolved.is_(False),
+        ).limit(1)
+    )).scalar_one_or_none()
+
+
+def _safe_instance_int(instance_id) -> int | None:
+    try:
+        return int(instance_id) if str(instance_id).isdigit() else None
+    except Exception:
+        return None
+
+
+def _bump_incident_counters(account: Account, now: datetime) -> None:
+    account.incident_count_7d = (account.incident_count_7d or 0) + 1
+    account.last_incident_at = now
+
+
+async def record_blocked(account: Account, via: str, db, *, raw_state: str = "blocked",
+                         notes: str | None = None) -> AccountIncident | None:
+    """V67 Phase 1 — idempotent blocked incident. Does not call Green API / clear queues."""
+    if await _open_incident(account.id, "blocked", db) is not None:
+        return None
+    now = datetime.utcnow()
+    _bump_incident_counters(account, now)
+    incident = AccountIncident(
+        account_id=account.id,
+        id_instance=_safe_instance_int(account.instance_id),
+        incident_type="blocked", detected_via=via, severity="critical",
+        auto_actions={"status": "banned", "raw_state": raw_state},
+        notes=notes or "WhatsApp blocked (stateInstance=blocked)",
+    )
+    db.add(incident)
+    logger.warning("blocked recorded for %s (via %s)", account.instance_id, via)
+    return incident
+
+
+async def record_forced_logout(account: Account, via: str, db, *, raw_state: str = "notAuthorized",
+                               notes: str | None = None) -> AccountIncident | None:
+    """V67 Phase 1 — forced logout / unexpected authorization loss. Idempotent open row."""
+    if await _open_incident(account.id, "forced_logout", db) is not None:
+        return None
+    now = datetime.utcnow()
+    _bump_incident_counters(account, now)
+    incident = AccountIncident(
+        account_id=account.id,
+        id_instance=_safe_instance_int(account.instance_id),
+        incident_type="forced_logout", detected_via=via, severity="critical",
+        auto_actions={"status": "disconnected", "raw_state": raw_state},
+        notes=notes or "Forced logout / unexpected authorization loss",
+    )
+    db.add(incident)
+    logger.warning("forced_logout recorded for %s (via %s)", account.instance_id, via)
+    return incident
+
+
+async def record_not_authorized(account: Account, via: str, db, *, raw_state: str = "notAuthorized",
+                                unexpected: bool = True) -> AccountIncident | None:
+    """Unexpected notAuthorized while the account was previously active/connected."""
+    if await _open_incident(account.id, "notAuthorized", db) is not None:
+        return None
+    now = datetime.utcnow()
+    _bump_incident_counters(account, now)
+    incident = AccountIncident(
+        account_id=account.id,
+        id_instance=_safe_instance_int(account.instance_id),
+        incident_type="notAuthorized", detected_via=via, severity="critical",
+        auto_actions={"unexpected": unexpected, "raw_state": raw_state},
+        notes="Unexpected notAuthorized (authorization loss)",
+    )
+    db.add(incident)
+    logger.warning("notAuthorized recorded for %s (via %s)", account.instance_id, via)
+    return incident
+
+
+async def record_device_restriction(account: Account, via: str, db, *,
+                                    raw_payload: dict | None = None) -> AccountIncident | None:
+    """Linked-device restriction when detectable from device webhook payload."""
+    if await _open_incident(account.id, "device_restriction", db) is not None:
+        return None
+    now = datetime.utcnow()
+    _bump_incident_counters(account, now)
+    # Never store secrets; only non-sensitive device status fields.
+    safe = {}
+    if isinstance(raw_payload, dict):
+        for k in ("state", "status", "deviceStatus", "reason", "typeWebhook"):
+            if k in raw_payload:
+                safe[k] = raw_payload.get(k)
+    incident = AccountIncident(
+        account_id=account.id,
+        id_instance=_safe_instance_int(account.instance_id),
+        incident_type="device_restriction", detected_via=via, severity="critical",
+        auto_actions={"raw_state": safe},
+        notes="Linked-device restriction detected",
+    )
+    db.add(incident)
+    logger.warning("device_restriction recorded for %s (via %s)", account.instance_id, via)
+    return incident
+
+
+async def record_auth_churn(account: Account, via: str, db, *,
+                            window_hours: int = 24, threshold: int = 3) -> AccountIncident | None:
+    """Repeated authorization churn: multiple forced_logout/notAuthorized in a window.
+
+    Only invents this signal when supported by counting prior critical auth incidents.
+    """
+    cutoff = datetime.utcnow() - timedelta(hours=window_hours)
+    n = (await db.execute(
+        select(AccountIncident).where(
+            AccountIncident.account_id == account.id,
+            AccountIncident.incident_type.in_(("forced_logout", "notAuthorized")),
+            AccountIncident.created_at >= cutoff,
+        )
+    )).scalars().all()
+    if len(n) < threshold:
+        return None
+    if await _open_incident(account.id, "auth_churn", db) is not None:
+        return None
+    now = datetime.utcnow()
+    _bump_incident_counters(account, now)
+    incident = AccountIncident(
+        account_id=account.id,
+        id_instance=_safe_instance_int(account.instance_id),
+        incident_type="auth_churn", detected_via=via, severity="critical",
+        auto_actions={"count_in_window": len(n), "window_hours": window_hours},
+        notes="Repeated authorization churn",
+    )
+    db.add(incident)
+    return incident
+
+
+async def resolve_incident_type(account: Account, incident_type: str, db,
+                                resolved_by: str = "auto") -> int:
+    rows = (await db.execute(
+        select(AccountIncident).where(
+            AccountIncident.account_id == account.id,
+            AccountIncident.incident_type == incident_type,
+            AccountIncident.resolved.is_(False),
+        )
+    )).scalars().all()
+    for r in rows:
+        r.resolved = True
+        r.resolved_at = datetime.utcnow()
+        r.resolved_by = resolved_by
+    return len(rows)
+
+
+async def has_unresolved_critical(account_id, db) -> bool:
+    row = (await db.execute(
+        select(AccountIncident).where(
+            AccountIncident.account_id == account_id,
+            AccountIncident.incident_type.in_(CRITICAL_INCIDENT_TYPES),
+            AccountIncident.resolved.is_(False),
+            AccountIncident.severity == "critical",
+        ).limit(1)
+    )).scalar_one_or_none()
+    return row is not None

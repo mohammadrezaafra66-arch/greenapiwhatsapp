@@ -184,6 +184,131 @@ def is_kill_reason(reason: str) -> bool:
     return reason.split(":", 1)[1] in KILL_LIVE_STATES
 
 
+# ── V67.1 Phase 1 — canonical automated-send eligibility (extends, does not replace gate) ──
+
+DEVICE_RESTRICTION_HINTS = ("device", "linked", "restricted", "maxDevices", "tooManyDevices")
+
+
+def _live_looks_device_restricted(live_state: str | None) -> bool:
+    if not live_state:
+        return False
+    s = str(live_state).strip().lower()
+    return any(h.lower() in s for h in DEVICE_RESTRICTION_HINTS)
+
+
+def is_account_send_eligible(account, live_state: str | None = None,
+                             *, breaker_tripped: bool = False,
+                             unresolved_critical: bool = False,
+                             require_live_state: bool = True,
+                             now: datetime | None = None,
+                             live_state_known: bool | None = None) -> tuple[bool, str]:
+    """Phase 1 canonical predicate for automated outbound sends.
+
+    Extends `can_send_now` — does NOT replace it. Fail-closed for:
+    - fleet breaker
+    - unresolved critical incidents
+    - missing/unknown live state when require_live_state
+    - device-restriction-like live states
+    - all existing can_send_now refusals
+    """
+    now = now or datetime.utcnow()
+    if breaker_tripped:
+        return False, "fleet_breaker"
+    if unresolved_critical:
+        return False, "unresolved_critical_incident"
+    # Resolve live state from cache when caller omitted it.
+    if live_state is None and live_state_known is not False:
+        live_state = get_cached_live_state(getattr(account, "instance_id", None), now)
+    if require_live_state:
+        known = live_state_known if live_state_known is not None else (live_state is not None)
+        if not known or live_state is None:
+            return False, "unknown_live_state"
+        s = str(live_state).strip().lower()
+        if s in ("", "unknown"):
+            return False, "unknown_live_state"
+        if _live_looks_device_restricted(s):
+            return False, "live_state:device_restriction"
+    allowed, reason = can_send_now(account, live_state, now)
+    if not allowed:
+        return False, reason
+    return True, "ok"
+
+
+async def is_account_send_eligible_async(account, db=None, live_state: str | None = None,
+                                         now: datetime | None = None,
+                                         require_live_state: bool | None = None) -> tuple[bool, str]:
+    """Async wrapper: loads fleet breaker + unresolved critical incidents, then eligibility.
+
+    Live-state policy (Phase 1):
+    - Fleet breaker + unresolved critical always fail-closed.
+    - When `require_live_state` is True (or settings.automated_require_live_state), missing
+      live state rejects with `unknown_live_state`.
+    - Default False: after cache miss, hydrate from durable InstanceLiveState when possible;
+      if still unknown, degrade to classic can_send_now (status/cooldown/throttle) so a worker
+      restart cannot brick all sends for up to 60s. Strict unknown rejection remains unit-tested
+      via is_account_send_eligible(..., require_live_state=True).
+    """
+    now = now or datetime.utcnow()
+    from app.config import settings as _settings
+    if require_live_state is None:
+        require_live_state = bool(getattr(_settings, "automated_require_live_state", False))
+
+    try:
+        from app.services import fleet_breaker
+        tripped, br = await fleet_breaker.is_tripped(fail_closed=True)
+    except Exception:
+        tripped, br = True, "fleet_breaker_error"
+    if tripped:
+        return False, f"fleet_breaker:{br}"
+
+    unresolved = False
+    if db is not None and getattr(account, "id", None) is not None:
+        try:
+            from app.services.incident_handler import has_unresolved_critical
+            unresolved = await has_unresolved_critical(account.id, db)
+        except Exception as e:
+            logger.error("unresolved critical check failed (fail-closed): %s", e)
+            return False, "incident_check_failed"
+
+    if live_state is None:
+        live_state = get_cached_live_state(getattr(account, "instance_id", None), now)
+    if live_state is None and db is not None:
+        live_state = await _hydrate_live_state_from_db(db, getattr(account, "instance_id", None), now)
+
+    return is_account_send_eligible(
+        account, live_state, breaker_tripped=False, unresolved_critical=unresolved,
+        require_live_state=require_live_state, now=now,
+        live_state_known=(live_state is not None) if require_live_state else True,
+    )
+
+
+async def _hydrate_live_state_from_db(db, instance_id, now: datetime) -> str | None:
+    """Best-effort durable live-state mirror (InstanceLiveState), freshness-bounded."""
+    if not instance_id:
+        return None
+    try:
+        from sqlalchemy import select
+        from app.models.instance_state import InstanceLiveState
+        row = (await db.execute(
+            select(InstanceLiveState).where(InstanceLiveState.instance_id == str(instance_id))
+        )).scalar_one_or_none()
+        if row is None or row.checked_at is None:
+            return None
+        age = (now - row.checked_at).total_seconds()
+        if age > LIVE_STATE_MAX_AGE_SECONDS:
+            return None
+        update_live_state(instance_id, row.state, row.checked_at)
+        return (row.state or "").strip().lower() or None
+    except Exception:
+        return None
+
+
+async def gate_check_automated(account, db=None, now: datetime | None = None) -> tuple[bool, str]:
+    """Drop-in async gate for every automated send path (campaign/mesh/TC). Fail-closed on
+    fleet breaker + critical incidents; live-state strictness per settings."""
+    return await is_account_send_eligible_async(account, db=db, now=now)
+
+
 # ── durable persistence + kill-switch trip (async; used where a real DB session exists) ──
 async def persist_live_state(db, instance_id: str, state: str, source: str,
                              now: datetime | None = None) -> None:

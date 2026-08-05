@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     # V14 F23.4 — semi-automatic failover after yellowCard (default OFF: silently moving
     # load to another number can card it too if the message content is the trigger).
     auto_failover_on_yellow_card: bool = False
+    # V67.1 Phase 1 — D-H1 Hybrid WRAP: mesh AI own-account autochat default OFF.
+    # Existing enrollment rows remain; automated mesh sends are skipped when False.
+    mesh_autochat_enabled: bool = False
+    # V67.1 Phase 1 — campaign Redis lock fail-closed (D-C3 “then closed” for campaign path).
+    campaign_lock_fail_closed: bool = True
+    # When True, automated sends reject missing live state. Default False: hydrate from
+    # durable mirror / degrade to classic gate so worker restarts are not a total outage;
+    # strict unknown rejection is covered by is_account_send_eligible(require_live_state=True).
+    automated_require_live_state: bool = False
     # When true (Celery worker/beat), use NullPool — each task runs on a fresh
     # event loop via asyncio.run and pooled asyncpg conns can't cross loops.
     # When false (API), use a real connection pool for concurrency.

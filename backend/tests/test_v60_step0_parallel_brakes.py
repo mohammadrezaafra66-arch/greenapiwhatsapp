@@ -144,8 +144,10 @@ async def test_new_contact_defers_to_the_governor(monkeypatch):
 # ── the wiring: the parallel path really uses them ──────────────────────────
 def test_parallel_path_takes_the_single_run_lock():
     src = inspect.getsource(cr.run_campaign_parallel)
-    assert "campaign_lock:" in src
-    assert "nx=True" in src
+    # V67 Phase 1 — lock lives in CampaignLock (still NX + fail-closed); key prefix unchanged.
+    assert "CampaignLock" in src
+    from app.services.campaign_lock import lock_key
+    assert lock_key("x").startswith("campaign_lock:")
 
 
 def test_parallel_path_checks_schedule_hour_window_and_drip():

@@ -53,3 +53,42 @@ def _allow_sender_eligibility(monkeypatch):
         return True, "ok"
     monkeypatch.setattr("app.services.sender_eligibility.sender_send_allowed", _ok)
     yield
+
+
+@pytest.fixture(autouse=True)
+def _v67_phase1_legacy_compat(monkeypatch, request):
+    """V67 Phase 1 — production defaults: mesh autochat OFF + fleet breaker fail-closed.
+
+    Legacy suites that exercise mesh/TC send paths enable mesh autochat and stub the fleet
+    breaker as clear, unless the test module is the Phase 1 safety suite (which asserts the
+    real defaults / breaker behavior).
+    """
+    from unittest.mock import AsyncMock
+    nodeid = getattr(request.node, "nodeid", "") or ""
+    if "test_v67_phase1" in nodeid or "test_campaign_lock" in nodeid:
+        yield
+        return
+    from app.config import settings
+    monkeypatch.setattr(settings, "mesh_autochat_enabled", True, raising=False)
+    monkeypatch.setattr(
+        "app.services.fleet_breaker.is_tripped",
+        AsyncMock(return_value=(False, "ok")),
+    )
+    # Legacy campaign suites expect the inner run to execute; CampaignLock is fail-closed
+    # against real Redis in Phase 1. Stub a successful acquire outside the lock unit tests.
+    class _OkCampaignLock:
+        def __init__(self, *a, **k):
+            self.fail_closed_reason = None
+            self.skip_reason = None
+            self.token = "test-token"
+            self.acquired = True
+
+        async def acquire(self):
+            return True
+
+        async def release(self):
+            return True
+
+    monkeypatch.setattr("app.services.campaign_lock.CampaignLock", _OkCampaignLock)
+    monkeypatch.setattr("app.services.campaign_runner.CampaignLock", _OkCampaignLock, raising=False)
+    yield

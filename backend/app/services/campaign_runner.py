@@ -125,7 +125,15 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
         # and now, do NOT send: leave the contact pending for a healthy account/future run and
         # trip the kill-switch on a live danger state so nothing else uses this instance.
         from app.services.send_gate import gate_check, is_kill_reason, trip_kill_switch_for
-        allowed, gate_reason = gate_check(account)
+        from app.services.send_gate import gate_check_automated
+        # V67 Phase 1 — automated eligibility (fleet breaker + unresolved critical + live state).
+        try:
+            allowed, gate_reason = await gate_check_automated(account, db=db)
+        except Exception:
+            allowed, gate_reason = gate_check(account)
+            if allowed:
+                # Fail closed if async eligibility could not run.
+                allowed, gate_reason = False, "eligibility_check_failed"
         if not allowed:
             cc.status = MessageStatus.pending
             cc.error_message = f"send gate: {gate_reason}"
@@ -293,28 +301,54 @@ async def _deliver_message(db, campaign, cc, contact, account, products, poll_op
 
 
 async def run_campaign(campaign_id: str):
-    """Single-run guard (B1.3/B1.4): only one instance processes a campaign at a
-    time, so startup-resume and orphan-recovery re-queues can't double-send.
-    Fail-open — if Redis is unavailable, run without the lock (current behavior)."""
-    lock_key = f"campaign_lock:{campaign_id}"
-    r = None
+    """Single-run guard (B1.3/B1.4 + V67 Phase 1 fail-closed):
+    only one instance processes a campaign at a time.
+    Redis unavailable → do NOT run (fail-closed)."""
+    from app.services.campaign_lock import CampaignLock, lock_audit_event
+    from app.services.send_gate import is_account_send_eligible_async  # noqa: F401 — docs/runtime map
+    # Fleet breaker blocks new campaign runs entirely.
     try:
-        from app.services import redis_rate_limiter
-        r = await redis_rate_limiter.get_redis()
-        acquired = await r.set(lock_key, "1", nx=True, ex=14400)  # 4h TTL
-        if not acquired:
-            print(f"[Campaign {campaign_id}] already running (lock held) — skipping duplicate")
+        from app.services import fleet_breaker
+        tripped, reason = await fleet_breaker.is_tripped(fail_closed=True)
+        if tripped:
+            print(f"[Campaign {campaign_id}] fleet breaker tripped ({reason}) — skip")
+            await _pause_campaign_for_safety(campaign_id, fleet_breaker.PAUSE_REASON_FA)
             return
-    except Exception:
-        r = None  # Redis down → proceed without a lock
+    except Exception as e:
+        print(f"[Campaign {campaign_id}] fleet breaker check fail-closed: {e}")
+        await _pause_campaign_for_safety(campaign_id, "قفل ایمنی ناوگان — بررسی مدار قطع ناموفق")
+        return
+
+    lock = CampaignLock(campaign_id)
+    acquired = await lock.acquire()
+    if lock.fail_closed_reason:
+        print(f"[Campaign {campaign_id}] lock fail-closed: {lock.fail_closed_reason}")
+        await _pause_campaign_for_safety(campaign_id, lock.fail_closed_reason)
+        print(lock_audit_event(campaign_id, "fail_closed", reason=lock.fail_closed_reason))
+        return
+    if not acquired:
+        print(f"[Campaign {campaign_id}] already running (lock held) — skipping duplicate")
+        print(lock_audit_event(campaign_id, "skip_held"))
+        return
+    print(lock_audit_event(campaign_id, "acquired", token_suffix=lock.token[-8:]))
     try:
         await _run_campaign_inner(campaign_id)
     finally:
-        if r is not None:
-            try:
-                await r.delete(lock_key)
-            except Exception:
-                pass
+        await lock.release()
+        print(lock_audit_event(campaign_id, "released"))
+
+
+async def _pause_campaign_for_safety(campaign_id: str, reason: str) -> None:
+    """Best-effort pause so operators see why the run did not start."""
+    try:
+        async with AsyncSessionLocal() as db:
+            campaign = await db.get(Campaign, uuid.UUID(campaign_id))
+            if campaign and campaign.status == CampaignStatus.running:
+                campaign.status = CampaignStatus.paused
+                campaign.pause_reason = reason
+                await db.commit()
+    except Exception as e:
+        print(f"[Campaign {campaign_id}] safety pause failed (non-fatal): {e}")
 
 
 async def _run_campaign_inner(campaign_id: str):
@@ -583,28 +617,36 @@ async def run_campaign_parallel(campaign_id: str, account_ids: list[str]):
     the fail-closed account selection. Turning on multi-account sending therefore turned OFF
     four safety brakes, which is exactly backwards. All of them now run here too, using the
     SHARED decisions in campaign_preflight so the two paths cannot drift apart again.
+
+    V67 Phase 1 — campaign lock fail-closed + fleet breaker.
     """
-    # Brake 1 — single-run lock. Without it, startup-resume plus orphan-recovery could run two
-    # copies of the same campaign concurrently and double-send. Fail-open when Redis is down,
-    # matching run_campaign's existing behaviour.
-    lock_key = f"campaign_lock:{campaign_id}"
-    r = None
+    from app.services.campaign_lock import CampaignLock, lock_audit_event
     try:
-        from app.services import redis_rate_limiter
-        r = await redis_rate_limiter.get_redis()
-        if not await r.set(lock_key, "1", nx=True, ex=14400):
-            print(f"[Campaign {campaign_id}] already running (lock held) — skipping duplicate")
+        from app.services import fleet_breaker
+        tripped, reason = await fleet_breaker.is_tripped(fail_closed=True)
+        if tripped:
+            print(f"[Campaign {campaign_id}] parallel: fleet breaker ({reason}) — skip")
+            await _pause_campaign_for_safety(campaign_id, fleet_breaker.PAUSE_REASON_FA)
             return
-    except Exception:
-        r = None
+    except Exception as e:
+        print(f"[Campaign {campaign_id}] parallel fleet breaker fail-closed: {e}")
+        await _pause_campaign_for_safety(campaign_id, "قفل ایمنی ناوگان — بررسی مدار قطع ناموفق")
+        return
+
+    lock = CampaignLock(campaign_id)
+    acquired = await lock.acquire()
+    if lock.fail_closed_reason:
+        print(f"[Campaign {campaign_id}] parallel lock fail-closed: {lock.fail_closed_reason}")
+        await _pause_campaign_for_safety(campaign_id, lock.fail_closed_reason)
+        print(lock_audit_event(campaign_id, "parallel_fail_closed", reason=lock.fail_closed_reason))
+        return
+    if not acquired:
+        print(f"[Campaign {campaign_id}] already running (lock held) — skipping duplicate")
+        return
     try:
         await _run_campaign_parallel_inner(campaign_id, account_ids)
     finally:
-        if r is not None:
-            try:
-                await r.delete(lock_key)
-            except Exception:
-                pass
+        await lock.release()
 
 
 async def _run_campaign_parallel_inner(campaign_id: str, account_ids: list[str]):

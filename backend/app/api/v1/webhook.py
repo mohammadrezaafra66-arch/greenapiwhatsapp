@@ -377,9 +377,21 @@ async def handle_state_change(instance_id: str, payload: dict):
                 account.status = AccountStatus.banned
                 account.banned_at = datetime.utcnow()
                 account.ban_reason = "blocked by WhatsApp"
+                from app.services.incident_handler import record_blocked
+                await record_blocked(account, "webhook", db, raw_state=state)
                 await db.commit()
             elif state == "notAuthorized":
+                was_active = account.status == AccountStatus.active
                 account.status = AccountStatus.disconnected
+                from app.services.incident_handler import (
+                    record_forced_logout, record_not_authorized, record_auth_churn,
+                )
+                # Unexpected loss while previously active → forced logout + notAuthorized.
+                if was_active:
+                    await record_forced_logout(account, "webhook", db, raw_state=state)
+                    await record_not_authorized(account, "webhook", db, raw_state=state,
+                                                unexpected=True)
+                    await record_auth_churn(account, "webhook", db)
                 await db.commit()
             elif state == "authorized":
                 # V38 — stamp the reconnect instant ONLY on a genuine non-active → active
@@ -391,6 +403,15 @@ async def handle_state_change(instance_id: str, payload: dict):
                     account.reconnected_at = _ts
                     account.connected_at = _ts   # V39 PART 1 — universal connect-cooldown anchor
                 account.status = AccountStatus.active
+                # Resolve open auth-loss incidents on genuine re-auth (history preserved).
+                try:
+                    from app.services.incident_handler import resolve_incident_type, resolve_suspension
+                    await resolve_suspension(account, db)
+                    await resolve_incident_type(account, "notAuthorized", db)
+                    await resolve_incident_type(account, "forced_logout", db)
+                    await resolve_incident_type(account, "auth_churn", db)
+                except Exception as e:
+                    logger.warning("resolve auth incidents failed (non-fatal): %s", e)
                 await db.commit()
             elif state == "yellowCard":
                 # V14 F23 — automatic incident response (commits internally).
@@ -648,7 +669,8 @@ async def handle_quota_exceeded(instance_id: str, payload: dict):
 
 
 async def handle_device_status(instance_id: str, payload: dict):
-    """Handle device status changes (battery, online status, etc.)."""
+    """Handle device status changes (battery, online status, etc.).
+    V67 Phase 1 — when payload indicates linked-device restriction, record incident."""
     device_status = payload.get("deviceStatus", {}) or payload.get("status", "")
     print(f"[Device] instance {instance_id} device status: {device_status}")
     async with AsyncSessionLocal() as db:
@@ -656,6 +678,15 @@ async def handle_device_status(instance_id: str, payload: dict):
         account = result.scalar_one_or_none()
         if account:
             account.notes = f"[device] {device_status} at {datetime.utcnow().isoformat()}"
+            blob = json.dumps(payload, ensure_ascii=False) if not isinstance(payload, str) else payload
+            low = blob.lower() if isinstance(blob, str) else str(device_status).lower()
+            if any(h in low for h in (
+                "restricted", "toomany", "too many", "device limit", "linked device",
+                "maxdevice", "unauthorizeddevice",
+            )):
+                from app.services.incident_handler import record_device_restriction
+                await record_device_restriction(account, "webhook", db, raw_payload=payload
+                                               if isinstance(payload, dict) else {"status": device_status})
             await db.commit()
 
 

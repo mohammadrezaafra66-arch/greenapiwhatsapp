@@ -240,7 +240,7 @@ async def run_cold_reply_tick(db, now: datetime | None = None, *, client_factory
 
         # _send_from_main re-applies the V27 live health gate on the COLD account before hitting
         # Green API — same rail as every other send, never a parallel path.
-        mid = await _send_from_main(cold, helper.phone, text, client_factory)
+        mid = await _send_from_main(cold, helper.phone, text, client_factory, db=db)
 
         thread.awaiting_reply = False
         thread.pending_reply_at = None

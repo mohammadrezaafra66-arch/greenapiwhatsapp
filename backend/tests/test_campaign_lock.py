@@ -8,38 +8,52 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 
 @pytest.mark.asyncio
+async def test_run_campaign_fail_closed_when_redis_down():
+    """V67 Phase 1 — Redis unavailable must NOT run the campaign (fail-closed)."""
+    from app.services import campaign_runner
+    inner = AsyncMock()
+    inst = MagicMock()
+    inst.acquire = AsyncMock(return_value=False)
+    inst.fail_closed_reason = "قفل کمپین — Redis در دسترس نیست (شکست‌بسته)"
+    inst.skip_reason = inst.fail_closed_reason
+    inst.release = AsyncMock()
+    with patch("app.services.campaign_lock.CampaignLock", return_value=inst), \
+         patch.object(campaign_runner, "_run_campaign_inner", new=inner), \
+         patch.object(campaign_runner, "_pause_campaign_for_safety", new=AsyncMock()), \
+         patch("app.services.fleet_breaker.is_tripped", new=AsyncMock(return_value=(False, "ok"))):
+        await campaign_runner.run_campaign("cid")
+    inner.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_run_campaign_skips_when_lock_held():
     from app.services import campaign_runner
-    r = MagicMock()
-    r.set = AsyncMock(return_value=False)   # NX failed → another run holds it
-    r.delete = AsyncMock()
     inner = AsyncMock()
-    with patch("app.services.redis_rate_limiter.get_redis", new=AsyncMock(return_value=r)), \
-         patch.object(campaign_runner, "_run_campaign_inner", new=inner):
+    inst = MagicMock()
+    inst.acquire = AsyncMock(return_value=False)
+    inst.fail_closed_reason = None
+    inst.skip_reason = "held"
+    inst.release = AsyncMock()
+    with patch("app.services.campaign_lock.CampaignLock", return_value=inst), \
+         patch.object(campaign_runner, "_run_campaign_inner", new=inner), \
+         patch("app.services.fleet_breaker.is_tripped", new=AsyncMock(return_value=(False, "ok"))):
         await campaign_runner.run_campaign("cid")
-    inner.assert_not_awaited()   # duplicate run was skipped
-    r.delete.assert_not_awaited()  # must not release a lock it didn't take
+    inner.assert_not_awaited()
+    inst.release.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_run_campaign_runs_and_releases_lock_when_acquired():
     from app.services import campaign_runner
-    r = MagicMock()
-    r.set = AsyncMock(return_value=True)    # acquired
-    r.delete = AsyncMock()
     inner = AsyncMock()
-    with patch("app.services.redis_rate_limiter.get_redis", new=AsyncMock(return_value=r)), \
-         patch.object(campaign_runner, "_run_campaign_inner", new=inner):
+    inst = MagicMock()
+    inst.acquire = AsyncMock(return_value=True)
+    inst.fail_closed_reason = None
+    inst.token = "tok"
+    inst.release = AsyncMock()
+    with patch("app.services.campaign_lock.CampaignLock", return_value=inst), \
+         patch.object(campaign_runner, "_run_campaign_inner", new=inner), \
+         patch("app.services.fleet_breaker.is_tripped", new=AsyncMock(return_value=(False, "ok"))):
         await campaign_runner.run_campaign("cid")
     inner.assert_awaited_once()
-    r.delete.assert_awaited_once()   # lock released in finally
-
-
-@pytest.mark.asyncio
-async def test_run_campaign_fail_open_when_redis_down():
-    from app.services import campaign_runner
-    inner = AsyncMock()
-    with patch("app.services.redis_rate_limiter.get_redis", new=AsyncMock(side_effect=Exception("redis down"))), \
-         patch.object(campaign_runner, "_run_campaign_inner", new=inner):
-        await campaign_runner.run_campaign("cid")
-    inner.assert_awaited_once()   # Redis unavailable → still runs (fail-open)
+    inst.release.assert_awaited_once()

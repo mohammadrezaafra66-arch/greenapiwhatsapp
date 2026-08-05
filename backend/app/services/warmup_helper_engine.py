@@ -274,16 +274,32 @@ async def _resolve_cold_phone(db, cold_instance_id: str, client_factory) -> tupl
     return (hs.wa_me_digits(phone) if phone else None), acc
 
 
-async def _send_from_main(sender: Account, to_phone: str, text: str, client_factory) -> str | None:
+async def _send_from_main(sender: Account, to_phone: str, text: str, client_factory,
+                          db=None) -> str | None:
     """Send one message from the main warm account, respecting typing simulation so it looks
-    human. Best-effort — a send failure never crashes the tick."""
-    # V27 PART 1 — live pre-send health gate: never ask a helper through an unhealthy main
-    # account (cooldown/throttle/live yellowCard-blocked). V39 PART 1 — this shared gate now ALSO
-    # enforces the universal 24h connect/reconnect cooldown (reason `connect_cooldown`), so the
-    # V38 TC-only post-reconnect rest is no longer a separate pre-check here — it is one of the
-    # gate's reasons, giving a single source of truth across mesh/campaign/TC.
-    from app.services.send_gate import gate_check
-    allowed, gate_reason = gate_check(sender)
+    human. Best-effort — a send failure never crashes the tick.
+
+    V67 Phase 1 — automated eligibility via fleet breaker + send_gate (fail-closed).
+    """
+    from app.services.send_gate import gate_check, gate_check_automated
+    if db is not None:
+        try:
+            allowed, gate_reason = await gate_check_automated(sender, db=db)
+        except Exception:
+            allowed, gate_reason = False, "eligibility_check_failed"
+    else:
+        # No DB session: fleet breaker + classic gate (same degrade as async when live unknown).
+        try:
+            from app.services import fleet_breaker
+            tripped, br = await fleet_breaker.is_tripped(fail_closed=True)
+            if tripped:
+                logger.info("helper-ask skipped via %s: fleet_breaker=%s",
+                            sender.instance_id, br)
+                return None
+        except Exception:
+            logger.info("helper-ask skipped via %s: fleet_breaker_error", sender.instance_id)
+            return None
+        allowed, gate_reason = gate_check(sender)
     if not allowed:
         logger.info("helper-ask skipped via %s: gate=%s", sender.instance_id, gate_reason)
         return None
@@ -320,7 +336,7 @@ async def _send_as_sender(db, sender, to_phone: str, text: str, client_factory,
         logger.info("TC send blocked: sender %s fails eligibility (%s) with no valid override",
                     sid, reason)
         return None
-    return await _send_from_main(sender, to_phone, text, client_factory)
+    return await _send_from_main(sender, to_phone, text, client_factory, db=db)
 
 
 async def _unified_ask_text(db, helper, task_sender, cold_acc, cold_instance_id, phone_digits,

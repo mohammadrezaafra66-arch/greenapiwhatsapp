@@ -158,7 +158,29 @@ async def execute_action(db, action: dict, enrollment, new_account: Account,
     # This is the direct fix for incident gap #1: a carded peer kept sending 19 more messages
     # because nothing re-checked its cooldown/live-state right before the API call.
     from app.services.send_gate import gate_check
-    allowed, gate_reason = gate_check(sender, now)
+    from app.services.send_gate import gate_check_automated
+    from app.config import settings as _settings
+
+    # V67.1 Phase 1 — D-H1 Hybrid WRAP: synthetic mesh autochat disabled by default.
+    if not getattr(_settings, "mesh_autochat_enabled", False):
+        logger.info("mesh send skipped (%s → %s): mesh_autochat_disabled",
+                    sender.instance_id, recipient.instance_id)
+        db.add(WarmupEventLog(
+            enrollment_id=getattr(enrollment, "id", None),
+            edge_id=getattr(edge, "id", None), event_type="gate_skip",
+            delivery_status="mesh_autochat_disabled",
+            payload_json=json.dumps({"sender": sender.instance_id,
+                                     "reason": "mesh_autochat_disabled"},
+                                    ensure_ascii=False)))
+        return {"skipped": True, "reason": "mesh_autochat_disabled", "message_id": None}
+
+    # V67 Phase 1 — fleet breaker + unresolved critical + live state (fail-closed).
+    try:
+        allowed, gate_reason = await gate_check_automated(sender, db=db, now=now)
+    except Exception:
+        allowed, gate_reason = gate_check(sender, now)
+        if allowed:
+            allowed, gate_reason = False, "eligibility_check_failed"
     if not allowed:
         logger.info("mesh send skipped (%s → %s): gate=%s",
                     sender.instance_id, recipient.instance_id, gate_reason)

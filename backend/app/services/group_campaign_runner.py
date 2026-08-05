@@ -129,8 +129,8 @@ async def run_group_campaign(campaign_id: str):
                 message += await links_for_campaign(campaign, db)
 
                 # V27 PART 1 — live pre-send health gate before any group send.
-                from app.services.send_gate import gate_check as _gate_check
-                _grp_allowed, _grp_reason = _gate_check(account)
+                from app.services.send_gate import gate_check_automated as _gate_check
+                _grp_allowed, _grp_reason = await _gate_check(account, db=db)
                 if not _grp_allowed:
                     print(f"[GroupCampaign] send gate blocked {account.instance_id}: {_grp_reason}")
                     continue

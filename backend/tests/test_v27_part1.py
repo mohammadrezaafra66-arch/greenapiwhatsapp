@@ -16,6 +16,7 @@ import json
 import random
 from datetime import datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 import pytest
 
 from app.services import send_gate
@@ -143,6 +144,14 @@ async def test_mesh_send_blocked_when_peer_in_cooldown(monkeypatch):
     without calling Green API and log a gate_skip event."""
     async def _fast(_): return None
     monkeypatch.setattr("app.services.typing_sim.asyncio.sleep", _fast)
+    # V67 Phase 1 — mesh autochat is OFF by default; enable to exercise the gate path.
+    monkeypatch.setattr("app.config.settings",
+                        SimpleNamespace(mesh_autochat_enabled=True), raising=False)
+    import app.config as cfg
+    monkeypatch.setattr(cfg.settings, "mesh_autochat_enabled", True, raising=False)
+    monkeypatch.setattr("app.services.fleet_breaker.is_tripped",
+                        AsyncMock(return_value=(False, "ok")))
+    update_live_state("PEER", "authorized", NOW)
     calls = []
     factory = lambda iid, tok: _RecClient(calls, iid)
     new = _acct(instance_id="NEW", phone="989120000001")
@@ -163,6 +172,12 @@ async def test_mesh_send_blocked_when_peer_in_cooldown(monkeypatch):
 async def test_mesh_send_blocked_on_live_yellowcard(monkeypatch):
     async def _fast(_): return None
     monkeypatch.setattr("app.services.typing_sim.asyncio.sleep", _fast)
+    monkeypatch.setattr("app.config.settings",
+                        SimpleNamespace(mesh_autochat_enabled=True), raising=False)
+    import app.config as cfg
+    monkeypatch.setattr(cfg.settings, "mesh_autochat_enabled", True, raising=False)
+    monkeypatch.setattr("app.services.fleet_breaker.is_tripped",
+                        AsyncMock(return_value=(False, "ok")))
     calls = []
     factory = lambda iid, tok: _RecClient(calls, iid)
     update_live_state("PEER", "yellowCard", NOW)           # live card in the mirror
@@ -179,6 +194,13 @@ async def test_mesh_healthy_peer_still_sends(monkeypatch):
     """No regression: a healthy peer sends normally."""
     async def _fast(_): return None
     monkeypatch.setattr("app.services.typing_sim.asyncio.sleep", _fast)
+    monkeypatch.setattr("app.config.settings",
+                        SimpleNamespace(mesh_autochat_enabled=True), raising=False)
+    import app.config as cfg
+    monkeypatch.setattr(cfg.settings, "mesh_autochat_enabled", True, raising=False)
+    monkeypatch.setattr("app.services.fleet_breaker.is_tripped",
+                        AsyncMock(return_value=(False, "ok")))
+    update_live_state("PEER", "authorized", NOW)
     calls = []
     factory = lambda iid, tok: _RecClient(calls, iid)
     action = {"action": "send", "direction": "inbound", "edge": _edge(), "next_action_at": NOW}
