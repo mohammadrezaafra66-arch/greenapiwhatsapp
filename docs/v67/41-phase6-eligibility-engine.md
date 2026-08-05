@@ -2,78 +2,27 @@
 
 **Module:** `app.services.campaign_eligibility.CampaignEligibilityEngine`  
 **Facade:** `app.services.eligibility_service.EligibilityService`  
-**Decision version:** `v67.6.eligibility.1`  
+**Validator:** `app.services.eligibility_policy.validate_eligibility_rules`  
+**Decision version:** `v67.6.eligibility.2` (bumped in Phase 6.1)  
 **Mode:** simulation / decision only — never executes
 
-## Goal
+## Fail-closed policy contract
 
-Decide campaign eligibility from sensors. Engine decides. Engine never executes.
-
-## Inputs
-
-| Input | Source |
-|---|---|
-| FleetState | `fleet_accounts.fleet_state` (+ inject override) |
-| Journey | active/paused/simulating `account_journeys.status` |
-| Trust | Phase 4 TrustEngine via FleetScoringService |
-| Risk | Phase 4 RiskEngine |
-| Readiness | Phase 4 ReadinessEvaluator |
-| Capacity | Phase 5 CapacityPlanner |
-| Budget | Phase 5 FleetBudgetEngine |
-| Policy | default `fleet_policies` + `eligibility_rules` |
-| Incidents | evidence / inject |
-| Breaker | inject or `fleet_breaker.is_tripped` (read-only) |
-| Evidence | scoring evidence snapshot fields |
+- Missing policy → `NOT_ELIGIBLE` (`policy_missing`)
+- Empty settings → `NOT_ELIGIBLE`
+- Missing `eligibility_rules` → `NOT_ELIGIBLE` (`eligibility_rules_missing`)
+- Invalid rules → `NOT_ELIGIBLE` (`eligibility_rules_invalid:*`)
+- Missing `policy_version` → `NOT_ELIGIBLE` (`policy_version_missing`)
+- **No silent Conservative fallback inside the pure engine**
+- Service may select Conservative **explicitly** when DB has no default policy (`policy_source=explicit_conservative_default`)
+- DB policy lacking rules is **not** silently patched
 
 ## Outputs
 
-- `NOT_ELIGIBLE`
-- `ELIGIBLE_FOR_TRIAL`
-- `ELIGIBLE_FOR_LIMITED_CAMPAIGN`
-- `ELIGIBLE_FOR_STANDARD_CAMPAIGN`
-- `ELIGIBLE_FOR_HIGH_VOLUME`
+`NOT_ELIGIBLE` | `ELIGIBLE_FOR_TRIAL` | `ELIGIBLE_FOR_LIMITED_CAMPAIGN` | `ELIGIBLE_FOR_STANDARD_CAMPAIGN` | `ELIGIBLE_FOR_HIGH_VOLUME`
 
-Every decision includes:
+Every decision includes reason_codes, blocking/required evidence, next_recommendation, policy_version, decision_version, optional `policy_source`, `closest_tier`, `tier_gaps`.
 
-- `reason_codes`
-- `blocking_evidence`
-- `required_evidence`
-- `next_recommendation`
-- `policy_version`
-- `decision_version`
-- `simulation_only=true`
-- `mutates_runtime=false`
-- `executes=false`
+## Forbidden
 
-## Policy
-
-Thresholds live in `CONSERVATIVE_POLICY_SETTINGS["eligibility_rules"]`  
-(and DB `FleetPolicy.settings_json`). Engine body contains no numeric thresholds.
-
-## Persistence
-
-Optional dry-run persist to `fleet_plan_snapshots` with `plan_type="eligibility"`.  
-Refuses persist when `fleet.cutover=true`. Reuses Phase 5 table — no new DDL.
-
-## Forbidden (enforced by design)
-
-- No `send_gate` calls or mutations
-- No Celery dispatch
-- No Green API
-- No FleetState / Journey / Trust / Risk / Capacity mutation
-- No live campaign execution
-- No Autopilot / Cutover / Shadow / Canary
-
-## API
-
-| Method | Path | Notes |
-|---|---|---|
-| GET | `/api/v1/fleet/eligibility` | fleet list decisions |
-| GET | `/api/v1/fleet/eligibility-preview` | single account |
-| POST | `/api/v1/fleet/simulate-eligibility` | dry-run default; injects allowed |
-
-## CLI
-
-```bash
-python -m app.scripts.eligibility_simulate --account-id <uuid>
-```
+No send_gate / Celery / Green API / FleetState / Journey mutation / live campaign / Autopilot / Cutover / Shadow / Canary.

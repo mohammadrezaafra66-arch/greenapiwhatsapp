@@ -1,19 +1,17 @@
-# V67.1 Phase 7 — Readiness
+# V67.1 Phase 7 — Readiness (superseded pointer)
+
+This file is superseded by:
+
+- `docs/v67/46-phase7-scope-freeze.md`
+- `docs/v67/47-phase7-owner-decisions.md`
+- `docs/v67/49-phase7-final-readiness.md`
 
 ## Verdict
 
-# NO — wait for explicit `Execute V67.1 Phase 7`
+# NO
 
-Phase 6 eligibility decision engine complete (simulation only).
+Do **not** implement Phase 7 until:
 
-## Unresolved Phase 7 blockers
-
-1. Owner command: **`Execute V67.1 Phase 7`**
-2. Autopilot / live Journey approval
-3. send_gate / FleetState cutover approval
-4. Shadow / Canary rollout
-5. Real campaign execution bridge from eligibility decisions
-
-## Recommended next
-
-Wait for: **Execute V67.1 Phase 7**
+1. Phase 6.1 acceptance is confirmed
+2. Owner decisions in `47` are answered
+3. Explicit command: `Execute V67.1 Phase 7`
