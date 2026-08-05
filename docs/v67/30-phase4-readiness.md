@@ -2,37 +2,25 @@
 
 ## Verdict
 
-# NO — wait for explicit `Execute V67.1 Phase 4`
+# YES — Phase 4 COMPLETE (simulation scoring)
 
-Phase 3 simulation/shadow journey foundation is complete.
+Owner authorized `Execute V67.1 Phase 4`. See docs `31`–`34`.  
+Phase 5: `35-phase5-readiness.md` → **NO** until commanded.
 
----
+## Closed
 
-## Phase 3 closed
-
-| Gate | Status |
+| Item | Status |
 |---|---|
-| Journey persistence | YES |
-| Pure transition engine | YES |
-| Simulation / Shadow only | YES |
-| No send_gate cutover | YES |
-| cutover remains false | YES |
-| No CAMPAIGN_READY / MATURE auto | YES |
-| Trust/Risk/Capacity stubs only | YES |
-
----
-
-## Unresolved Phase 4 blockers
-
-1. Explicit owner command: **`Execute V67.1 Phase 4`**
-2. Trust scoring implementation scope
-3. Risk scoring implementation scope
-4. Whether FleetState may influence send eligibility (still **forbidden** until cutover approval)
-5. Graduation Trial design
-6. Dual-write / live Journey execution approval
-
----
+| Trust Engine | YES |
+| Risk Engine | YES |
+| Graduation Trial framework | YES |
+| Evidence snapshots | YES |
+| Readiness evaluator | YES |
+| send_gate unchanged | YES |
+| FleetState not auto-mutated | YES |
+| cutover false | YES |
+| Capacity / Autopilot deferred | YES |
 
 ## Recommended next
 
-Wait for: **Execute V67.1 Phase 4**
+Wait for: **Execute V67.1 Phase 5**
