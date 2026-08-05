@@ -1,5 +1,6 @@
 """V67 Phase 7 — ShadowRuntimeService (observational only; never mutates runtime)."""
 from __future__ import annotations
+import logging
 import uuid
 from datetime import datetime
 from typing import Any
@@ -28,6 +29,8 @@ from app.services.capacity_planner import CapacityPlanner
 from app.services.fleet_budget import FleetBudgetEngine
 from app.services.campaign_eligibility import CampaignEligibilityEngine
 from app.services.send_gate import can_send_now, is_account_send_eligible, get_cached_live_state
+
+logger = logging.getLogger("afrakala.shadow_runtime")
 
 
 class ShadowRuntimeService:
@@ -430,6 +433,20 @@ class ShadowRuntimeService:
         shadow_metrics.incr(f"shadow_mismatch_{comparison.mismatch_class}")
         shadow_metrics.incr(f"shadow_severity_{comparison.severity}")
         shadow_metrics.incr("shadow_runs_success")
+        # Structured Stage-A monitoring log — no Secrets / no phone / no raw message.
+        logger.info(
+            "shadow_run_complete run_id=%s account_id=%s source=%s mismatch=%s severity=%s "
+            "persisted=%s duplicate=%s stale=%s duration_note=completed shadow_version=%s",
+            out.get("run_id"),
+            str(account_id)[:8],
+            source,
+            comparison.mismatch_class,
+            comparison.severity,
+            out.get("persisted"),
+            out.get("duplicate"),
+            list(comparison.stale_sensors)[:12],
+            SHADOW_VERSION,
+        )
         return out
 
     async def run_batch_periodic(self, db: AsyncSession, *, limit: int | None = None) -> dict[str, Any]:
