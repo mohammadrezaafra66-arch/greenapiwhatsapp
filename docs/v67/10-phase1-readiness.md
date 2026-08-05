@@ -26,11 +26,14 @@ Branch: `feature/v67-autonomous-fleet-manager` (D-C9).
 
 | Gate | Status |
 |---|---|
-| Owner decisions ratified | Done (pre-implementation) |
-| Phase 1 implementation | In progress / see `11-phase1-implementation-report.md` |
-| Phase 1 acceptance | Pending verification docs |
+| Owner decisions ratified | Done |
+| Phase 1 implementation | Done — see `11-phase1-implementation-report.md` |
+| Phase 1 acceptance | **PASS** — targeted + full Backend suite |
+| Verification docs `11`–`14` | Done |
 
-Mark Phase 1 complete only after acceptance in `11`–`14` passes.
+**Phase 1 complete** on `feature/v67-autonomous-fleet-manager`.
+
+Full Backend suite (once): **1684 passed, 0 failed** (2026-08-05). Baseline failures: none.
 
 ---
 
@@ -46,6 +49,7 @@ Mark Phase 1 complete only after acceptance in `11`–`14` passes.
 | Migration strategy design | Done (`05` + `06` B5) |
 | Owner sign-off Hard Stops | **Done** |
 | Feature branch | **Done** |
+| Phase 1 safety stabilization | **Done** |
 
 ---
 
