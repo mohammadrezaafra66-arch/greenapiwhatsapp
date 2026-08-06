@@ -40,6 +40,10 @@ test("timeline and sections exist", () => {
   assert.match(pageSrc, /mismatch-section/);
   assert.match(pageSrc, /findings-section/);
   assert.match(pageSrc, /summary-cards/);
+  assert.match(pageSrc, /runtime-evidence-section/);
+  assert.match(pageSrc, /static-evidence-section/);
+  assert.match(pageSrc, /stop-conditions-section/);
+  assert.match(pageSrc, /automated-report-section/);
 });
 
 test("route and menu wired", () => {

@@ -44,3 +44,30 @@ test("faNum unknown and reason label", () => {
 test("shiftDateUtc", () => {
   assert.equal(shiftDateUtc("2026-08-06", -1), "2026-08-05");
 });
+
+test("maps evidence bundle and stop conditions without recomputing status", () => {
+  const v = mapOwnerReport({
+    report: {
+      overall_status: "INSUFFICIENT_EVIDENCE",
+      phase7_fully_accepted: false,
+      phase8_allowed: false,
+      evidence_bundle: {
+        evidence_version: "v67.owner.daily-observation.evidence.1",
+        can_support_daily_pass: false,
+        correlation_status: "HEALTHY",
+        runtime_items: [],
+      },
+      static_manifest_status: "MATCH",
+      deployed_git_sha: "abc123def456",
+      stop_conditions: [{ key: "cutover_true", title_fa: "Cutover", state: "فعال نشده" }],
+      automated_report_meta: { schedule_utc: "06:00", schedule_tehran: "09:30" },
+    },
+    timeline: [],
+  });
+  assert.equal(v.error, null);
+  assert.equal(v.report.overall_status, "INSUFFICIENT_EVIDENCE");
+  assert.equal(v.report.evidenceBundle.can_support_daily_pass, false);
+  assert.equal(v.report.staticManifestStatus, "MATCH");
+  assert.equal(v.report.stopConditions.length, 1);
+  assert.equal(v.report.automatedReportMeta.schedule_utc, "06:00");
+});

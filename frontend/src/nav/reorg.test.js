@@ -16,7 +16,7 @@ const APPROVED = [
   ["استوری و محتوا", ["/statuses", "/status-scheduler", "/advertising-links", "/content", "/files"]],
   ["شماره‌ها", ["/onboarding", "/accounts", "/telegram-accounts", "/account-schedules", "/partner-instances"]],
   ["سلامت و ضدمسدودی", ["/accounts-overview", "/protection", "/warmup", "/team-collaboration"]],
-  ["گزارش‌ها و تحلیل", ["/reporting", "/products"]],
+  ["گزارش‌ها و تحلیل", ["/reporting", "/observation-report", "/products"]],
   ["تنظیمات", ["/ai-keys", "/ai-settings", "/own-numbers", "/join-links", "/capabilities"]],
 ];
 
@@ -37,10 +37,9 @@ test("NOTHING LOST — every baseline route is still reachable after the reorg",
   assert.deepEqual(d.lostSidebarRoutes, []);
   // Every baseline router route is still a router route (no page dropped).
   for (const r of baseline.routerRoutes) assert.ok(current.routerRoutes.includes(r), `lost route ${r}`);
-  // V48 — the reorg was regroup/rename-only (count preserved); V48 then adds exactly ONE new page,
-  // so the live count is the baseline count + 1 (the intentional /accounts-overview addition).
-  assert.equal(current.counts.distinctNavRoutes, baseline.counts.distinctNavRoutes + 1);
-  assert.equal(current.counts.routerRoutes, baseline.counts.routerRoutes + 1);
+  // V48 adds /accounts-overview; Owner Change Daily Observation adds /observation-report.
+  assert.equal(current.counts.distinctNavRoutes, baseline.counts.distinctNavRoutes + 2);
+  assert.equal(current.counts.routerRoutes, baseline.counts.routerRoutes + 2);
 });
 
 test("the ONLY intentional entry changes are the V47 dedup/phantom removals + the V48 new page", () => {
@@ -54,9 +53,10 @@ test("the ONLY intentional entry changes are the V47 dedup/phantom removals + th
     "/wa-collections::ارسال گروهی",               // duplicate leaf (removed)
     "/wa-collections::مجموعه‌های گروهی",          // duplicate leaf (removed)
   ].sort());
-  // V47's single unified wa-collections entry + V48's single new overview page — nothing else.
+  // V47 unified wa-collections + V48 overview + V67 observation report — nothing else.
   assert.deepEqual(added, [
     "/accounts-overview::نمای کلی حساب‌ها",       // V48 — the one new unified overview page
+    "/observation-report::گزارش روزانه مشاهده",  // V67 Owner Change — read-only observation report
     "/wa-collections::ارسال گروهی / مجموعه‌ها",   // V47 — the single unified entry
   ].sort());
 });

@@ -36,6 +36,13 @@ def _clean(**over):
         fleet_state_mutation_evidence_status=EvidenceStatus.HEALTHY.value,
         send_gate_integrity_evidence_status=EvidenceStatus.HEALTHY.value,
         operational_mutation_evidence_status=EvidenceStatus.HEALTHY.value,
+        static_manifest_status="MATCH",
+        evidence_bundle={
+            "evidence_version": "v67.owner.daily-observation.evidence.1",
+            "can_support_daily_pass": True,
+            "missing_items": [],
+            "false_pass_guards": [],
+        },
     )
     base.update(over)
     return validate_report_dict(base)

@@ -22,12 +22,15 @@ test("nothing lost — every pre-existing route is still reachable after adding 
 
 test("the overview is counted as the single intentional new route", () => {
   const d = diffInventory(baseline, current);
-  assert.deepEqual(d.addedRoutes, ["/accounts-overview"]);
+  // V48 overview remains intentional; V67 observation report is an additional intentional route.
+  assert.deepEqual(d.addedRoutes, ["/accounts-overview", "/observation-report"]);
 });
 
 test("the overview route is both a real router route and a sidebar leaf", () => {
   assert.ok(current.routerRoutes.includes("/accounts-overview"), "missing router route");
   assert.ok(current.distinctNavRoutes.includes("/accounts-overview"), "missing sidebar leaf");
+  assert.ok(current.routerRoutes.includes("/observation-report"), "missing observation router route");
+  assert.ok(current.distinctNavRoutes.includes("/observation-report"), "missing observation sidebar leaf");
   // and it introduces no dangling links (sidebar↔router stay fully consistent).
   assert.deepEqual(current.routesInNavNotRouter, []);
   assert.deepEqual(current.routerRoutesNotInSidebar, []);
