@@ -1,124 +1,101 @@
-"""V67 Phase 7.3 — read-only daily Shadow observation report (UTC day).
+"""V67 Owner Change — Read-Only Daily Observation Report CLI (Phase A).
 
-Never enables flags, never deletes, never calls Green API / send / campaign / Journey.
+Consumes DailyObservationReportService. Never enables flags, never deletes,
+never calls Green API / send / campaign / Journey, never mutates runtime.
 """
 from __future__ import annotations
 import argparse
 import asyncio
 import json
-from datetime import datetime, timedelta
-from typing import Any
+import sys
 
-from sqlalchemy import text
+from app.services.daily_observation.contract import OverallStatus
+from app.services.daily_observation.persian_render import (
+    render_markdown,
+    render_persian_text,
+    render_text,
+)
+from app.services.daily_observation.service import DailyObservationReportService
+from app.services.daily_observation.session_meta import SESSION_2_ID
 
-from app.database import AsyncSessionLocal
-from app.config import settings
+# Documented exit codes
+EXIT_PASS = 0
+EXIT_INVALID_DATE = 2
+EXIT_DB_UNAVAILABLE = 3
+EXIT_REVIEW_REQUIRED = 10
+EXIT_INSUFFICIENT_EVIDENCE = 11
+EXIT_FAIL = 12
+EXIT_NOT_APPLICABLE = 13
+EXIT_ERROR = 1
 
 
-def _day_bounds(day_utc: str) -> tuple[datetime, datetime]:
-    start = datetime.strptime(day_utc, "%Y-%m-%d")
-    end = start + timedelta(days=1)
-    return start, end
-
-
-async def build_report(day_utc: str) -> dict[str, Any]:
-    start, end = _day_bounds(day_utc)
-    async with AsyncSessionLocal() as db:
-        rows = (await db.execute(
-            text(
-                """
-                SELECT mismatch_class, severity, COUNT(*) AS n
-                FROM fleet_shadow_snapshots
-                WHERE observed_at >= :start AND observed_at < :end
-                GROUP BY 1, 2
-                ORDER BY 1, 2
-                """
-            ),
-            {"start": start, "end": end},
-        )).mappings().all()
-        total = (await db.execute(
-            text(
-                """
-                SELECT COUNT(*) AS n,
-                       COUNT(DISTINCT account_id) AS accounts,
-                       MIN(observed_at) AS first_at,
-                       MAX(observed_at) AS last_at
-                FROM fleet_shadow_snapshots
-                WHERE observed_at >= :start AND observed_at < :end
-                """
-            ),
-            {"start": start, "end": end},
-        )).mappings().one()
-        critical = (await db.execute(
-            text(
-                """
-                SELECT COUNT(*) AS n FROM fleet_shadow_snapshots
-                WHERE observed_at >= :start AND observed_at < :end
-                  AND severity IN ('HIGH','CRITICAL')
-                """
-            ),
-            {"start": start, "end": end},
-        )).scalar() or 0
-    by_class: dict[str, int] = {}
-    by_sev: dict[str, int] = {}
-    for r in rows:
-        by_class[r["mismatch_class"]] = by_class.get(r["mismatch_class"], 0) + int(r["n"])
-        by_sev[r["severity"]] = by_sev.get(r["severity"], 0) + int(r["n"])
+def _exit_for_status(status: str) -> int:
     return {
-        "date_utc": day_utc,
-        "read_only": True,
-        "simulation_only": True,
-        "mutates_runtime": False,
-        "executes": False,
-        "v67_shadow_runtime_enabled": bool(settings.v67_shadow_runtime_enabled),
-        "v67_shadow_scheduler_enabled": bool(settings.v67_shadow_scheduler_enabled),
-        "dangerous_threshold_status": "UNRATIFIED",
-        "snapshots_total": int(total["n"] or 0),
-        "accounts_covered": int(total["accounts"] or 0),
-        "first_observed_at": total["first_at"].isoformat() if total["first_at"] else None,
-        "last_observed_at": total["last_at"].isoformat() if total["last_at"] else None,
-        "by_mismatch_class": by_class,
-        "by_severity": by_sev,
-        "high_critical_count": int(critical),
-        "stop_condition_status": "REVIEW_REQUIRED" if int(critical) else "OK_NO_AUTO_ACTION",
-        "notes": "Pre-enable / manual snapshots do not count toward observation days.",
-    }
-
-
-def to_markdown(report: dict[str, Any]) -> str:
-    lines = [
-        f"# Shadow daily report {report['date_utc']} (UTC)",
-        "",
-        f"- snapshots: {report['snapshots_total']}",
-        f"- accounts: {report['accounts_covered']}",
-        f"- high/critical: {report['high_critical_count']}",
-        f"- runtime_flag: {report['v67_shadow_runtime_enabled']}",
-        f"- scheduler_flag: {report['v67_shadow_scheduler_enabled']}",
-        f"- threshold: {report['dangerous_threshold_status']}",
-        f"- stop_status: {report['stop_condition_status']}",
-        "",
-        "## By mismatch class",
-    ]
-    for k, v in sorted(report["by_mismatch_class"].items()):
-        lines.append(f"- {k}: {v}")
-    lines.append("")
-    lines.append("## By severity")
-    for k, v in sorted(report["by_severity"].items()):
-        lines.append(f"- {k}: {v}")
-    return "\n".join(lines) + "\n"
+        OverallStatus.PASS.value: EXIT_PASS,
+        OverallStatus.REVIEW_REQUIRED.value: EXIT_REVIEW_REQUIRED,
+        OverallStatus.INSUFFICIENT_EVIDENCE.value: EXIT_INSUFFICIENT_EVIDENCE,
+        OverallStatus.FAIL.value: EXIT_FAIL,
+        OverallStatus.NOT_APPLICABLE.value: EXIT_NOT_APPLICABLE,
+    }.get(status, EXIT_ERROR)
 
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(description="Read-only Shadow daily report")
-    p.add_argument("--date", default=datetime.utcnow().strftime("%Y-%m-%d"), help="UTC YYYY-MM-DD")
-    p.add_argument("--format", choices=("json", "markdown"), default="json")
+    p = argparse.ArgumentParser(
+        description="Read-only Daily Observation Report (Owner Change Phase A)"
+    )
+    p.add_argument("--date", required=False, default=None, help="UTC YYYY-MM-DD (default: today UTC)")
+    p.add_argument(
+        "--format",
+        choices=("json", "markdown", "text", "persian-text"),
+        default="persian-text",
+    )
+    p.add_argument("--session", default=SESSION_2_ID, help="Logical session id (session-2)")
+    p.add_argument("--show-evidence", action="store_true")
+    p.add_argument("--strict", action="store_true")
     args = p.parse_args(argv)
-    report = asyncio.run(build_report(args.date))
-    if args.format == "markdown":
-        print(to_markdown(report))
+
+    if args.session != SESSION_2_ID:
+        print(json.dumps({"error": "unsupported_session", "session": args.session}), file=sys.stderr)
+        return EXIT_ERROR
+
+    from datetime import datetime
+
+    day = args.date or datetime.utcnow().strftime("%Y-%m-%d")
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except ValueError:
+        print(json.dumps({"error": "invalid_date", "date": day}), file=sys.stderr)
+        return EXIT_INVALID_DATE
+
+    try:
+        report = asyncio.run(
+            DailyObservationReportService().build(day, strict=bool(args.strict))
+        )
+    except ValueError as e:
+        if str(e).startswith("invalid_date"):
+            print(json.dumps({"error": "invalid_date", "date": day}), file=sys.stderr)
+            return EXIT_INVALID_DATE
+        print(json.dumps({"error": str(e)}), file=sys.stderr)
+        return EXIT_ERROR
+    except Exception as e:
+        # DB / infra hard failure
+        print(json.dumps({"error": "report_failed", "detail": str(e)}), file=sys.stderr)
+        if "database" in str(e).lower() or "connect" in str(e).lower():
+            return EXIT_DB_UNAVAILABLE
+        return EXIT_ERROR
+
+    if args.format == "json":
+        print(json.dumps(report.to_dict(), indent=2, default=str, ensure_ascii=False))
+    elif args.format == "markdown":
+        print(render_markdown(report), end="")
+    elif args.format == "text":
+        print(render_text(report), end="")
     else:
-        print(json.dumps(report, indent=2, default=str))
-    return 0
+        print(render_persian_text(report, show_evidence=bool(args.show_evidence)), end="")
+
+    if report.database_status == "UNHEALTHY":
+        return EXIT_DB_UNAVAILABLE
+    return _exit_for_status(report.overall_status)
 
 
 if __name__ == "__main__":
