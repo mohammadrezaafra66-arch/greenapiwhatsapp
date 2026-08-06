@@ -1,24 +1,27 @@
 # V67.1 Phase 7.3 — Daily Reporting
 
+**Superseded for logic by Owner Change Phase A** — see `114`–`119`.
+
 ## CLI
 
 ```bash
 python -m app.scripts.fleet_shadow_daily_report --date YYYY-MM-DD
+python -m app.scripts.fleet_shadow_daily_report --date YYYY-MM-DD --format persian-text
+python -m app.scripts.fleet_shadow_daily_report --date YYYY-MM-DD --format json
 python -m app.scripts.fleet_shadow_daily_report --date YYYY-MM-DD --format markdown
 ```
 
+Default format is now `persian-text`. Implementation delegates to `DailyObservationReportService` (`v67.owner.daily-observation.1`).
+
 ## Properties
 
-- Read-only SQL  
+- Read-only aggregation  
 - No flag mutation  
 - No deletion  
 - No Green API / send / campaign / Journey  
-- JSON or Markdown  
-- UTC date  
+- Session 2 bounded  
+- Fail-closed validity (`PASS` / `FAIL` / `REVIEW_REQUIRED` / `INSUFFICIENT_EVIDENCE`)  
 
-## Smoke (2026-08-05)
+## Smoke (2026-08-05 historical)
 
-- snapshots_total: 2  
-- accounts_covered: 1  
-- RUNTIME_UNKNOWN: 2  
-- high_critical_count: 2 → `REVIEW_REQUIRED` (human review; no auto send mutation)
+Earlier Stage A smoke (pre-Phase A) recorded snapshots_total=2, RUNTIME_UNKNOWN, REVIEW_REQUIRED-style high/critical review. Re-run CLI after Phase A for current Session 2 days.

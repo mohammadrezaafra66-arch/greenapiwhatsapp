@@ -52,6 +52,14 @@
 
 دادهٔ در دسترس‌نبوده به‌صورت `نامشخص` نشان داده می‌شود (نه Unknown انگلیسی). Cutover ناموجود هرگز به‌عنوان خاموش امن نمایش داده نمی‌شود.
 
+## گزارش روزانه فنی (Phase A data layer)
+
+کارت جایگزین گزارش روزانه نیست. لایه داده و CLI فقط‌خواندنی Owner Change Phase A:
+
+`python -m app.scripts.fleet_shadow_daily_report --date YYYY-MM-DD`
+
+جزئیات: `docs/v67/114` تا `119`. صفحه فارسی Frontend هنوز Phase B است.
+
 ## تأکید بر نبود کنترل
 
 بدون دکمه، Form، Link عملیاتی، Token، Secret، LocalStorage/SessionStorage، POST/PUT/PATCH/DELETE. فقط GET موجود `/fleet/accounts` برای شمارش حساب ناوگان.
