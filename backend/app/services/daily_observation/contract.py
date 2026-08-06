@@ -121,6 +121,14 @@ class DailyObservationReport:
     runtime_observed_evidence: list[str] = field(default_factory=list)
     static_test_evidence: list[str] = field(default_factory=list)
 
+    # Phase C — evidence layer (read-only; not a parallel validator)
+    evidence_bundle: dict[str, Any] | None = None
+    static_manifest: dict[str, Any] | None = None
+    static_manifest_status: str = EvidenceStatus.UNKNOWN.value
+    stop_conditions: list[dict[str, Any]] = field(default_factory=list)
+    automated_report_meta: dict[str, Any] = field(default_factory=dict)
+    deployed_git_sha: str | None = None
+
     minimum_evidence_complete: bool = False
     tick_completeness_status: str = EvidenceStatus.UNKNOWN.value
     cohort_coverage_status: str = EvidenceStatus.UNKNOWN.value

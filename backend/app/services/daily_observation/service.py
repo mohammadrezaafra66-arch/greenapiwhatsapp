@@ -32,6 +32,11 @@ from app.services.daily_observation.ticks import (
     observation_window_for_day,
 )
 from app.services.daily_observation.validator import DailyObservationValidator
+from app.services.daily_observation.evidence_collector import (
+    DailyObservationEvidenceCollector,
+    map_evidence_to_report_statuses,
+)
+from app.services.daily_observation.stop_conditions import derive_stop_conditions
 from app.services.shadow_types import SHADOW_VERSION
 
 
@@ -81,7 +86,9 @@ class DailyObservationReportService:
             report.overall_status = OverallStatus.NOT_APPLICABLE.value
             if probe_infra:
                 await self._fill_infra(report, last_periodic_at=None, now=now)
-            return self._validator.validate(report)
+            validated = self._validator.validate(report)
+            validated.stop_conditions = derive_stop_conditions(validated)
+            return validated
 
         report.expected_periodic_ticks = int(window["expected_periodic_ticks"])
         last_periodic = None
@@ -160,23 +167,39 @@ class DailyObservationReportService:
                 InfraStatus.HEALTHY.value if last_periodic else InfraStatus.UNKNOWN.value
             )
 
-            report.runtime_observed_evidence = [
-                "snapshot_simulation_only_check",
-                "snapshot_mutates_runtime_check",
-                "snapshot_executes_check",
-                "fleet_account_cutover_count",
-            ]
-            report.static_test_evidence = [
-                "phase7_isolation_tests",
-                "send_gate_untouched_by_shadow_path_tests",
-            ]
-            report.send_path_evidence_status = EvidenceStatus.INSUFFICIENT_EVIDENCE.value
-            report.green_api_send_evidence_status = EvidenceStatus.INSUFFICIENT_EVIDENCE.value
-            report.campaign_execution_evidence_status = EvidenceStatus.INSUFFICIENT_EVIDENCE.value
-            report.journey_mutation_evidence_status = EvidenceStatus.INSUFFICIENT_EVIDENCE.value
-            report.fleet_state_mutation_evidence_status = EvidenceStatus.INSUFFICIENT_EVIDENCE.value
-            report.send_gate_integrity_evidence_status = EvidenceStatus.INSUFFICIENT_EVIDENCE.value
-            report.operational_mutation_evidence_status = EvidenceStatus.INSUFFICIENT_EVIDENCE.value
+            bundle, manifest = await DailyObservationEvidenceCollector().collect(
+                db,
+                report_date_utc=day_utc,
+                query_start=query_start,
+                query_end=query_end,
+                now_utc=now,
+                policy_version=report.policy_version,
+                migration_revision=report.migration_revision,
+                snapshot_summary=snap,
+                cutover_true_count=report.cutover_true_count,
+            )
+            report.evidence_bundle = bundle.owner_safe_dict()
+            report.static_manifest = manifest.to_dict()
+            report.static_manifest_status = manifest.manifest_status
+            report.deployed_git_sha = manifest.deployed_git_sha
+            mapped = map_evidence_to_report_statuses(bundle)
+            report.send_path_evidence_status = mapped["send_path_evidence_status"]
+            report.green_api_send_evidence_status = mapped["green_api_send_evidence_status"]
+            report.campaign_execution_evidence_status = mapped["campaign_execution_evidence_status"]
+            report.journey_mutation_evidence_status = mapped["journey_mutation_evidence_status"]
+            report.fleet_state_mutation_evidence_status = mapped["fleet_state_mutation_evidence_status"]
+            report.send_gate_integrity_evidence_status = mapped["send_gate_integrity_evidence_status"]
+            report.operational_mutation_evidence_status = mapped["operational_mutation_evidence_status"]
+            report.runtime_observed_evidence = mapped["runtime_observed_evidence"]
+            report.static_test_evidence = mapped["static_test_evidence"]
+            report.automated_report_meta = {
+                "schedule_utc": "06:00",
+                "schedule_tehran": "09:30",
+                "task_name": "tasks.daily_observation_report",
+                "previous_completed_day_only": True,
+                "writes_business_db": False,
+                "notifications": False,
+            }
 
             try:
                 from app.services import shadow_metrics
@@ -225,6 +248,7 @@ class DailyObservationReportService:
                 )
 
         validated = self._validator.validate(report)
+        validated.stop_conditions = derive_stop_conditions(validated)
         if strict and validated.overall_status != OverallStatus.PASS.value:
             validated.requires_human_review = True
         return validated

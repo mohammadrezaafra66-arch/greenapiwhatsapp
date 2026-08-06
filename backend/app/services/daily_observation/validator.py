@@ -23,16 +23,17 @@ class DailyObservationValidator:
 
     OWNER_ACTION = {
         OverallStatus.PASS.value: (
-            "این روز از نظر داده‌های موجود معتبر است. تنظیمی را تغییر ندهید و Observation را ادامه دهید."
+            "این روز بر اساس شواهد Runtime و Static موجود قابل‌شمارش است. "
+            "تنظیمی را تغییر ندهید و Observation را ادامه دهید."
         ),
         OverallStatus.REVIEW_REQUIRED.value: (
-            "این روز نیازمند بررسی فنی است. تا زمان بررسی، Phase 8 نباید شروع شود."
+            "این روز نیازمند بررسی فنی است. Phase 8 همچنان مسدود است."
         ),
         OverallStatus.FAIL.value: (
-            "این روز نامعتبر است. بدون تصمیم مالک Observation را Restart نکنید."
+            "این روز نامعتبر است. بدون تصمیم مالک Session را Restart نکنید."
         ),
         OverallStatus.INSUFFICIENT_EVIDENCE.value: (
-            "اطلاعات کافی برای معتبر دانستن این روز وجود ندارد. نتیجه را PASS تلقی نکنید."
+            "شواهد کافی برای معتبر دانستن این روز وجود ندارد. این روز را PASS حساب نکنید."
         ),
         OverallStatus.NOT_APPLICABLE.value: (
             "این تاریخ خارج از پنجره Session 2 است. نتیجه PASS یا FAIL برای Observation ندارد."
@@ -114,6 +115,12 @@ class DailyObservationValidator:
             reasons.append("IDEMPOTENCY_CONFLICT")
             return self._finalize(report, OverallStatus.FAIL.value, reasons, blocking=blocking, can_count=False)
 
+        # Static manifest mismatch is fail-closed (Phase C).
+        if (report.static_manifest_status or "").upper() == "MISMATCH":
+            blocking.append("STATIC_MANIFEST_SHA_MISMATCH")
+            reasons.append("STATIC_MANIFEST_MISMATCH")
+            return self._finalize(report, OverallStatus.FAIL.value, reasons, blocking=blocking, can_count=False)
+
         # Snapshot gap — tolerance UNRATIFIED → any shortfall blocks PASS
         exp = report.expected_periodic_ticks
         act = report.actual_periodic_snapshots
@@ -165,6 +172,28 @@ class DailyObservationValidator:
         if any(s in _UNKNOWNISH for s in mutation_fields):
             unknown.append("MUTATION_RUNTIME_EVIDENCE_UNAVAILABLE")
             reasons.append("MUTATION_EVIDENCE_INSUFFICIENT")
+
+        # Static manifest incomplete / unknown reduces evidence (cannot unlock PASS alone).
+        sm = (report.static_manifest_status or "").upper()
+        if sm in ("MISSING", "UNKNOWN", ""):
+            unknown.append("STATIC_MANIFEST_INCOMPLETE")
+            reasons.append("STATIC_MANIFEST_INCOMPLETE")
+
+        if report.evidence_bundle is None:
+            unknown.append("EVIDENCE_BUNDLE_MISSING")
+            reasons.append("EVIDENCE_BUNDLE_MISSING")
+        elif isinstance(report.evidence_bundle, dict):
+            # No false PASS: can_support_daily_pass=True is only valid with HEALTHY mutation fields.
+            if report.evidence_bundle.get("can_support_daily_pass") is True and any(
+                s in _UNKNOWNISH for s in mutation_fields
+            ):
+                unknown.append("EVIDENCE_BUNDLE_FALSE_PASS_GUARD")
+                reasons.append("EVIDENCE_CANNOT_SUPPORT_PASS")
+            elif report.evidence_bundle.get("can_support_daily_pass") is not True and any(
+                s in _UNKNOWNISH for s in mutation_fields
+            ):
+                unknown.append("CRITICAL_EVIDENCE_NOT_OBSERVABLE")
+                reasons.append("RUNTIME_MUTATION_NOT_OBSERVABLE")
 
         if report.celery_beat_status in _UNKNOWNISH:
             unknown.append("CELERY_BEAT_UNKNOWN")

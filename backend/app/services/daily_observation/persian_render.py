@@ -98,7 +98,28 @@ def render_persian_text(report: DailyObservationReport, *, show_evidence: bool =
         lines.extend(f"• {x}" for x in (report.static_test_evidence or ["هیچ"]))
         lines.append(f"دلایل اعتبار: {', '.join(report.validity_reason_codes) or '—'}")
 
+    # Phase C evidence / stop conditions (always summarize briefly)
+    lines += [
+        "",
+        "— شواهد Runtime / Static (Phase C) —",
+        f"نسخه Evidence: {(report.evidence_bundle or {}).get('evidence_version', 'نامشخص') if isinstance(report.evidence_bundle, dict) else 'نامشخص'}",
+        f"وضعیت Static Manifest: {report.static_manifest_status or 'نامشخص'}",
+        f"SHA مستقر: {report.deployed_git_sha or 'نامشخص'}",
+        f"همبستگی: {(report.evidence_bundle or {}).get('correlation_status', 'نامشخص') if isinstance(report.evidence_bundle, dict) else 'نامشخص'}",
+        "",
+        "— Stop Conditions —",
+    ]
+    if report.stop_conditions:
+        for sc in report.stop_conditions:
+            lines.append(
+                f"• {sc.get('title_fa', sc.get('key'))}: {sc.get('state')} "
+                f"({sc.get('severity', '')}) — {sc.get('owner_action_fa', '')}"
+            )
+    else:
+        lines.append("• موردی ثبت نشده")
+
     lines.append("")
+    lines.append("شواهد Static به‌تنهایی برای PASS کافی نیست.")
     lines.append("این خروجی فقط‌خواندنی است و هیچ تنظیمی را تغییر نمی‌دهد.")
     return "\n".join(lines) + "\n"
 
