@@ -8,6 +8,7 @@ import {
   shiftDateUtc,
   todayUtc,
   STATUS_COLOR,
+  EVIDENCE_CLASS_FA,
 } from "../observation/ownerViewModel.js";
 
 const SHELL = {
@@ -334,6 +335,123 @@ export default function DailyObservationReportPage() {
                   : <p className="text-muted text-xs">موردی نیست</p>}
               </div>
             </div>
+          </Section>
+
+          <Section title="شواهد Runtime" testid="runtime-evidence-section">
+            <p className="text-xs text-muted leading-relaxed">
+              فقط شواهد روز و منابع bounded نمایش داده می‌شود. نبود خطا به‌معنی نبود Mutation نیست.
+              Static به‌تنهایی برای PASS کافی نیست.
+            </p>
+            <div className="grid sm:grid-cols-2 gap-2 mt-2">
+              <Row label="همبستگی" value={r.evidenceBundle?.correlation_status || "نامشخص"} ltr />
+              <Row
+                label="پشتیبانی از PASS روزانه"
+                value={r.evidenceBundle?.can_support_daily_pass ? "بله" : "خیر"}
+              />
+            </div>
+            <ul className="mt-2 space-y-1 text-xs">
+              {(r.evidenceBundle?.runtime_items || []).slice(0, 12).map((it, idx) => (
+                <li key={`rt-${idx}`}>
+                  • {it.invariant}: {EVIDENCE_CLASS_FA[it.evidence_class] || it.evidence_class}
+                  {" — "}{it.status}
+                </li>
+              ))}
+              {!(r.evidenceBundle?.runtime_items || []).length && (
+                <li className="text-muted">شواهد Runtime در پاسخ موجود نیست</li>
+              )}
+            </ul>
+            {(r.evidenceBundle?.partial_items || []).length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold mb-1">مشاهده جزئی (بدون نسبت به Shadow)</p>
+                {(r.evidenceBundle.partial_items || []).slice(0, 8).map((it, idx) => (
+                  <p key={`pr-${idx}`} className="text-xs">
+                    • {it.invariant}: {it.status} — {(it.reason_codes || []).join(", ")}
+                  </p>
+                ))}
+              </div>
+            )}
+            {(r.evidenceBundle?.missing_items || []).length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold mb-1">شواهد ناقص / غیرقابل‌مشاهده</p>
+                {(r.evidenceBundle.missing_items || []).slice(0, 8).map((it, idx) => (
+                  <p key={`ms-${idx}`} className="text-xs">
+                    • {it.invariant}: {EVIDENCE_CLASS_FA[it.evidence_class] || it.evidence_class}
+                  </p>
+                ))}
+              </div>
+            )}
+          </Section>
+
+          <Section title="شواهد Static / Manifest" testid="static-evidence-section">
+            <div className="grid sm:grid-cols-2 gap-2">
+              <Row label="وضعیت Manifest" value={r.staticManifestStatus} ltr />
+              <Row label="SHA مستقر" value={r.deployedGitSha ? r.deployedGitSha.slice(0, 12) : "نامشخص"} ltr />
+              <Row
+                label="نسخه Manifest"
+                value={r.staticManifest?.static_proof_version || "نامشخص"}
+                ltr
+              />
+              <Row
+                label="نسخه Evidence"
+                value={r.evidenceBundle?.evidence_version || "نامشخص"}
+                ltr
+              />
+            </div>
+            <p className="text-xs text-muted mt-2 leading-relaxed">
+              تطابق SHA فقط معماری release را تأیید می‌کند و به‌تنهایی روز را PASS نمی‌کند.
+            </p>
+          </Section>
+
+          <Section title="Stop Conditions" testid="stop-conditions-section">
+            <p className="text-xs text-muted mb-2">
+              نمایش فقط‌خواندنی است. هیچ توقف خودکاری از این صفحه انجام نمی‌شود.
+            </p>
+            <div className="space-y-2">
+              {(r.stopConditions || []).map((sc) => (
+                <div
+                  key={sc.key}
+                  className="rounded-lg border border-line p-2 text-sm"
+                  data-testid={`stop-${sc.key}`}
+                >
+                  <div className="flex justify-between gap-2">
+                    <span className="font-semibold">{sc.title_fa}</span>
+                    <span dir="ltr" className="text-xs">{sc.state}</span>
+                  </div>
+                  <p className="text-xs opacity-80 mt-1" dir="ltr">{sc.reason}</p>
+                  <p className="text-xs mt-1">منبع: <span dir="ltr">{sc.evidence_source}</span></p>
+                  <p className="text-xs mt-1">شدت: <span dir="ltr">{sc.severity}</span></p>
+                  <p className="text-xs mt-1 leading-relaxed">{sc.owner_action_fa}</p>
+                </div>
+              ))}
+              {!(r.stopConditions || []).length && (
+                <p className="text-xs text-muted">موردی ثبت نشده</p>
+              )}
+            </div>
+          </Section>
+
+          <Section title="گزارش خودکار روزانه" testid="automated-report-section">
+            <div className="grid sm:grid-cols-2 gap-2">
+              <Row
+                label="زمان زمان‌بندی (UTC)"
+                value={r.automatedReportMeta?.schedule_utc || "06:00"}
+                ltr
+              />
+              <Row
+                label="معادل تهران"
+                value={r.automatedReportMeta?.schedule_tehran || "09:30"}
+                ltr
+              />
+              <Row
+                label="نام Task"
+                value={r.automatedReportMeta?.task_name || "tasks.daily_observation_report"}
+                ltr
+              />
+              <Row label="اعلان / پیام" value="خیر" />
+            </div>
+            <p className="text-xs text-muted mt-2 leading-relaxed">
+              گزارش روز کامل‌شده قبلی UTC به‌صورت خودکار ساخته می‌شود. این صفحه فقط GET می‌کند و
+              دکمه اجرا/ارسال ندارد.
+            </p>
           </Section>
         </>
       )}

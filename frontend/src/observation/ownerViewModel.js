@@ -34,6 +34,10 @@ export const REASON_FA = Object.freeze({
   RUNTIME_UNKNOWN: "وضعیت زمان اجرا نامشخص",
   HIGH_CRITICAL_PRESENT: "اختلاف با شدت بالا یا بحرانی",
   MUTATION_EVIDENCE_INSUFFICIENT: "شواهد Mutation عملیاتی ناکافی است",
+  RUNTIME_MUTATION_NOT_OBSERVABLE: "Mutation نسبت‌داده‌شده به Shadow قابل‌مشاهده نیست",
+  STATIC_MANIFEST_INCOMPLETE: "Static Manifest ناقص یا نامشخص است",
+  STATIC_MANIFEST_MISMATCH: "عدم تطابق SHA مستقر با Manifest",
+  EVIDENCE_BUNDLE_MISSING: "بسته شواهد موجود نیست",
   TICK_GAP_UNRATIFIED: "کمبود Snapshot دوره‌ای (آستانه تأیید نشده)",
   CUTOVER_TRUE: "Cutover روشن است",
   NO_COHORT: "cohort ناوگان خالی است",
@@ -42,6 +46,13 @@ export const REASON_FA = Object.freeze({
   CELERY_WORKER_UNKNOWN: "وضعیت Celery نامشخص",
   BEAT_UNKNOWN: "وضعیت Celery Beat نامشخص",
   SCHEDULER_UNKNOWN: "وضعیت زمان‌بند نامشخص",
+});
+
+export const EVIDENCE_CLASS_FA = Object.freeze({
+  RUNTIME_VERIFIED: "تأییدشده در Runtime",
+  STATIC_VERIFIED: "تأییدشده Static",
+  PARTIALLY_OBSERVED: "مشاهده جزئی",
+  NOT_OBSERVABLE: "غیرقابل‌مشاهده",
 });
 
 export function faNum(n) {
@@ -98,6 +109,14 @@ export function mapOwnerReport(payload) {
         exec: faNum(r.executes_violations),
         operational: INFRA_FA[r.operational_mutation_evidence_status] || "نامشخص",
       },
+      evidenceBundle: r.evidence_bundle && typeof r.evidence_bundle === "object" ? r.evidence_bundle : null,
+      staticManifest: r.static_manifest && typeof r.static_manifest === "object" ? r.static_manifest : null,
+      staticManifestStatus: r.static_manifest_status || "UNKNOWN",
+      deployedGitSha: r.deployed_git_sha || null,
+      stopConditions: Array.isArray(r.stop_conditions) ? r.stop_conditions : [],
+      automatedReportMeta: r.automated_report_meta && typeof r.automated_report_meta === "object"
+        ? r.automated_report_meta
+        : null,
     },
     timeline: Array.isArray(payload.timeline) ? payload.timeline : [],
   };
