@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { http } from "../api.js";
 import {
   SESSION_2_META,
@@ -157,6 +158,16 @@ export default function ObservationCountdownCard() {
           {model.ownerNoChange}
         </p>
         <p className="mt-1 text-xs opacity-80 leading-relaxed">{model.ownerEscalateHint}</p>
+        <p className="mt-2 text-xs opacity-80 leading-relaxed">
+          وضعیت معتبر بودن هر روز را در گزارش روزانه کامل ببینید.
+        </p>
+        <Link
+          to="/observation-report"
+          className="mt-2 inline-flex text-sm font-semibold text-sky-800 dark:text-sky-200 underline underline-offset-2"
+          data-testid="observation-full-report-link"
+        >
+          مشاهده گزارش روزانه کامل
+        </Link>
       </div>
 
       <div

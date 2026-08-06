@@ -40,6 +40,7 @@ import Onboarding from "./pages/Onboarding.jsx";
 import OwnNumbers from "./pages/OwnNumbers.jsx";
 import ActiveContacts from "./pages/ActiveContacts.jsx";
 import AccountsOverview from "./pages/AccountsOverview.jsx";
+import DailyObservationReport from "./pages/DailyObservationReport.jsx";
 
 export default function App() {
   return (
@@ -85,6 +86,7 @@ export default function App() {
         <Route path="own-numbers" element={<OwnNumbers />} />
         <Route path="active-contacts" element={<ActiveContacts />} />
         <Route path="accounts-overview" element={<AccountsOverview />} />
+        <Route path="observation-report" element={<DailyObservationReport />} />
         <Route path="*" element={<div className="text-muted">صفحه یافت نشد</div>} />
       </Route>
       </Routes>

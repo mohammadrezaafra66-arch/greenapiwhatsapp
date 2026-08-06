@@ -74,6 +74,7 @@ const NAV = [
   {
     label: "گزارش‌ها و تحلیل", icon: "📊", children: [
       { to: "/reporting", label: "گزارش روزانه" },
+      { to: "/observation-report", label: "گزارش روزانه مشاهده" },
       { to: "/products", label: "رصد محصولات" },
     ],
   },
@@ -131,6 +132,7 @@ const PAGES = [
   { to: "/team-collaboration", label: "همکاری تیمی", syn: "team collaboration همکاری تیمی گرم سازی افراد واقعی cold account warmth log alerts" },
   { to: "/partner-instances", label: "مدیریت پارتنر", syn: "partner ساخت شماره qr" },
   { to: "/reporting", label: "گزارش روزانه", syn: "report بهترین ساعت شماره‌های اضطراری" },
+  { to: "/observation-report", label: "گزارش روزانه مشاهده", syn: "observation shadow session2 گزارش مشاهده روزانه phase7" },
   { to: "/products", label: "رصد محصولات", syn: "products محصول" },
   { to: "/ai-keys", label: "کلیدهای هوش مصنوعی", syn: "ai keys openai" },
   { to: "/ai-settings", label: "تنظیمات هوش مصنوعی", syn: "ai settings" },

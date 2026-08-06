@@ -625,3 +625,15 @@ export const TelegramApi = {
   state: (id) => http.get(`/telegram/accounts/${id}/state`).then((r) => r.data),
   sendTest: (id, chat_id) => http.post(`/telegram/accounts/${id}/send-test`, { chat_id }).then((r) => r.data),
 };
+
+// ── Owner Change — Read-Only Daily Observation Report (Phase B) ──
+// Sanitized GET only. No Shadow operator token. No mutations.
+export const ObservationApi = {
+  report: (date, { includeTimeline = true, signal } = {}) =>
+    http
+      .get("/fleet/observation/report", {
+        params: { date, session: "session-2", include_timeline: includeTimeline },
+        signal,
+      })
+      .then((r) => r.data),
+};
