@@ -1004,3 +1004,32 @@ def task_fleet_shadow_tick():
                 await db.commit()
             return out
     return run_async(_run())
+
+
+# V67.1 Owner Change Phase C — read-only automated daily observation report.
+# Scheduled 06:00 UTC (= 09:30 Asia/Tehran). Previous completed UTC day only.
+# No Green API, no send, no campaign, no Shadow tick, no business DB writes.
+@celery_app.task(name="tasks.daily_observation_report", soft_time_limit=120, time_limit=180)
+def task_daily_observation_report(day_utc: str | None = None):
+    """Generate previous UTC day's Daily Observation report (log + optional files)."""
+
+    async def _run():
+        from app.services.daily_observation.automated_report import generate_daily_observation_report
+
+        return await generate_daily_observation_report(day_utc=day_utc, write_files=True)
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger = __import__("logging").getLogger(__name__)
+        logger.exception(
+            "daily_observation_report_failed err=%s mutates_runtime=false executes=false",
+            type(exc).__name__,
+        )
+        return {
+            "ok": False,
+            "error": type(exc).__name__,
+            "read_only": True,
+            "mutates_runtime": False,
+            "executes": False,
+        }

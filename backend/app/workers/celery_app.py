@@ -103,4 +103,12 @@ celery_app.conf.beat_schedule = {
     # V67.1 Phase 7 — Shadow tick (registered but no-ops unless BOTH flags true; defaults false).
     # Enabling in any live environment requires separate owner authorization after Phase 7.
     "fleet-shadow-tick": {"task": "tasks.fleet_shadow_tick", "schedule": 300.0},
+    # V67.1 Owner Change Phase C — daily observation report at 06:00 UTC.
+    # Celery timezone is Asia/Tehran → 06:00 UTC == 09:30 Tehran.
+    # Read-only: structured log + optional files under /app/var/daily_observation_reports.
+    # Does not send WhatsApp/email, does not mutate flags/state, does not run Shadow.
+    "daily-observation-report": {
+        "task": "tasks.daily_observation_report",
+        "schedule": crontab(hour=9, minute=30),
+    },
 }

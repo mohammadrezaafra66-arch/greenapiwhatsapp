@@ -28,6 +28,13 @@ backups/
 # source URLs are alive. Never belongs in git.
 backend/.media/
 
+# V67 Owner Change — deploy fingerprint + generated daily observation report files
+backend/.deployed_git_sha
+backend/var/daily_observation_reports/*.json
+backend/var/daily_observation_reports/*.fa.md
+backend/var/daily_observation_reports/*.md
+!backend/var/daily_observation_reports/.gitkeep
+
 # V52 — generated test/audit artifacts. Regenerable, and a stale copy committed by a
 # `git add -A` sweep is worse than no copy (a 1.1 MB project_structure.txt was committed
 # this way once already). audit.md is the exception: it is committed deliberately as the
