@@ -106,15 +106,40 @@ def resolve_source_branch() -> str | None:
         return None
 
 
+def resolve_expected_git_sha(*, explicit: str | None = None) -> str | None:
+    """Independent expected release SHA — never fall back to the deployed fingerprint."""
+    if explicit and str(explicit).strip():
+        return str(explicit).strip()[:64]
+    for key in ("V67_EXPECTED_GIT_SHA", "EXPECTED_GIT_SHA"):
+        v = (os.environ.get(key) or "").strip()
+        if v:
+            return v[:64]
+    here = Path(__file__).resolve()
+    for candidate in (
+        here.parents[3] / ".expected_git_sha",
+        here.parents[4] / ".expected_git_sha",
+        Path("/app/.expected_git_sha"),
+    ):
+        try:
+            if candidate.is_file():
+                v = candidate.read_text(encoding="utf-8").strip().splitlines()[0].strip()
+                if v and not v.startswith("#"):
+                    return v[:64]
+        except Exception:
+            pass
+    return None
+
+
 def build_static_manifest(
     *,
     migration_revision: str | None = None,
     expected_sha: str | None = None,
     now_utc: datetime | None = None,
 ) -> ObservationStaticProofManifest:
+    """Build manifest. MATCH requires an independent expected SHA (env/arg), not self-compare."""
     now = now_utc or datetime.utcnow()
     deployed = resolve_deployed_git_sha()
-    expected = (expected_sha or deployed)
+    expected = resolve_expected_git_sha(explicit=expected_sha)
     m = ObservationStaticProofManifest(
         deployed_git_sha=deployed,
         source_branch=resolve_source_branch(),
@@ -127,15 +152,20 @@ def build_static_manifest(
         m.sha_match = None
         m.reason_codes.append("DEPLOYED_SHA_UNAVAILABLE")
         return m
-    if expected and deployed != expected:
-        # When expected equals deployed (default), this path is unused.
+    if not expected:
+        # Single fingerprint is informative only — do not claim independent MATCH.
+        m.manifest_status = "UNKNOWN"
+        m.sha_match = None
+        m.reason_codes.append("DEPLOYED_SHA_SINGLE_SOURCE")
+        return m
+    if deployed != expected:
         m.manifest_status = "MISMATCH"
         m.sha_match = False
         m.reason_codes.append("DEPLOYED_SHA_MISMATCH")
         return m
     m.manifest_status = "MATCH"
     m.sha_match = True
-    m.reason_codes.append("DEPLOYED_SHA_RESOLVED")
+    m.reason_codes.append("DEPLOYED_SHA_INDEPENDENT_MATCH")
     return m
 
 

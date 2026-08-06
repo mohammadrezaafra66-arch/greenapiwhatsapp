@@ -23,4 +23,6 @@
 - Does not decide daily PASS alone
 - MISMATCH → validator FAIL (fail-closed)
 - MISSING/UNKNOWN → cannot unlock PASS
+- MATCH requires an **independent** expected SHA (`V67_EXPECTED_GIT_SHA` or `.expected_git_sha`) equal to the deployed fingerprint — never self-compare deployed to itself (Phase D honesty fix)
+- Single-source fingerprint → `UNKNOWN` + `DEPLOYED_SHA_SINGLE_SOURCE`
 - Immutable versioned artifact shape; rebuilt at report generation time from release metadata

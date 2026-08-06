@@ -131,15 +131,41 @@ def test_map_evidence_keeps_mutation_insufficient():
     assert mapped["send_path_evidence_status"] == EvidenceStatus.INSUFFICIENT_EVIDENCE.value
 
 
-def test_build_static_manifest_match_when_sha_resolved():
+def test_build_static_manifest_single_source_is_unknown_not_match():
+    """P1 honesty: resolving one SHA must not self-compare into MATCH."""
+    with patch(
+        "app.services.daily_observation.static_manifest.resolve_deployed_git_sha",
+        return_value="abc123",
+    ), patch(
+        "app.services.daily_observation.static_manifest.resolve_expected_git_sha",
+        return_value=None,
+    ):
+        m = build_static_manifest()
+    assert m.manifest_status == "UNKNOWN"
+    assert m.sha_match is None
+    assert "DEPLOYED_SHA_SINGLE_SOURCE" in m.reason_codes
+    assert m.deployed_git_sha == "abc123"
+
+
+def test_build_static_manifest_match_requires_independent_expected():
     with patch(
         "app.services.daily_observation.static_manifest.resolve_deployed_git_sha",
         return_value="abc123",
     ):
-        m = build_static_manifest()
+        m = build_static_manifest(expected_sha="abc123")
     assert m.manifest_status == "MATCH"
     assert m.sha_match is True
-    assert m.deployed_git_sha == "abc123"
+    assert "DEPLOYED_SHA_INDEPENDENT_MATCH" in m.reason_codes
+
+
+def test_build_static_manifest_independent_mismatch():
+    with patch(
+        "app.services.daily_observation.static_manifest.resolve_deployed_git_sha",
+        return_value="aaa",
+    ):
+        m = build_static_manifest(expected_sha="bbb")
+    assert m.manifest_status == "MISMATCH"
+    assert m.sha_match is False
 
 
 def test_evaluate_sha_mismatch():
@@ -147,7 +173,7 @@ def test_evaluate_sha_mismatch():
         "app.services.daily_observation.static_manifest.resolve_deployed_git_sha",
         return_value="aaa",
     ):
-        m = build_static_manifest()
+        m = build_static_manifest(expected_sha="aaa")
     m = evaluate_sha_against_manifest(m, runtime_sha="bbb")
     assert m.manifest_status == "MISMATCH"
 
