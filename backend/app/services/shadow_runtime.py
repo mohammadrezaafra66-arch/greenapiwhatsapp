@@ -355,6 +355,7 @@ class ShadowRuntimeService:
             "idempotency_key": idem,
             "source": source,
             "observed_at": now.isoformat(),
+            "scheduled_slot": slot_str,
         }
 
         do_persist = (
@@ -436,7 +437,8 @@ class ShadowRuntimeService:
         # Structured Stage-A monitoring log — no Secrets / no phone / no raw message.
         logger.info(
             "shadow_run_complete run_id=%s account_id=%s source=%s mismatch=%s severity=%s "
-            "persisted=%s duplicate=%s stale=%s duration_note=completed shadow_version=%s",
+            "persisted=%s duplicate=%s stale=%s duration_note=completed shadow_version=%s "
+            "policy_version=%s idempotency_key=%s slot=%s",
             out.get("run_id"),
             str(account_id)[:8],
             source,
@@ -446,6 +448,9 @@ class ShadowRuntimeService:
             out.get("duplicate"),
             list(comparison.stale_sensors)[:12],
             SHADOW_VERSION,
+            out.get("policy_version"),
+            out.get("idempotency_key"),
+            out.get("scheduled_slot") or out.get("slot"),
         )
         return out
 
