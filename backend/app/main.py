@@ -25,6 +25,7 @@ from app.api.v1 import (
     adlinks, warmup, warmup_helpers,
     group_monitor, telegram, onboarding,
     reports_public, own_numbers, active_contacts, fleet, fleet_shadow,
+    fleet_observation,
 )
 from app.config import settings
 
@@ -1256,6 +1257,7 @@ for router in [
     warmup_helpers.router, group_monitor.router, telegram.router,
     onboarding.router, reports_public.router, own_numbers.router,
     active_contacts.router, fleet.router, fleet_shadow.router,
+    fleet_observation.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

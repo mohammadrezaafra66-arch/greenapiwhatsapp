@@ -77,6 +77,15 @@ def derive_scheduler_status(
     return InfraStatus.HEALTHY.value
 
 
+def derive_scheduler_status_historical(*, scheduler_flag: bool, had_periodic: bool) -> str:
+    """Day-scoped scheduler evidence for past UTC days (no live-age hybrid)."""
+    if not scheduler_flag:
+        return InfraStatus.UNHEALTHY.value
+    if had_periodic:
+        return InfraStatus.HEALTHY.value
+    return InfraStatus.DEGRADED.value
+
+
 def derive_beat_status(*, last_periodic_at, scheduler_flag: bool) -> str:
     """No dedicated Beat health API — infer cautiously or UNKNOWN."""
     if last_periodic_at is not None and scheduler_flag:

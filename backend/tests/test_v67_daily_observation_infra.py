@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from app.services.daily_observation.infra_health import (
     derive_beat_status,
     derive_scheduler_status,
+    derive_scheduler_status_historical,
 )
 from app.services.daily_observation.contract import InfraStatus
 
@@ -56,6 +57,20 @@ def test_scheduler_recent_healthy():
             max_age_seconds=900,
         )
         == InfraStatus.HEALTHY.value
+    )
+
+
+def test_scheduler_historical_with_periodic_healthy():
+    assert (
+        derive_scheduler_status_historical(scheduler_flag=True, had_periodic=True)
+        == InfraStatus.HEALTHY.value
+    )
+
+
+def test_scheduler_historical_without_periodic_degraded():
+    assert (
+        derive_scheduler_status_historical(scheduler_flag=True, had_periodic=False)
+        == InfraStatus.DEGRADED.value
     )
 
 

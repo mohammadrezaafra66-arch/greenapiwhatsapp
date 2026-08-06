@@ -55,7 +55,7 @@ async def test_service_build_does_not_commit_or_add(monkeypatch):
         return sess
 
     # Avoid real infra probes
-    async def _fill(self, report, *, last_periodic_at, now):
+    async def _fill(self, report, *, last_periodic_at, now, is_current_day=True, had_periodic=False):
         report.database_status = "HEALTHY"
         report.redis_status = "HEALTHY"
         report.celery_worker_status = "HEALTHY"
